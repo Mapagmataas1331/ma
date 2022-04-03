@@ -9,7 +9,7 @@ filename: explore
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-6">
+    <div class="col-md-8">
       <div class="card-body">
         <h5 class="card-title">111</h5>
         <p class="card-text">1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111</p>
@@ -24,7 +24,7 @@ filename: explore
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-6">
+    <div class="col-md-8">
       <div class="card-body">
         <h5 class="card-title">222</h5>
         <p class="card-text">2222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222</p>
@@ -39,7 +39,7 @@ filename: explore
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-6">
+    <div class="col-md-8">
       <div class="card-body">
         <h5 class="card-title">333</h5>
         <p class="card-text">3333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333</p>
