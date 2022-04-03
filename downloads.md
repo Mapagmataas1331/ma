@@ -4,7 +4,7 @@ layout: template
 filename: download
 --- 
 <title>Downloads</title>
-<div class="card mb-5">
+<div class="card mb-18">
   <div class="row g-0">
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
