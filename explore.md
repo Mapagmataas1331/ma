@@ -4,12 +4,12 @@ layout: template
 filename: explore
 --- 
 <title>Explore Ma.kak.si</title>
-<div class="card mb-6">
+<div class="card mb-12">
   <div class="row g-0">
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-4">
+    <div class="col-md-10">
       <div class="card-body">
         <h5 class="card-title">111</h5>
         <p class="card-text">111111111111111111111111111111111111111111111111111111111111</p>
@@ -19,12 +19,12 @@ filename: explore
     </div>
   </div>
 </div>
-<div class="card mb-10">
+<div class="card mb-12">
   <div class="row g-0">
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-8">
+    <div class="col-md-10">
       <div class="card-body">
         <h5 class="card-title">222</h5>
         <p class="card-text">222222222222222222222222222222222222222222222222222222222222</p>
@@ -34,12 +34,12 @@ filename: explore
     </div>
   </div>
 </div>
-<div class="card mb-10">
+<div class="card mb-12">
   <div class="row g-0">
     <div class="col-md-2">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-8">
+    <div class="col-md-10">
       <div class="card-body">
         <h5 class="card-title">333</h5>
         <p class="card-text">333333333333333333333333333333333333333333333333333333333333</p>
