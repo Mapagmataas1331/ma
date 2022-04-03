@@ -11,9 +11,9 @@ filename: explore
     </div>
     <div class="col-md-6">
       <div class="card-body">
-        <h5 class="card-title">Card title</h5>
-        <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
-        <p class="card-text"><small class="text-muted">Last updated 3 mins ago</small></p>
+        <h5 class="card-title">111</h5>
+        <p class="card-text">111111</p>
+        <p class="card-text"><small class="text-muted">1</small></p>
 		<a class="btn btn-info" href="#" role="button">more</a>
       </div>
     </div>
@@ -26,9 +26,9 @@ filename: explore
     </div>
     <div class="col-md-8">
       <div class="card-body">
-        <h5 class="card-title">Card title</h5>
-        <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
-        <p class="card-text"><small class="text-muted">Last updated 3 mins ago</small></p>
+        <h5 class="card-title">222</h5>
+        <p class="card-text">222222</p>
+        <p class="card-text"><small class="text-muted">2</small></p>
 		<a class="btn btn-info" href="#" role="button">more</a>
       </div>
     </div>
@@ -41,9 +41,9 @@ filename: explore
     </div>
     <div class="col-md-8">
       <div class="card-body">
-        <h5 class="card-title">Card title</h5>
-        <p class="card-text">This is a wider card with supporting text below as a natural lead-in to additional content. This content is a little bit longer.</p>
-        <p class="card-text"><small class="text-muted">Last updated 3 mins ago</small></p>
+        <h5 class="card-title">333</h5>
+        <p class="card-text">333333</p>
+        <p class="card-text"><small class="text-muted">3</small></p>
 		<a class="btn btn-info" href="#" role="button">more</a>
       </div>
     </div>

@@ -14,22 +14,22 @@ filename: index
     <div class="carousel-item active" data-bs-interval="5000">
       <img src="static/img/1.jpg" class="d-block w-100" alt="">
       <div class="carousel-caption d-none d-md-block">
-        <h5>First slide label</h5>
-        <p>Some representative placeholder content for the first slide.</p>
+        <h5>111</h5>
+        <p>111111</p>
       </div>
     </div>
     <div class="carousel-item" data-bs-interval="5000">
       <img src="static/img/1.jpg" class="d-block w-100" alt="">
       <div class="carousel-caption d-none d-md-block">
-        <h5>Second slide label</h5>
-        <p>Some representative placeholder content for the second slide.</p>
+        <h5>222</h5>
+        <p>222222</p>
       </div>
     </div>
     <div class="carousel-item" data-bs-interval="5000">
       <img src="static/img/1.jpg" class="d-block w-100" alt="">
       <div class="carousel-caption d-none d-md-block">
-        <h5>Third slide label</h5>
-        <p>Some representative placeholder content for the third slide.</p>
+        <h5>333</h5>
+        <p>333333</p>
       </div>
     </div>
   </div>
