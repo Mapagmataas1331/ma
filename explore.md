@@ -6,8 +6,8 @@ filename: explore
 <title>Explore Ma.kak.si</title>
 <div class="card mb-12">
   <div class="row g-0">
-    <div class="col-md-3">
-      <img src="static/img/1.gif" class="img-fluid rounded-start" style="max-width: 50%;" alt="">
+    <div class="col-md-1">
+      <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
     <div class="col-md-9">
       <div class="card-body">
