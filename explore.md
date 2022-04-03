@@ -4,7 +4,7 @@ layout: template
 filename: explore
 --- 
 <title>Explore Ma.kak.si</title>
-<div class="card mb-12">
+<div class="card mb-12" style="max-height: 540px;">
   <div class="row g-0">
     <div class="col-md-4">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
