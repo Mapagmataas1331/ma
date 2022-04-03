@@ -7,7 +7,7 @@ filename: explore
 <div class="card mb-12">
   <div class="row g-0">
     <div class="col-md-3">
-      <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
+      <img src="static/img/1.gif" class="img-fluid rounded-start" style="max-width: 100%;" alt="">
     </div>
     <div class="col-md-9">
       <div class="card-body">
