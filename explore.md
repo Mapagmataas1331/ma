@@ -4,12 +4,12 @@ layout: template
 filename: explore
 --- 
 <title>Explore Ma.kak.si</title>
-<div class="card mb-8">
+<div class="card mb-6">
   <div class="row g-0">
-    <div class="col-md-2">
+    <div class="col-md-1">
       <img src="static/img/1.gif" class="img-fluid rounded-start" alt="">
     </div>
-    <div class="col-md-6">
+    <div class="col-md-5">
       <div class="card-body">
         <h5 class="card-title">111</h5>
         <p class="card-text">111111</p>
