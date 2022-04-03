@@ -27,7 +27,7 @@ filename: download
 			  </div>
 			  <div class="modal-footer">
 				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-				<a class="btn btn-info" href="#" role="button">Understood</a>
+				<a class="btn btn-info" href="#" role="button">Download</a>
 			  </div>
 			</div>
 		  </div>
@@ -59,7 +59,7 @@ filename: download
 			  </div>
 			  <div class="modal-footer">
 				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-				<a class="btn btn-info" href="#" role="button">Understood</a>
+				<a class="btn btn-info" href="#" role="button">Download</a>
 			  </div>
 			</div>
 		  </div>
@@ -91,7 +91,7 @@ filename: download
 			  </div>
 			  <div class="modal-footer">
 				<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-				<a class="btn btn-info" href="#" role="button">Understood</a>
+				<a class="btn btn-info" href="#" role="button">Download</a>
 			  </div>
 			</div>
 		  </div>
