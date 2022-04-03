@@ -14,8 +14,8 @@ filename: download
         <h5 class="card-title">111</h5>
         <p class="card-text">1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111</p>
         <p class="card-text"><small class="text-muted">1</small></p>
-		<button type="button" class="btn btn-info" data-bs-toggle="1mod" data-bs-target="#staticBackdrop">more</button>
-		<div class="1mod modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+		<button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#staticBackdrop1">more</button>
+		<div class="modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop1" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
 		  <div class="modal-dialog">
 			<div class="modal-content">
 			  <div class="modal-header">
@@ -46,8 +46,8 @@ filename: download
         <h5 class="card-title">222</h5>
         <p class="card-text">22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222</p>
         <p class="card-text"><small class="text-muted">3</small></p>
-		<button type="button" class="btn btn-info" data-bs-toggle="mod2" data-bs-target="#staticBackdrop">more</button>
-		<div class="mod2 modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+		<button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#staticBackdrop2">more</button>
+		<div class="modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop2" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
 		  <div class="modal-dialog">
 			<div class="modal-content">
 			  <div class="modal-header">
@@ -78,8 +78,8 @@ filename: download
         <h5 class="card-title">333</h5>
         <p class="card-text">3333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333</p>
         <p class="card-text"><small class="text-muted">3</small></p>
-		<button type="button" class="btn btn-info" data-bs-toggle="mod3" data-bs-target="#staticBackdrop">more</button>
-		<div class="mod3 modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
+		<button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#staticBackdrop3">more</button>
+		<div class="modal fade modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="staticBackdrop3" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="staticBackdropLabel" aria-hidden="true">
 		  <div class="modal-dialog">
 			<div class="modal-content">
 			  <div class="modal-header">
