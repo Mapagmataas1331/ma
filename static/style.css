@@ -1,8 +1,6 @@
-<style>
-  body {
-    background-color: aqua;
-  }
-  .navbar {
-    background-color:aquamarine
-  }
-</style>
+body {
+  background-color: aqua!important;
+}
+.navbar {
+  background-color:aquamarine
+}
