@@ -1,6 +1,15 @@
 body {
-  background-color: rebeccapurple!important;
+  background-color: lightcyan!important;
 }
-.navbar, .copybar {
-  background-color:gainsboro
+.navbar {
+  background-color:gainsboro;
+  border-bottom-width: 2px;
+  border-bottom-style: ridge;
+  border-bottom-color: gray;
+}
+.copybar {
+  background-color:gainsboro;
+  border-top-width: 2px;
+  border-top-style: ridge;
+  border-top-color: gray;
 }
