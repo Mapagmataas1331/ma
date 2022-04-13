@@ -8,7 +8,7 @@ body {
   border-bottom-color: gray;
 }
 .copybar {
-  background-color:gainsboro!important;
+  background-color:gainsboro;
   border-top-width: 2px;
   border-top-style: ridge;
   border-top-color: gray;
