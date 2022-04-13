@@ -1,5 +1,11 @@
 body {
-  background-color: lightcyan;
+  background-color: white;
+}
+main {
+  min-height: 100%;
+}
+html, body {
+  height: 100%;
 }
 .navbar {
   background-color:gainsboro;
