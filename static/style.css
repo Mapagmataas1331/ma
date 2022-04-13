@@ -1,13 +1,13 @@
 body {
   background-color: lightcyan;
 }
-.navbar {
+header {
   background-color:gainsboro;
   border-bottom-width: 2px;
   border-bottom-style: ridge;
   border-bottom-color: gray;
 }
-.copybar {
+footer {
   background-color:gainsboro!important;
   border-top-width: 2px;
   border-top-style: ridge;
