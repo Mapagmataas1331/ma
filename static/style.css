@@ -1,6 +1,6 @@
 body {
-  background-color: aqua!important;
+  background-color: rebeccapurple!important;
 }
-.navbar {
-  background-color:aquamarine
+.navbar, .copybar {
+  background-color:gainsboro
 }
