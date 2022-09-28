@@ -21,3 +21,7 @@ html, body {
   border-top-color: gray;
   margin-top: 5%;
 }
+.card {
+  background-color:lightblue;
+  margin-bottom: 5%;
+}
