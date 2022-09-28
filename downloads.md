@@ -14,7 +14,7 @@ filename: download
         <h5 class="card-title">Makent</h5>
         <p class="card-text">Ma.kak.si's programs installer</p>
         <p class="card-text"><small class="text-muted">1331</small></p>
-		<a class="btn btn-info" href="/makent" role="button">More...</a>
+	<a class="btn btn-info" href="/makent" role="button">More...</a>
       </div>
     </div>
   </div>
@@ -29,7 +29,7 @@ filename: download
         <h5 class="card-title">dl1</h5>
         <p class="card-text">Download1</p>
         <p class="card-text"><small class="text-muted">1</small></p>
-		<a class="btn btn-info" href="/download1" role="button">More...</a>
+	<a class="btn btn-info" href="/download1" role="button">More...</a>
       </div>
     </div>
   </div>
@@ -44,7 +44,7 @@ filename: download
         <h5 class="card-title">dl2</h5>
         <p class="card-text">Download1</p>
         <p class="card-text"><small class="text-muted">2</small></p>
-		<a class="btn btn-info" href="/download2" role="button">More...</a>
+	<a class="btn btn-info" href="/download2" role="button">More...</a>
       </div>
     </div>
   </div>
