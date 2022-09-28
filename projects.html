@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/css/bootstrap.min.css" rel="stylesheet"
+	integrity="sha384-iYQeCzEYFbKjA/T2uDLTpkwGzCiq6soy8tYaI1GyVh/UjpbCx/TYkiZhlZB6+fzT" crossorigin="anonymous">
+    <link rel="icon" type="image/x-icon" href="img/favicon_16x16.ico" sizes="16x16">
+    <link rel="icon" type="image/x-icon" href="img/favicon_32x32.ico" sizes="32x32">
+    <link rel="icon" type="image/x-icon" href="img/favicon_96x96.ico" sizes="96x96">
+	<style>
+	  .navbar {
+		border-bottom-style: ridge;
+	    border-bottom-width: 2px;
+	    border-bottom-color: deepskyblue;
+	  }
+	  .copybar {
+		border-top-style: ridge;
+		border-top-width: 2px;
+		border-top-color: deepskyblue;
+	  }
+	</style>
+  </head>
+  <body style="background-image: linear-gradient(90deg, deepskyblue, skyblue, skyblue, skyblue, deepskyblue)">
+	<header>
+	  <nav class="navbar fixed-top navbar-dark bg-dark">
+	    <div class="container-fluid">
+	  	  <a class="navbar-brand" href="/">
+		    <img src="img/favicon_96x96.ico" alt="M" width="24" height="24" class="d-inline-block align-text-top">
+		    <b style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
+            -webkit-text-fill-color: transparent; -webkit-background-clip: text;">a.kak.si</b>
+		  </a>
+		  <button class="navbar-toggler" style="background-image: linear-gradient(-25deg, deepskyblue, skyblue, deepskyblue);" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup"
+		  aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+		    <span class="navbar-toggler-icon"></span>
+		  </button>
+		  <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+		    <div class="navbar-nav">
+			  <a class="nav-link" href="/author">About Author</a>
+			  <a class="nav-link active" aria-current="page" href="/projects">Projects</a>
+			  <a class="nav-link" href="#">#</a>
+		    </div>
+		  </div>
+	    </div>
+	  </nav>
+	</header>
+    <main>
+	  <title>Ma.kak.si Projects</title>
+	  <div style="width: 80%; margin-left: 10%; margin-top: 6.5%" id="carouselExampleIndicators" class="carousel carousel-dark slide"
+	  data-bs-ride="carousel" data-bs-touch="false">
+		<div class="carousel-indicators">
+		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="0" class="active" aria-current="true"
+		  aria-label="Slide 1"></button>
+		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="1" aria-label="Slide 2"></button>
+		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="2" aria-label="Slide 3"></button>
+		</div>
+		<div class="carousel-inner">
+		  <div class="carousel-item active" data-bs-interval="6000">
+			<img src="img/1.jpg" class="d-block w-100" alt="...">
+		  </div>
+		  <div class="carousel-item" data-bs-interval="2000">
+			<img src="img/1.jpg" class="d-block w-100" alt="...">
+		  </div>
+		  <div class="carousel-item" data-bs-interval="2000">
+			<img src="img/1.jpg" class="d-block w-100" alt="...">
+		  </div>
+		</div>
+		<button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
+		  <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+		  <span class="visually-hidden">Предыдущий</span>
+		</button>
+		<button class="carousel-control-next" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="next">
+		  <span class="carousel-control-next-icon" aria-hidden="true"></span>
+		  <span class="visually-hidden">Следующий</span>
+		</button>
+	  </div>
+	  <div style="margin-top: 13%; padding-bottom: 6.5%" class="accordion" id="accordionExample">
+		<div class="accordion-item">
+		  <h2 class="accordion-header" id="headingOne">
+			<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+			  Элемент аккордеона #1
+			</button>
+		  </h2>
+		  <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
+			<div class="accordion-body">
+			  <strong>Это тело аккордеона первого элемента.</strong> Оно отображается по умолчанию, пока плагин свертывания не добавит соответствующие классы, которые мы используем для стилизации каждого элемента. Эти классы управляют общим внешним видом, а также отображением и скрытием с помощью переходов CSS. Вы можете изменить все это с помощью собственного CSS или переопределить наши переменные по умолчанию. Также стоит отметить, что практически любой HTML может быть помещен в <code>.accordion-body</code>, хотя переход ограничивает переполнение.
+			</div>
+		  </div>
+		</div>
+		<div class="accordion-item">
+		  <h2 class="accordion-header" id="headingTwo">
+			<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+				Элемент аккордеона #2
+			</button>
+		  </h2>
+		  <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
+			<div class="accordion-body">
+			  <strong>Это тело аккордеона второго элемента.</strong> По умолчанию он скрыт, пока плагин свертывания не добавит соответствующие классы, которые мы используем для стилизации каждого элемента. Эти классы управляют общим внешним видом, а также отображением и скрытием с помощью переходов CSS. Вы можете изменить все это с помощью собственного CSS или переопределить наши переменные по умолчанию. Также стоит отметить, что практически любой HTML может быть помещен в <code>.accordion-body</code>, хотя переход ограничивает переполнение.
+			</div>
+		  </div>
+		</div>
+		<div class="accordion-item">
+		  <h2 class="accordion-header" id="headingThree">
+			<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+				Элемент аккордеона #3
+			</button>
+		  </h2>
+		  <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordionExample">
+			<div class="accordion-body">
+			  <strong>Это тело аккордеона третьего элемента.</strong> По умолчанию оно скрыто, пока плагин свертывания не добавит соответствующие классы, которые мы используем для стилизации каждого элемента. Эти классы управляют общим внешним видом, а также отображением и скрытием с помощью переходов CSS. Вы можете изменить все это с помощью собственного CSS или переопределить наши переменные по умолчанию. Также стоит отметить, что практически любой HTML может быть помещен в <code>.accordion-body</code>, хотя переход ограничивает переполнение.
+			</div>
+		  </div>
+		</div>
+	  </div>
+    </main>
+    <footer class="copybar fixed-bottom text-center text-lg-start bg-dark">
+	  <div class="text-center p-3">
+	    <a style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
+		-webkit-text-fill-color: transparent; -webkit-background-clip: text;">Made with:</a>
+	    <a style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
+		-webkit-text-fill-color: transparent; -webkit-background-clip: text" href="https://pages.github.com/">Github Pages</a>
+	  </div>
+    </footer>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"
+	integrity="sha384-u1OknCvxWvY5kfmNBILK2hRnQC3Pr17a+RTT6rIHI7NnikvbZlHgTPOOmMi466C8" crossorigin="anonymous">
+	</script>
+  </body>
+</html>
