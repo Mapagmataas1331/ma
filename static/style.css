@@ -1,0 +1,23 @@
+body {
+  background-color: white;
+}
+main {
+  min-height: 95%;
+}
+html, body {
+  height: 95%;
+}
+.navbar {
+  background-color:lightgray;
+  border-bottom-width: 2px;
+  border-bottom-style: ridge;
+  border-bottom-color: gray;
+  margin-bottom: 5%;
+}
+.copybar {
+  background-color:lightgray;
+  border-top-width: 2px;
+  border-top-style: ridge;
+  border-top-color: gray;
+  margin-top: 5%;
+}
