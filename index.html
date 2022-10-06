@@ -14,29 +14,33 @@
 	<link rel="icon" type="image/png" href="icons/1/256.png" sizes="256x256">
 	<link rel="icon" type="image/png" href="icons/1/512.png" sizes="512x512">
 	<style>
-	  .navbar {
-		border-bottom-style: ridge;
-	    border-bottom-width: 2px;
-	    border-bottom-color: deepskyblue;
-	  }
-	  .copybar {
-		border-top-style: ridge;
-		border-top-width: 2px;
-		border-top-color: deepskyblue;
-	  }
+	  body {background-image: linear-gradient(90deg, deepskyblue, skyblue, skyblue, skyblue, deepskyblue)}
+	  .navbar {border-bottom-style: ridge; border-bottom-width: 2px; border-bottom-color: deepskyblue}
+	  .navbar-brand-text, .copybar-logo {background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
+            -webkit-text-fill-color: transparent; background-clip: unset; -webkit-background-clip: text}
+	  .navbar-toggler {background-image: linear-gradient(-25deg, deepskyblue, skyblue, deepskyblue)}
+	  .carousel, .accordion {width: 80%; margin-left: 10%}
+	  .carousel {padding-top: 8.75em; padding-bottom: 6.5em}
+	  .carousel-inner {max-height: 40em}
+	  .carousel-control-prev {max-width: 5%; margin-left: -9%}
+	  .carousel-control-next {max-width: 5%; margin-right: -9%}
+	  .accordion {padding-top: 3.25em; padding-bottom: 6.5em}
+	  .accordion-item {background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, skyblue, skyblue, deepskyblue)}
+	  .accordion-button {background: linear-gradient(90deg, deepskyblue, skyblue, skyblue, deepskyblue)}
+	  .accordion-body {max-height: 39em}
+	  .ratio-16x9 {max-height: 37em}
+	  .copybar {border-top-style: ridge; border-top-width: 2px; border-top-color: deepskyblue}
 	</style>
   </head>
-  <body style="background-image: linear-gradient(90deg, deepskyblue, skyblue, skyblue, skyblue, deepskyblue)">
+  <body>
 	<header>
 	  <nav class="navbar fixed-top navbar-dark bg-dark">
 	    <div class="container-fluid">
 	  	  <a class="navbar-brand" href="/">
 		    <img src="icons/1/64.png" alt="Ma" width="32" height="32" class="d-inline-block align-text-top">
-		    <b style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
-            -webkit-text-fill-color: transparent; -webkit-background-clip: text;">.kak.si</b>
+		    <b class="navbar-brand-text">.kak.si</b>
 		  </a>
-		  <button class="navbar-toggler" style="background-image: linear-gradient(-25deg, deepskyblue, skyblue, deepskyblue);"
-          type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup"
+		  <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavAltMarkup"
 		  aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
 		    <span class="navbar-toggler-icon"></span>
 		  </button>
@@ -53,15 +57,14 @@
 	</header>
     <main>
 	  <title>Ma.kak.si Explore</title>
-	  <div style="width: 80%; margin-left: 10%; padding-top: 8.75em; padding-bottom: 6.5em" id="carouselExampleIndicators"
-	  class="carousel carousel-dark slide" data-bs-ride="carousel" data-bs-touch="false">
+	  <div id="carouselExampleIndicators" class="carousel carousel-dark slide" data-bs-ride="carousel" data-bs-touch="false">
 		<div class="carousel-indicators">
 		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="0" class="active" aria-current="true"
 		  aria-label="Slide 1"></button>
 		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="1" aria-label="Slide 2"></button>
 		  <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="2" aria-label="Slide 3"></button>
 		</div>
-		<div style="max-height: 40em" class="carousel-inner">
+		<div class="carousel-inner">
 		  <div class="carousel-item active" data-bs-interval="6000">
 			<img src="imgs/carousel.jpg" class="d-block w-100" alt="...">
 		  </div>
@@ -72,54 +75,53 @@
 			<img src="imgs/carousel.jpg" class="d-block w-100" alt="...">
 		  </div>
 		</div>
-		<button style="max-width: 5%; margin-left: -9%" class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
+		<button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
 		  <span class="carousel-control-prev-icon" aria-hidden="true"></span>
 		  <span class="visually-hidden">Предыдущий</span>
 		</button>
-		<button style="max-width: 5%; margin-right: -9%" class="carousel-control-next" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="next">
+		<button class="carousel-control-next" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="next">
 		  <span class="carousel-control-next-icon" aria-hidden="true"></span>
 		  <span class="visually-hidden">Следующий</span>
 		</button>
 	  </div>
-	  <div style="width: 80%; margin-left: 10%;  padding-top: 3.25em; padding-bottom: 3.25em" class="accordion" id="accordionExample">
-		<div style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, skyblue, skyblue, deepskyblue);" class="accordion-item">
+	  <div class="accordion" id="accordionExample">
+		<div class="accordion-item">
 		  <h2 class="accordion-header" id="headingOne">
-			<button style="background: linear-gradient(90deg, deepskyblue, skyblue, skyblue, deepskyblue);"
-			class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne"
+			<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne"
 			aria-expanded="true" aria-controls="collapseOne">1.</button>
 		  </h2>
 		  <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne" data-bs-parent="#accordionExample">
-			<div style="max-height: 39em" class="accordion-body">
-			  <div style="max-height: 37em" class="ratio ratio-16x9">
+			<div class="accordion-body">
+			  <div class="ratio ratio-16x9">
 				<iframe src="https://www.youtube.com/embed/A1OqtIqzScI" title="YouTube video" allowfullscreen></iframe>
 			  </div>
 			</div>
 		  </div>
 		</div>
-		<div style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, skyblue, skyblue, deepskyblue);" class="accordion-item">
+		<div class="accordion-item">
 		  <h2 class="accordion-header" id="headingTwo">
-			<button style="background: linear-gradient(90deg, deepskyblue, skyblue, skyblue, deepskyblue);"
+			<button
 			class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo"
 			aria-expanded="false" aria-controls="collapseTwo">2.</button>
 		  </h2>
 		  <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo" data-bs-parent="#accordionExample">
-			<div style="max-height: 39em" class="accordion-body">
-			  <div style="max-height: 37em; height: max-content;" class="ratio ratio-16x9">
-				<a href="/">makent</a>
+			<div class="accordion-body">
+			  <div class="ratio ratio-16x9">
+				<a href="/makent">makent</a>
 			  </div>
 			</div>
 		  </div>
 		</div>
-		<div style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, skyblue, skyblue, deepskyblue);" class="accordion-item">
+		<div class="accordion-item">
 		  <h2 class="accordion-header" id="headingThree">
-			<button style="background: linear-gradient(90deg, deepskyblue, skyblue, skyblue, deepskyblue);"
+			<button
 			class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseThree"
 			aria-expanded="false" aria-controls="collapseThree">3.</button>
 		  </h2>
 		  <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree" data-bs-parent="#accordionExample">
-			<div style="max-height: 39em" class="accordion-body">
-			  <div style="max-height: 37em; height: max-content;" class="ratio ratio-16x9">
-				<a href="/">makent</a>
+			<div class="accordion-body">
+			  <div class="ratio ratio-16x9">
+				<a href="/makent">makent</a>
 			  </div>
 			</div>
 		  </div>
@@ -128,10 +130,8 @@
     </main>
     <footer class="copybar fixed-bottom text-center text-lg-start bg-dark">
 	  <div class="text-center p-3">
-	    <a style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
-		-webkit-text-fill-color: transparent; -webkit-background-clip: text;">Made with:</a>
-	    <a style="background: linear-gradient(-25deg, deepskyblue, skyblue, skyblue, deepskyblue);
-		-webkit-text-fill-color: transparent; -webkit-background-clip: text" href="https://pages.github.com/">Github Pages</a>
+	    <a class="copybar-logo" href="https://pages.github.com/">Made with:</a>
+	    <a class="copybar-logo" href="https://pages.github.com/">Github Pages</a>
 	  </div>
     </footer>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.1/dist/js/bootstrap.bundle.min.js"
