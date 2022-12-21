@@ -1,5 +1,7 @@
 body {
     overflow-y: hidden;
+    user-select: none;
+    -webkit-user-select: none;
 }
 #main {
     position: absolute;
