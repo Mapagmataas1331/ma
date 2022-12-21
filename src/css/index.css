@@ -35,7 +35,43 @@ body {
     width: calc(100% / 3);
     height: 100%;
 }
-.dpad button {
+.dpad button, .dpad:nth-child(2) div {
+    border: 0;
     background-color: #f2f2f2;
-    opacity: 75%;
+    opacity: 0.75;
+}
+.dpad button:hover {
+    opacity: 1;
+}
+.dpad-u {
+    border-radius: 16px 16px 0 0;
+}
+.dpad-l {
+    border-radius: 16px 0 0 16px;
+}
+.dpad-r {
+    border-radius: 0 16px 16px 0;
+}
+.dpad-d {
+    border-radius: 0 0 16px 16px;
+}
+.dpad:first-child div:first-child {
+    border-radius: 0 0 16px 0;
+    box-shadow: 16px 16px #f2f2f2;
+    opacity: 0.75;
+}
+.dpad:first-child div:last-child {
+    border-radius: 0 0 0 16px;
+    box-shadow: -16px 16px #f2f2f2;
+    opacity: 0.75;
+}
+.dpad:last-child div:first-child {
+    border-radius: 0 16px 0 0;
+    box-shadow: 16px -16px #f2f2f2;
+    opacity: 0.75;
+}
+.dpad:last-child div:last-child {
+    border-radius: 16px 0 0 0;
+    box-shadow: -16px -16px #f2f2f2;
+    opacity: 0.75;
 }
