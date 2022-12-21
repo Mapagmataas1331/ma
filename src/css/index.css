@@ -1,0 +1,20 @@
+body {
+    overflow-y: hidden;
+}
+#main {
+    position: absolute;
+    width: 2560px;
+    height: 1440px;
+    top: calc(50vh - 720px);
+    left: calc(50vw - 1280px);
+    background-image: url("src/img/background_0.png") 50% 0 no-repeat fixed;
+    background-size: cover;
+}
+#hero {
+    position: fixed;
+    width: 64px;
+    height: 64px;
+    top: calc(50vh - 32px);
+    left: calc(50vw - 32px);
+    background-color: #f2f2f2;
+}
