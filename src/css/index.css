@@ -2,6 +2,7 @@ body {
     overflow-y: hidden;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
 }
 #main {
     position: absolute;
