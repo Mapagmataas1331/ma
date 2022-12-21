@@ -17,7 +17,11 @@
 <body>
     <div id="main">
         <div id="hero"></div>
-        
+        <div id="dpad">
+            <div class="dpad"><div></div><button class="dpad-u" onclick="moveHero(1, 0)"></button><div></div></div>
+            <div class="dpad"><button class="dpad-l" onclick="moveHero(0, 1)"></button><div></div><button class="dpad-r" onclick="moveHero(0, 0)"></button></div>
+            <div class="dpad"><div></div><button class="dpad-d" onclick="moveHero(1, 1)"></button><div></div></div>
+        </div>
     </div>
 </body>
 </html>
