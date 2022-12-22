@@ -1,3 +1,4 @@
+// prevent some touch ios events
 document.addEventListener('touchmove', function (event) {
     if (event.scale !== 1) { event.preventDefault(); }
 }, false);
@@ -10,8 +11,7 @@ document.addEventListener('touchend', function (event) {
     lastTouchEnd = now;
 }, false);
 
-var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 };
-
+var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
 var keymap = {};
 onkeydown = onkeyup = (e) => {
     e = e || event;
@@ -22,10 +22,14 @@ window.addEventListener('load', () => {
     setInterval(() => {
         checkkey();
         checkjoy();
-    }, 25)
+    }, speed)
     console.log("Loaded!");
     joystick_init();
 });
+
+window.addEventListener('unload', () => {
+
+})
 
 function checkkey() {
     if (keymap[87] || keymap[38]) {
@@ -79,7 +83,7 @@ function moveHero(axis, dir) {
     return console.log(hero_cords);
 }
 
-
+// ---------- Joystick ---------- \\
 var width, height, radius, x_orig, y_orig;
 
 function joystick_init() {
