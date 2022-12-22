@@ -126,7 +126,7 @@ function Draw(event) {
     if (paint) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         background();
-        var angle_in_degrees,x, y, speed;
+        var x, y;
         var angle = Math.atan2((coord.y - y_orig), (coord.x - x_orig));
         if (Math.sign(angle) == -1) {
             angle_in_degrees = Math.round(-angle * 180 / Math.PI);
@@ -145,7 +145,6 @@ function Draw(event) {
             joystick(x, y);
         }
         getPosition(event);
-        var speed =  Math.round(100 * Math.sqrt(Math.pow(x - x_orig, 2) + Math.pow(y - y_orig, 2)) / radius);
         var x_relative = Math.round(x - x_orig);
         var y_relative = -Math.round(y - y_orig);
         joymap = { x: x_relative, y: y_relative};
