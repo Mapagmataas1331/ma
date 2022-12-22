@@ -14,6 +14,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+
 var uname = "nouser";
 window.db_uname = uname;
 
@@ -22,8 +23,10 @@ function log(login, pass) {
     if (snapshot.exists()) {
       if (pass == snapshot.val()) {
         uname = login;
+        log_result(1, "Successfully logged in!");
         return true;
       } else {
+        log_result(0, "Wrong password!");
         return false;
       }
     } else {
@@ -31,20 +34,12 @@ function log(login, pass) {
         password: pass
       });
       uname = login;
+      log_result(1, "Successfully registered!");
       return true;
     }
   });
 }
 window.db_log = log;
-
-function checkuname() {
-  if (uname != "nouser") {
-    return true;
-  } else {
-    return false;
-  }
-}
-window.db_checkuname = checkuname;
 
 // function getTables() {
 //   get(ref(db, `users/${uname}/table_1`)).then((snapshot) => {

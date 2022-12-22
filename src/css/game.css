@@ -8,7 +8,7 @@ body {
     height: 1440px;
     top: calc(50vh - 720px);
     left: calc(50vw - 1280px);
-    background-image: url("../img/game/background_0.png");
+    background-image: url("../img/game/backgrounds/0.png");
     background-repeat: no-repeat;
     background-size: cover;
     z-index: -300;
@@ -34,14 +34,18 @@ body {
 #hero-img {
     height: 64px;
     width: 64px;
-    background-image: url("../img/game/background_0.png");
+    background-image: url("../img/game/backgrounds/0.png");
     background-repeat: no-repeat;
     background-size: cover;
 }
 #joystick {
+    display: none;
     position: fixed;
-    bottom: 8px;
+    bottom: -45px;
+    z-index: -100;
 }
-@media screen {
-    
+@media (hover: none) {
+    joystick {
+        display: initial;
+    }
 }

@@ -6,7 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, shrink-to-fit=no">
     <link rel="stylesheet" href="src/css/main.css">
     <script src="src/js/main.js"></script>
-    <link rel="icon" type="image/png" href="src/img/background_0.png">
+    <script src="src/js/db.js"></script>
+    <link rel="icon" type="image/png" href="src/img/game/backgrounds/0.png">
     <meta name="author" content="Mapagmataas">
     <meta name="description" content="Mapagmataas' projects">
     <meta name="keywords" content="mrkaksi, Mapagmataas">
@@ -16,7 +17,12 @@
 </head>
 <body class="noselect">
     <div id="log-menu">
-        
+        <form action="javascript:;" onsubmit="db_log(this.uname.value, this.upass.value)">
+            <div><p id="log-result">Log in or register:</p></div>
+            <input type="text" placeholder="  Username   (3 - 8)" name="uname" id="uname" minlength="3" maxlength="8" required>
+            <input type="password" placeholder="  Password    (3 - 8)" name="upass" id="upass" minlength="3" maxlength="8" required>
+            <button type="submit">Send</button>
+        </form>
     </div>
     <div id="main">
         <div id="hero" class="hero"><p>Mapagmataas</p><div id="hero-img"></div></div>
