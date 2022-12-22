@@ -1,4 +1,16 @@
-var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, width, height, radius, x_orig, y_orig;
+document.addEventListener('touchmove', function (event) {
+    if (event.scale !== 1) { event.preventDefault(); }
+}, false);
+var lastTouchEnd = 0;
+document.addEventListener('touchend', function (event) {
+    var now = (new Date()).getTime();
+    if (now - lastTouchEnd <= 300) {
+        event.preventDefault();
+    }
+    lastTouchEnd = now;
+}, false);
+
+var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 };
 
 var keymap = {};
 onkeydown = onkeyup = (e) => {
@@ -44,6 +56,32 @@ function checkjoy() {
     }
 }
 
+function moveHero(axis, dir) {
+    const main = document.getElementById("main");
+    const hero = document.getElementById("hero");
+    if (axis == 0) {
+        if (dir == 0) {
+            hero_cords.x += 8;
+        } else {
+            hero_cords.x -= 8;
+        }
+        hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
+        main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`
+    } else {
+        if (dir == 0) {
+            hero_cords.y += 8;
+        } else {
+            hero_cords.y -= 8;
+        }
+        hero.style.top = `calc(50% - ${hero_cords.y + 32}px)`;
+        main.style.top = `calc(50vh + ${hero_cords.y - 720}px)`;
+    }
+    return console.log(hero_cords);
+}
+
+
+var width, height, radius, x_orig, y_orig;
+
 function joystick_init() {
     canvas = document.getElementById("joystick");
     ctx = canvas.getContext('2d');
@@ -87,18 +125,18 @@ function joystick(width, height) {
     ctx.stroke();
 }
 
-let coord = { x: 0, y: 0 };
+let abs_joy_coord = { x: 0, y: 0 };
 let paint = false;
 
 function getPosition(event) {
     var mouse_x = event.clientX || event.touches[0].clientX;
     var mouse_y = event.clientY || event.touches[0].clientY;
-    coord.x = mouse_x - canvas.offsetLeft;
-    coord.y = mouse_y - canvas.offsetTop;
+    abs_joy_coord.x = mouse_x - canvas.offsetLeft;
+    abs_joy_coord.y = mouse_y - canvas.offsetTop;
 }
 
 function is_it_in_the_circle() {
-    var current_radius = Math.sqrt(Math.pow(coord.x - x_orig, 2) + Math.pow(coord.y - y_orig, 2));
+    var current_radius = Math.sqrt(Math.pow(abs_joy_coord.x - x_orig, 2) + Math.pow(abs_joy_coord.y - y_orig, 2));
     if (radius >= current_radius) return true
     else return false
 }
@@ -109,7 +147,7 @@ function startDrawing(event) {
     if (is_it_in_the_circle()) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         background();
-        joystick(coord.x, coord.y);
+        joystick(abs_joy_coord.x, abs_joy_coord.y);
         Draw(event);
     }
 }
@@ -127,7 +165,7 @@ function Draw(event) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         background();
         var x, y;
-        var angle = Math.atan2((coord.y - y_orig), (coord.x - x_orig));
+        var angle = Math.atan2((abs_joy_coord.y - y_orig), (abs_joy_coord.x - x_orig));
         if (Math.sign(angle) == -1) {
             angle_in_degrees = Math.round(-angle * 180 / Math.PI);
         }
@@ -135,9 +173,9 @@ function Draw(event) {
             angle_in_degrees =Math.round( 360 - angle * 180 / Math.PI);
         }
         if (is_it_in_the_circle()) {
-            joystick(coord.x, coord.y);
-            x = coord.x;
-            y = coord.y;
+            joystick(abs_joy_coord.x, abs_joy_coord.y);
+            x = abs_joy_coord.x;
+            y = abs_joy_coord.y;
         }
         else {
             x = radius * Math.cos(angle) + x_orig;
@@ -150,26 +188,3 @@ function Draw(event) {
         joymap = { x: x_relative, y: y_relative};
     }
 } 
-
-function moveHero(axis, dir) {
-    const main = document.getElementById("main");
-    const hero = document.getElementById("hero");
-    if (axis == 0) {
-        if (dir == 0) {
-            hero_cords.x += 16;
-        } else {
-            hero_cords.x -= 16;
-        }
-        hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
-        main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`
-    } else {
-        if (dir == 0) {
-            hero_cords.y += 16;
-        } else {
-            hero_cords.y -= 16;
-        }
-        hero.style.top = `calc(50% - ${hero_cords.y + 32}px)`;
-        main.style.top = `calc(50vh + ${hero_cords.y - 720}px)`;
-    }
-    return console.log(hero_cords);
-}

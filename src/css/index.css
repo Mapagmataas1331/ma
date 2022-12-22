@@ -13,7 +13,7 @@ body {
     background-size: cover;
     z-index: -300;
 }
-#hero {
+.hero {
     position: relative;
     width: 64px;
     height: 64px;
