@@ -11,6 +11,7 @@ body {
     background-image: url("../img/background_0.png");
     background-repeat: no-repeat;
     background-size: cover;
+    z-index: -300;
 }
 #hero {
     position: relative;
@@ -19,60 +20,9 @@ body {
     top: calc(50% - 32px);
     left: calc(50% - 32px);
     background-color: #f2f2f2;
+    z-index: -200;
 }
-#dpad {
+#joystick {
     position: fixed;
-    width: 192px;
-    height: 192px;
-    right: 16px;
-    bottom: 16px;
-}
-.dpad {
-    display: flex;
-    width: 100%;
-    height: calc(100% / 3);
-}
-.dpad button, .dpad div {
-    width: calc(100% / 3);
-    height: 100%;
-}
-.dpad button, .dpad:nth-child(2) div {
-    border: 0;
-    background-color: #f2f2f2;
-    opacity: 0.75;
-}
-.dpad button:hover {
-    opacity: 1;
-}
-.dpad-u {
-    border-radius: 16px 16px 0 0;
-}
-.dpad-l {
-    border-radius: 16px 0 0 16px;
-}
-.dpad-r {
-    border-radius: 0 16px 16px 0;
-}
-.dpad-d {
-    border-radius: 0 0 16px 16px;
-}
-.dpad:first-child div:first-child {
-    border-radius: 0 0 16px 0;
-    box-shadow: 16px 16px #f2f2f2;
-    opacity: 0.75;
-}
-.dpad:first-child div:last-child {
-    border-radius: 0 0 0 16px;
-    box-shadow: -16px 16px #f2f2f2;
-    opacity: 0.75;
-}
-.dpad:last-child div:first-child {
-    border-radius: 0 16px 0 0;
-    box-shadow: 16px -16px #f2f2f2;
-    opacity: 0.75;
-}
-.dpad:last-child div:last-child {
-    border-radius: 16px 0 0 0;
-    box-shadow: -16px -16px #f2f2f2;
-    opacity: 0.75;
+    bottom: 8px;
 }

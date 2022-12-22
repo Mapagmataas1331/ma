@@ -1,63 +1,176 @@
-var x = 0, y = 0;
+var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, width, height, radius, x_orig, y_orig;
 
-var map = {};
+var keymap = {};
 onkeydown = onkeyup = (e) => {
     e = e || event;
-    map[e.keyCode] = e.type == 'keydown';
+    keymap[e.keyCode] = e.type == 'keydown';
 }
 
-window.addEventListener('load', (event) => {
+window.addEventListener('load', () => {
     setInterval(() => {
         checkkey();
+        checkjoy();
     }, 25)
     console.log("Loaded!");
+    joystick_init();
 });
 
 function checkkey() {
-    if (map[87] == true || map[38] == true) {
+    if (keymap[87] || keymap[38]) {
         moveHero(1, 0);
     }
-    if (map[65] == true || map[37] == true) {
+    if (keymap[65] || keymap[37]) {
         moveHero(0, 1);
     }
-    if (map[68] == true || map[39] == true) {
+    if (keymap[68] || keymap[39]) {
         moveHero(0, 0);
     }
-    if (map[83] == true || map[40] == true) {
+    if (keymap[83] || keymap[40]) {
+        moveHero(1, 1);
+    }
+}
+function checkjoy() {
+    if (joymap.y > 0) {
+        moveHero(1, 0);
+    }
+    if (joymap.x < 0) {
+        moveHero(0, 1);
+    }
+    if (joymap.x > 0) {
+        moveHero(0, 0);
+    }
+    if (joymap.y < 0) {
         moveHero(1, 1);
     }
 }
 
-function startMoving(axis, dir) {
-    interval = setInterval(() => {
-        moveHero(axis, dir);
-    }, 25);
+function joystick_init() {
+    canvas = document.getElementById("joystick");
+    ctx = canvas.getContext('2d');
+    resize();
+    document.addEventListener('mousedown', startDrawing);
+    document.addEventListener('mouseup', stopDrawing);
+    document.addEventListener('mousemove', Draw);
+    document.addEventListener('touchstart', startDrawing);
+    document.addEventListener('touchend', stopDrawing);
+    document.addEventListener('touchcancel', stopDrawing);
+    document.addEventListener('touchmove', Draw);
+    window.addEventListener('resize', resize);
 }
-function stopMoving() {
-    if (typeof interval !== 'undefined') {
-        clearInterval(interval);
+
+function resize() {
+    width = window.innerWidth;
+    radius = 32;
+    height = radius * 6.5;
+    ctx.canvas.width = width;
+    ctx.canvas.height = height;
+    background();
+    joystick(width / 2, height / 3);
+}
+
+function background() {
+    x_orig = width / 2;
+    y_orig = height / 3;
+    ctx.beginPath();
+    ctx.arc(x_orig, y_orig, radius + 20, 0, Math.PI * 2, true);
+    ctx.fillStyle = 'rgba(217, 217, 217, 0.5)';
+    ctx.fill();
+}
+
+function joystick(width, height) {
+    ctx.beginPath();
+    ctx.arc(width, height, radius, 0, Math.PI * 2, true);
+    ctx.fillStyle = '#f2f2f2';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(217, 217, 217, 0.5)';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+}
+
+let coord = { x: 0, y: 0 };
+let paint = false;
+
+function getPosition(event) {
+    var mouse_x = event.clientX || event.touches[0].clientX;
+    var mouse_y = event.clientY || event.touches[0].clientY;
+    coord.x = mouse_x - canvas.offsetLeft;
+    coord.y = mouse_y - canvas.offsetTop;
+}
+
+function is_it_in_the_circle() {
+    var current_radius = Math.sqrt(Math.pow(coord.x - x_orig, 2) + Math.pow(coord.y - y_orig, 2));
+    if (radius >= current_radius) return true
+    else return false
+}
+
+function startDrawing(event) {
+    paint = true;
+    getPosition(event);
+    if (is_it_in_the_circle()) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        background();
+        joystick(coord.x, coord.y);
+        Draw(event);
     }
 }
+
+function stopDrawing() {
+    paint = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    background();
+    joystick(width / 2, height / 3);
+    joymap = { x: 0, y: 0};
+}
+
+function Draw(event) {
+    if (paint) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        background();
+        var angle_in_degrees,x, y, speed;
+        var angle = Math.atan2((coord.y - y_orig), (coord.x - x_orig));
+        if (Math.sign(angle) == -1) {
+            angle_in_degrees = Math.round(-angle * 180 / Math.PI);
+        }
+        else {
+            angle_in_degrees =Math.round( 360 - angle * 180 / Math.PI);
+        }
+        if (is_it_in_the_circle()) {
+            joystick(coord.x, coord.y);
+            x = coord.x;
+            y = coord.y;
+        }
+        else {
+            x = radius * Math.cos(angle) + x_orig;
+            y = radius * Math.sin(angle) + y_orig;
+            joystick(x, y);
+        }
+        getPosition(event);
+        var speed =  Math.round(100 * Math.sqrt(Math.pow(x - x_orig, 2) + Math.pow(y - y_orig, 2)) / radius);
+        var x_relative = Math.round(x - x_orig);
+        var y_relative = -Math.round(y - y_orig);
+        joymap = { x: x_relative, y: y_relative};
+    }
+} 
 
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
     const hero = document.getElementById("hero");
     if (axis == 0) {
         if (dir == 0) {
-            x += 16;
+            hero_cords.x += 16;
         } else {
-            x -= 16;
+            hero_cords.x -= 16;
         }
-        hero.style.left = `calc(50% - ${-x + 32}px)`;
-        main.style.left = `calc(50vw + ${-x - 1280}px)`
+        hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
+        main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`
     } else {
         if (dir == 0) {
-            y += 16;
+            hero_cords.y += 16;
         } else {
-            y -= 16;
+            hero_cords.y -= 16;
         }
-        hero.style.top = `calc(50% - ${y + 32}px)`;
-        main.style.top = `calc(50vh + ${y - 720}px)`;
+        hero.style.top = `calc(50% - ${hero_cords.y + 32}px)`;
+        main.style.top = `calc(50vh + ${hero_cords.y - 720}px)`;
     }
-    return console.log(`x, y: ${x}, ${y}`);
+    return console.log(hero_cords);
 }
