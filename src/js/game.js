@@ -77,7 +77,7 @@ function moveHero(axis, dir) {
         } else {
             hero_cords.y -= 8;
         }
-        hero.style.top = `calc(50% - ${hero_cords.y + 32}px)`;
+        hero.style.top = `calc(50% - ${hero_cords.y + 48}px)`;
         main.style.top = `calc(50vh + ${hero_cords.y - 720}px)`;
     }
     return console.log(hero_cords);
