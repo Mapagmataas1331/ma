@@ -22,11 +22,15 @@ window.addEventListener('load', () => {
     if (logged) {
         setInterval(() => {
             checkkey();
-            checkjoy();
         }, speed)
+        if (document.getElementById("joystick").style.display !== "none") {
+            setInterval(() => {
+                checkjoy();
+            }, speed)
+            joystick_init();
+        }
     }
     console.log("Loaded!");
-    joystick_init();
 });
 
 window.addEventListener('unload', () => {

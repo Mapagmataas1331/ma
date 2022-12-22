@@ -20,7 +20,7 @@ body {
     background-color: #f2f2f2;
     box-shadow: 8px 8px 16px #0d0d0d;
 }
-#log-menu form div {
+#log_res-container {
     width: calc(100% - 8px);
     height: 56px;
     background-color: #0099ff;
@@ -30,7 +30,7 @@ body {
     margin-bottom: 80px;
     text-align: center;
 }
-#log-menu form div p {
+#log_res-text {
     height: 32px;
     margin: 16px 0 auto 0;
     color: #f2f2f2;
