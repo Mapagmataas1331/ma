@@ -39,9 +39,12 @@ window.addEventListener('load', () => {
     console.log("Loaded!");
 });
 
-window.addEventListener('beforeunload', () => {
-    db_quit();
-});
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') {
+        db_quit();
+        location.reload()
+   }
+})
 
 function checkkey() {
     if (keymap[87] || keymap[38]) {
