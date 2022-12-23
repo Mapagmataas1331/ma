@@ -39,7 +39,7 @@ window.addEventListener('load', () => {
     console.log("Loaded!");
 });
 
-window.addEventListener('unload', () => {
+window.addEventListener('beforeunload', () => {
     db_quit();
 });
 
