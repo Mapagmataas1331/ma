@@ -44,8 +44,3 @@ body {
     bottom: -45px;
     z-index: -100;
 }
-@media (hover: none) {
-    joystick {
-        display: initial;
-    }
-}

@@ -10,6 +10,11 @@ document.addEventListener('touchend', function (event) {
     }
     lastTouchEnd = now;
 }, false);
+function is_touch_enabled() {
+    return ( 'ontouchstart' in window ) || 
+           ( navigator.maxTouchPoints > 0 ) ||
+           ( navigator.msMaxTouchPoints > 0 );
+}
 
 var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
 var keymap = {};
@@ -23,7 +28,7 @@ window.addEventListener('load', () => {
         setInterval(() => {
             checkkey();
         }, speed)
-        if (document.getElementById("joystick").style.display !== "none") {
+        if (is_touch_enabled) {
             setInterval(() => {
                 checkjoy();
             }, speed)
@@ -94,6 +99,7 @@ var width, height, radius, x_orig, y_orig;
 
 function joystick_init() {
     canvas = document.getElementById("joystick");
+    canvas.style.display = "block";
     ctx = canvas.getContext('2d');
     resize();
     document.addEventListener('mousedown', startDrawing);
