@@ -16,7 +16,13 @@ function is_touch_enabled() {
            ( navigator.msMaxTouchPoints > 0 );
 }
 
+var logged = false;
+function log_next() {
+    logged = true;
+}
+
 var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
+
 var keymap = {};
 onkeydown = onkeyup = (e) => {
     e = e || event;
@@ -24,16 +30,16 @@ onkeydown = onkeyup = (e) => {
 }
 
 window.addEventListener('load', () => {
-    if (logged) {
-        setInterval(() => {
+    setInterval(() => {
+        if (logged) {
             checkkey();
-        }, speed)
-        if (is_touch_enabled) {
-            setInterval(() => {
+            if (is_touch_enabled) {
                 checkjoy();
-            }, speed)
-            joystick_init();
+            }
         }
+    }, speed)
+    if (is_touch_enabled) {
+            joystick_init();
     }
     console.log("Loaded!");
 });
