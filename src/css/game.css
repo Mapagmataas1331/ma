@@ -11,6 +11,7 @@ body {
     background-image: url("../img/game/backgrounds/0.png");
     background-repeat: no-repeat;
     background-size: cover;
+    background-color: #cccccc;
     z-index: -300;
 }
 .hero {
@@ -31,7 +32,7 @@ body {
     font-size: 12px;
     color: #f2f2f2;
 }
-#hero-img {
+.hero div {
     height: 64px;
     width: 64px;
     background-image: url("../img/game/backgrounds/0.png");

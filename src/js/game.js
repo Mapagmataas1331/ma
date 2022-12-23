@@ -16,6 +16,7 @@ if (isTouch) {
 
 var logged = false;
 function log_next() {
+    createhero(db_uname, 0, 0);
     logged = true;
 }
 
@@ -33,8 +34,7 @@ window.addEventListener('load', () => {
             checkkey();
             if (isTouch) {
                 checkjoy();
-            }
-        }
+        }}
     }, speed)
     if (isTouch) {
         joystick_init();
@@ -44,7 +44,7 @@ window.addEventListener('load', () => {
 
 window.addEventListener('unload', () => {
 
-})
+});
 
 function checkkey() {
     if (keymap[87] || keymap[38]) {
@@ -75,9 +75,31 @@ function checkjoy() {
     }
 }
 
+function createhero(name, x, y) {
+    const main = document.getElementById("main");
+    const newHero = document.createElement("div");
+    newHero.setAttribute("id", "hero-" + name);
+    newHero.classList.add("hero");
+    main.appendChild(newHero);
+    newHero.style.left = `calc(50% - ${-x + 32}px)`;
+    newHero.style.top = `calc(50% - ${y + 48}px)`;
+    const newHero_name = document.createElement("p");
+    newHero_name.setAttribute("id", "hero-" + name + "-name");
+    newHero_name.innerText = name;
+    newHero.appendChild(newHero_name);
+    const newHero_box = document.createElement("div");
+    newHero_box.setAttribute("id", "hero-" + name + "-box");
+    newHero.appendChild(newHero_box);
+    if (name == db_uname) {
+        main.style.left = `calc(50vw + ${-x - 1280}px)`;
+        main.style.top = `calc(50vh + ${y - 720}px)`;
+        hero_cords = { x: x, y: y }
+    }
+}
+
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
-    const hero = document.getElementById("hero");
+    const hero = document.getElementById("hero-" + db_uname);
     if (axis == 0) {
         if (dir == 0) {
             hero_cords.x += 8;
@@ -85,7 +107,7 @@ function moveHero(axis, dir) {
             hero_cords.x -= 8;
         }
         hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
-        main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`
+        main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`;
     } else {
         if (dir == 0) {
             hero_cords.y += 8;
