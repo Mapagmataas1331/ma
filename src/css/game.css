@@ -15,7 +15,7 @@ body {
     z-index: -300;
 }
 .hero {
-    position: relative;
+    position: absolute;
     width: 64px;
     height: 80px;
     top: calc(50% - 48px);

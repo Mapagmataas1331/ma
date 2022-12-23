@@ -78,44 +78,43 @@ function logNext() {
 
 var newOnce = true;
 function createHero(name, x, y) {
-    var chHero =  document.getElementById("hero-" + name);
     const main = document.getElementById("main");
-    if (typeof(chHero) != 'undefined' && chHero != null) {
-        chHero.style.left = `calc(50% - ${-x + 32}px)`;
-        chHero.style.top = `calc(50% - ${y + 48}px)`;
-    } else {
-        chHero = document.createElement("div");
-        chHero.setAttribute("id", "hero-" + name);
-        chHero.classList.add("hero");
-        main.appendChild(chHero);
-        chHero.style.left = `calc(50% - ${-x + 32}px)`;
-        chHero.style.top = `calc(50% - ${y + 48}px)`;
-        const chHero_name = document.createElement("p");
-        chHero_name.setAttribute("id", "hero-" + name + "-name");
-        chHero_name.innerText = name;
-        chHero.appendChild(chHero_name);
-        const chHero_box = document.createElement("div");
-        chHero_box.setAttribute("id", "hero-" + name + "-box");
-        chHero.appendChild(chHero_box);
-    }
     if (name == db_uname && newOnce) {
         newOnce = false;
-        chHero.style.left = `calc(50% - ${-x + 32}px)`;
-        chHero.style.top = `calc(50% - ${y + 48}px)`;
+        makingHero(name, x, y);
+        hero_cords = { x: x, y: y };
         main.style.left = `calc(50vw + ${-x - 1280}px)`;
         main.style.top = `calc(50vh + ${y - 720}px)`;
-        hero_cords = { x: x, y: y };
-    }
-    if (name == db_uname && newOnce) {
-        newOnce = false;
-        chHero.style.left = `calc(50% - ${-x + 32}px)`;
-        chHero.style.top = `calc(50% - ${y + 48}px)`;
-        main.style.left = `calc(50vw + ${-x - 1280}px)`;
-        main.style.top = `calc(50vh + ${y - 720}px)`;
-        hero_cords = { x: x, y: y };
+        return;
+    } else if (name == db_uname && !newOnce){
+        return;
+    }else {
+        var bgHero = document.getElementById("hero-" + name);
+        if (typeof(bgHero) != 'undefined' && bgHero != null) {
+            bgHero.style.left = `calc(50% - ${-x + 32}px)`;
+            bgHero.style.top = `calc(50% - ${y + 48}px)`;
+        } else {
+            makingHero(name, x, y);
+        }
     }
 }
 window.createHero = createHero;
+function makingHero(name, x, y) {
+    const main = document.getElementById("main");
+    chHero = document.createElement("div");
+    chHero.setAttribute("id", "hero-" + name);
+    chHero.classList.add("hero");
+    chHero.style.left = `calc(50% - ${-x + 32}px)`;
+    chHero.style.top = `calc(50% - ${y + 48}px)`;
+    main.appendChild(chHero);
+    const chHero_name = document.createElement("p");
+    chHero_name.setAttribute("id", "hero-" + name + "-name");
+    chHero_name.innerText = name;
+    chHero.appendChild(chHero_name);
+    const chHero_box = document.createElement("div");
+    chHero_box.setAttribute("id", "hero-" + name + "-box");
+    chHero.appendChild(chHero_box);
+}
 
 function removeHero(name) {
     var curHero = document.getElementById("hero-" + name);

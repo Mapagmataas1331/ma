@@ -51,8 +51,8 @@ function logHero() {
   get(ref(db, `users/${db_uname}/game`)).then((snapshot) => {
     if (!(snapshot.exists())) {
       set(ref(db, `users/${db_uname}/game`), {
-        cord_x: 0,
-        cord_y: 0
+        cord_x: "0",
+        cord_y: "0"
       });
     }
     update(ref(db, `users/${db_uname}/game`), {
