@@ -4,13 +4,12 @@ window.logged = logged;
 function log_result(res, text) {
   const res_cont = document.getElementById("log_res-container");
   const res_text = document.getElementById("log_res-text");
-  const res_form = document.getElementById("log-form");
   res_text.innerText = text;
   if (res == 1) {
     res_cont.style.backgroundColor = "#33cc33"
     console.log(`Welcome ${db_uname}!`);
-    appear(res_form, 100, -5, 40);
-    log_next();
+    appear(document.getElementById("log-menu"), 100, -5, 40);
+    logNext();
   } else {
     res_cont.style.backgroundColor = "#ff9933"
   }

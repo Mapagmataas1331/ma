@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, set, get, update } from "firebase/database";
+import { getDatabase, ref, set, get, update, child } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAcX-IWMEso-jUNNoZqfPOM1MJG5aM8PaM",
@@ -40,57 +40,49 @@ function log(login, pass) {
 }
 window.db_log = log;
 
-// function getTables() {
-//   get(ref(db, `users/${uname}/table_1`)).then((snapshot) => {
-//     if (snapshot.exists()) {
-//       snapshot.forEach(childSnapshot => {
-//         newTbel(1, childSnapshot.key);
-//       });
-//     }
-//   });
-//   get(ref(db, `users/${uname}/table_2`)).then((snapshot) => {
-//     if (snapshot.exists()) {
-//       snapshot.forEach(childSnapshot => {
-//         newTbel(2, childSnapshot.key);
-//       });
-//     }
-//   });
-// }
-// function writeTable(tbn, tname, trowid, trowvalue) {
-//   if (uname == "") {
-//     alert("Вы не вошли!");
-//     return false;
-//   } else if (nolog == true) {
-//     alert("Вы не имеете права редактирования!");
-//     return false;
-//   } else {
-//     update(ref(db, `users/${uname}/table_${tbn}/${tname}`), {
-//       ["table_row_" + String("0" + trowid).slice(-2)]: trowvalue
-//     });
-//     return true;
-//   }
-// }
-// window.writeTable = writeTable;
+function quit() {
+  update(ref(db, `users/${db_uname}/game`), {
+    online: false
+  });
+}
+window.db_quit = quit;
 
-// function getTable(tbn, tname, trowid) {
-//   if (uname == "") {
-//     alert("Вы не вошли!");
-//     return false;
-//   }
-//   return get(ref(db, `users/${uname}/table_${tbn}/${tname}/table_row_${String("0" + trowid).slice(-2)}`)).then((snapshot) => {
-//     if (snapshot.exists()) {
-//       return snapshot.val();
-//     }
-//     return null;
-//   });
-// }
-// window.getTable = getTable;
+function logHero() {
+  get(ref(db, `users/${db_uname}/game`)).then((snapshot) => {
+    if (!(snapshot.exists())) {
+      set(ref(db, `users/${db_uname}/game`), {
+        cord_x: 0,
+        cord_y: 0
+      });
+    }
+    update(ref(db, `users/${db_uname}/game`), {
+      online: true
+    });
+    var con = true;
+    window.db_con = con;
+  });
+}
+window.db_logHero = logHero;
 
-// function checklog() {
-//   if (nolog == false) {
-//     return true;
-//   } else {
-//     return false;
-//   }
-// }
-// window.checklog = checklog;
+function updateHero(newX, newY) {
+  update(ref(db, `users/${db_uname}/game`), {
+    cord_x: newX,
+    cord_y: newY
+  });
+}
+window.db_updateHero = updateHero;
+
+function getUsers() {
+  get(ref(db, 'users')).then((snap) => {
+    snap.forEach((userSnap) => {
+      if (userSnap.child("game").exists) {
+        if (userSnap.child("game/online").val()) {
+          createHero(userSnap.key, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+        } else {
+          removeHero(userSnap.key);
+        }
+      }
+    });
+  });
+}
+window.db_getUsers = getUsers;

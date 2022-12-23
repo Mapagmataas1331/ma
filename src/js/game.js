@@ -14,12 +14,6 @@ if (isTouch) {
     }, false);
 }
 
-var logged = false;
-function log_next() {
-    createhero(db_uname, 0, 0);
-    logged = true;
-}
-
 var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
 
 var keymap = {};
@@ -30,11 +24,14 @@ onkeydown = onkeyup = (e) => {
 
 window.addEventListener('load', () => {
     setInterval(() => {
-        if (logged) {
+        if (typeof(db_con) !== 'undefined' && db_con) {
             checkkey();
             if (isTouch) {
                 checkjoy();
-        }}
+            }
+            db_getUsers();
+            db_updateHero(hero_cords.x, hero_cords.y);
+        }
     }, speed)
     if (isTouch) {
         joystick_init();
@@ -43,7 +40,7 @@ window.addEventListener('load', () => {
 });
 
 window.addEventListener('unload', () => {
-
+    db_quit();
 });
 
 function checkkey() {
@@ -75,27 +72,58 @@ function checkjoy() {
     }
 }
 
-function createhero(name, x, y) {
+function logNext() {
+    db_logHero();
+}
+
+var newOnce = true;
+function createHero(name, x, y) {
+    var chHero =  document.getElementById("hero-" + name);
     const main = document.getElementById("main");
-    const newHero = document.createElement("div");
-    newHero.setAttribute("id", "hero-" + name);
-    newHero.classList.add("hero");
-    main.appendChild(newHero);
-    newHero.style.left = `calc(50% - ${-x + 32}px)`;
-    newHero.style.top = `calc(50% - ${y + 48}px)`;
-    const newHero_name = document.createElement("p");
-    newHero_name.setAttribute("id", "hero-" + name + "-name");
-    newHero_name.innerText = name;
-    newHero.appendChild(newHero_name);
-    const newHero_box = document.createElement("div");
-    newHero_box.setAttribute("id", "hero-" + name + "-box");
-    newHero.appendChild(newHero_box);
-    if (name == db_uname) {
+    if (typeof(chHero) != 'undefined' && chHero != null) {
+        chHero.style.left = `calc(50% - ${-x + 32}px)`;
+        chHero.style.top = `calc(50% - ${y + 48}px)`;
+    } else {
+        chHero = document.createElement("div");
+        chHero.setAttribute("id", "hero-" + name);
+        chHero.classList.add("hero");
+        main.appendChild(chHero);
+        chHero.style.left = `calc(50% - ${-x + 32}px)`;
+        chHero.style.top = `calc(50% - ${y + 48}px)`;
+        const chHero_name = document.createElement("p");
+        chHero_name.setAttribute("id", "hero-" + name + "-name");
+        chHero_name.innerText = name;
+        chHero.appendChild(chHero_name);
+        const chHero_box = document.createElement("div");
+        chHero_box.setAttribute("id", "hero-" + name + "-box");
+        chHero.appendChild(chHero_box);
+    }
+    if (name == db_uname && newOnce) {
+        newOnce = false;
+        chHero.style.left = `calc(50% - ${-x + 32}px)`;
+        chHero.style.top = `calc(50% - ${y + 48}px)`;
         main.style.left = `calc(50vw + ${-x - 1280}px)`;
         main.style.top = `calc(50vh + ${y - 720}px)`;
-        hero_cords = { x: x, y: y }
+        hero_cords = { x: x, y: y };
+    }
+    if (name == db_uname && newOnce) {
+        newOnce = false;
+        chHero.style.left = `calc(50% - ${-x + 32}px)`;
+        chHero.style.top = `calc(50% - ${y + 48}px)`;
+        main.style.left = `calc(50vw + ${-x - 1280}px)`;
+        main.style.top = `calc(50vh + ${y - 720}px)`;
+        hero_cords = { x: x, y: y };
     }
 }
+window.createHero = createHero;
+
+function removeHero(name) {
+    var curHero = document.getElementById("hero-" + name);
+    if (typeof(curHero) !== 'undefined' && curHero !== null) {
+        curHero.remove()
+    }
+}
+window.removeHero = removeHero;
 
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
