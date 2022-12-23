@@ -1,19 +1,17 @@
+var isTouch = 'ontouchstart' in window || navigator.msMaxTouchPoints;
 // prevent some touch ios events
-document.addEventListener('touchmove', function (event) {
-    if (event.scale !== 1) { event.preventDefault(); }
-}, false);
-var lastTouchEnd = 0;
-document.addEventListener('touchend', function (event) {
-    var now = (new Date()).getTime();
-    if (now - lastTouchEnd <= 300) {
-        event.preventDefault();
-    }
-    lastTouchEnd = now;
-}, false);
-function is_touch_enabled() {
-    return ( 'ontouchstart' in window ) || 
-           ( navigator.maxTouchPoints > 0 ) ||
-           ( navigator.msMaxTouchPoints > 0 );
+if (isTouch) {
+    document.addEventListener('touchmove', function (event) {
+        if (event.scale !== 1) { event.preventDefault(); }
+    }, false);
+    var lastTouchEnd = 0;
+    document.addEventListener('touchend', function (event) {
+        var now = (new Date()).getTime();
+        if (now - lastTouchEnd <= 300) {
+            event.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, false);
 }
 
 var logged = false;
@@ -33,13 +31,13 @@ window.addEventListener('load', () => {
     setInterval(() => {
         if (logged) {
             checkkey();
-            if (is_touch_enabled) {
+            if (isTouch) {
                 checkjoy();
             }
         }
     }, speed)
-    if (is_touch_enabled) {
-            joystick_init();
+    if (isTouch) {
+        joystick_init();
     }
     console.log("Loaded!");
 });
