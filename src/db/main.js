@@ -15,15 +15,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-
-var uname = "nouser";
-window.db_uname = uname;
-
 function log(login, pass) {
   get(ref(db, `users/${login}/password`)).then((snapshot) => {
     if (snapshot.exists()) {
       if (pass == snapshot.val()) {
-        uname = login;
+        var uname = login;
+        window.db_uname = uname;
         log_result(1, "Successfully logged in!");
         return true;
       } else {
@@ -34,7 +31,8 @@ function log(login, pass) {
       set(ref(db, `users/${login}`), {
         password: pass
       });
-      uname = login;
+      var uname = login;
+      window.db_uname = uname;
       log_result(1, "Successfully registered!");
       return true;
     }
