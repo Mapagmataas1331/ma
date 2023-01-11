@@ -18,10 +18,11 @@ body {
     top: 3px;
     left: 8px;
     height: 64px;
+    width: min-content;
     cursor: pointer;
 }
 #nav-cont div img {
-    box-shadow: 0 2px 4px #0d0d0d;
+    box-shadow: 0 2px 4px #262626;
     border-radius: 64px;
     width: 64px;
     height: 64px;
@@ -29,8 +30,8 @@ body {
 #nav-cont div p {
     height: 64px;
     font-size: 32px;
-    margin: 0;
-    color: #f2f2f2;
+    margin: 8px 0 auto 0;
+    color: #78d5ed;
     font-family: "Comic Sans MS", "Comic Sans", cursive;
     font-weight: 400;
 }
