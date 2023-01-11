@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, shrink-to-fit=no">
+    <link rel="stylesheet" href="src/css/main.css">
+    <script src="src/js/main.js"></script>
+    <script src="src/js/db.js"></script>
+    <link rel="icon" type="image/png" href="src/img/icon/512.png">
+    <meta name="author" content="Mapagmataas">
+    <meta name="description" content="Mapagmataas' projects">
+    <meta name="keywords" content="mrkaksi, Mapagmataas">
+    <title>ma.kak.si Lobby</title>
+    <link rel="stylesheet" href="src/css/game.css">
+    <script src="src/js/game.js"></script>
+</head>
+<body class="noselect">
+    <div id="log-menu">
+        <form id="log-form" action="javascript:;" onsubmit="db_log(this.uname.value, this.upass.value)">
+            <div id="log_res-container"><p id="log_res-text">Log in or register:</p></div>
+            <input type="text" placeholder="  Username   (3 - 8)" name="uname" id="uname" minlength="3" maxlength="8" required>
+            <input type="password" placeholder="  Password    (3 - 8)" name="upass" id="upass" minlength="3" maxlength="8" required>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+    <div id="main"></div>
+    <canvas id="joystick"></canvas>
+</body>
+</html>

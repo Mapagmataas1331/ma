@@ -23,6 +23,7 @@ onkeydown = onkeyup = (e) => {
 }
 
 window.addEventListener('load', () => {
+    document.getElementById("log-menu").style.display = 'block';
     setInterval(() => {
         if (typeof(db_con) !== 'undefined' && db_con) {
             checkkey();
