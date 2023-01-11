@@ -53,16 +53,19 @@ body {
     height: 32px;
 }
 #log-menu form input {
-    width: 80%;
+    text-align: center;
+    width: calc(80% - 16px);
+    padding: 0 8px 0 8px;
     margin: 0 auto 32px calc(10% - 0.5px);
 }
 #log-menu form input:focus {
+    text-align: left;
     outline: 0;
     border: 1px solid #0099ff;
 }
 #log-menu form button {
     width: 60%;
-    margin: 48px auto 32px calc(20% - 0.5px);
+    margin: 56px auto 32px calc(20% - 0.5px);
     color: #4d4d4d;
 }
 #log-menu form button:hover {
