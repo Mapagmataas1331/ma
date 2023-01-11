@@ -10,6 +10,17 @@ body {
     background-color: #4d4d4d;
     z-index: 100;
 }
+#nav-cont div {
+    position: relative;
+    top: 4px;
+    left: 8px;
+    height: 64px;
+    cursor: pointer;
+}
+#nav-cont div img {
+    width: 64px;
+    height: 64px;
+}
 #log-menu {
     position: fixed;
     width: 100%;
