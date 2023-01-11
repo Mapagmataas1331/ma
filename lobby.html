@@ -20,9 +20,10 @@
         <div onclick="location.href = 'https://ma.kak.si';">
             <img src="src/img/icon/512.png" alt="icon">
         </div>
+        <button onclick="appear(document.getElementById('log-menu'), 5, 40, false); appear(document.getElementById('log-form'), 5, 40, true);">log</button>
     </div>
-    <div id="log-menu">
-        <form id="log-form" action="javascript:;" onsubmit="db_log(this.uname.value, this.upass.value)">
+    <div id="log-menu" style="opacity: 1; margin-top: none;">
+        <form id="log-form" action="javascript:;" onsubmit="db_log(this.uname.value, this.upass.value)" style="margin-top: none;">
             <div id="log_res-container"><p id="log_res-text">Log in or register:</p></div>
             <input type="text" placeholder="Username   (3 - 8)" name="uname" id="uname" minlength="3" maxlength="8" required>
             <input type="password" placeholder="Password   (3 - 8)" name="upass" id="upass" minlength="3" maxlength="8" required>
