@@ -22,9 +22,15 @@ onkeydown = onkeyup = (e) => {
     keymap[e.keyCode] = e.type == 'keydown';
 }
 
+function rand(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+}
+
 window.addEventListener('load', () => {
+    var onetime = true;
     appear();
     setInterval(() => {
+        db_checkAfk();
         if (typeof(db_con) !== 'undefined' && db_con) {
             checkkey();
             if (isTouch) {
@@ -32,9 +38,12 @@ window.addEventListener('load', () => {
             }
             db_getHeroes();
             db_updateHero(hero_cords.x, hero_cords.y);
-            db_checkAfk();
+            if (onetime) {
+                loopIdleAnim();
+                onetime = false;
+            }
         }
-    }, speed)
+    }, speed);
     if (isTouch) {
         joystick_init();
     }
@@ -74,16 +83,47 @@ function logNext() {
     db_logHero();
 }
 
+function loopIdleAnim() {
+    var randv = rand(2500, 5000);
+    setTimeout(function() {
+        idleAnim(randv);
+        loopIdleAnim();
+    }, randv);
+}
+
+function idleAnim(randv) {
+    const elm = document.getElementById("hero-" + db_uname + "-img0")
+    if (db_afk) {
+        elm.style.backgroundImage = "url('src/img/game/heroes/00-02.png')";
+    } else {
+        setTimeout(function() {
+            elm.style.backgroundImage = "url('src/img/game/heroes/00-01.png')";
+            setTimeout(function() {
+                elm.style.backgroundImage = "url('src/img/game/heroes/00-02.png')";
+                setTimeout(function() {
+                    elm.style.backgroundImage = "url('src/img/game/heroes/00-01.png')";
+                    setTimeout(function() {
+                        elm.style.backgroundImage = "url('src/img/game/heroes/00-00.png')";
+                    }, 0.05 * randv);
+                }, 0.05 * randv);
+            }, 0.05 * randv);
+        }, 0.05 * randv);
+    }
+}
+
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
     const hero = document.getElementById("hero-" + db_uname);
-    const box0 = document.getElementById("id", "hero-" + db_uname + "-box0")
-    const box1 = document.getElementById("id", "hero-" + db_uname + "-box1")
+    const box = document.getElementById("hero-" + db_uname + "-box")
     if (axis == 0) {
         if (dir == 0) {
             hero_cords.x += 8;
+            box.style.webkitTransform = "scaleX(1)";
+            box.style.transform = "scaleX(1)";
         } else {
             hero_cords.x -= 8;
+            box.style.webkitTransform = "scaleX(-1)";
+            box.style.transform = "scaleX(-1)";
         }
         hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
         main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`;
@@ -135,14 +175,17 @@ function makingHero(user, name, x, y) {
     chHero_name.setAttribute("id", "hero-" + user + "-name");
     chHero_name.innerText = name;
     chHero.appendChild(chHero_name);
+    const chHero_box = document.createElement("div");
+    chHero_box.setAttribute("id", "hero-" + user + "-box");
+    chHero.appendChild(chHero_box);
     const chHero_box0 = document.createElement("div");
-    chHero_box0.setAttribute("id", "hero-" + user + "-box0");
+    chHero_box0.setAttribute("id", "hero-" + user + "-img0");
     chHero_box0.style.backgroundImage = "url('src/img/game/heroes/00-00.png')";
-    chHero.appendChild(chHero_box0);
+    chHero_box.appendChild(chHero_box0);
     const chHero_box1 = document.createElement("div");
-    chHero_box1.setAttribute("id", "hero-" + user + "-box1");
+    chHero_box1.setAttribute("id", "hero-" + user + "-img1");
     chHero_box1.style.backgroundImage = "url('src/img/game/heroes/00-10.png')";
-    chHero.appendChild(chHero_box1);
+    chHero_box.appendChild(chHero_box1);
 }
 
 function removeHero(user) {

@@ -34,14 +34,18 @@ body {
 }
 .hero div {
     width: 64px;
+    height: 64px;
+}
+.hero div div {
+    width: 64px;
     background-repeat: no-repeat;
     background-size: cover;
     image-rendering: pixelated;
 }
-.hero div:nth-child(2) {
+.hero div div:nth-child(1) {
     height: 48px;
 }
-.hero div:nth-child(3) {
+.hero div div:nth-child(2) {
     height: 16px;
 }
 #joystick {
