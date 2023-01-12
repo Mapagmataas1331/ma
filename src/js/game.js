@@ -23,6 +23,7 @@ onkeydown = onkeyup = (e) => {
 }
 
 window.addEventListener('load', () => {
+    appear();
     setInterval(() => {
         if (typeof(db_con) !== 'undefined' && db_con) {
             checkkey();

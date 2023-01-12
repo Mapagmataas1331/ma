@@ -8,8 +8,7 @@ function log_result(res, text) {
   if (res == 1) {
     res_cont.style.backgroundColor = "#33cc33"
     console.log(`Welcome ${db_uname}!`);
-    appear(document.getElementById("log-menu"), 5, 40, false);
-    appear(document.getElementById("log-form"), 5, 40, true);
+    appear();
     logNext();
   } else {
     res_cont.style.backgroundColor = "#ff9933"
@@ -17,50 +16,38 @@ function log_result(res, text) {
 }
 window.log_result = log_result;
 
-function appear(elm, step, speed, bool){
+function appear(){
+  var menu = document.getElementById("log-menu");
+  var form = document.getElementById("log-form");
   var t_o;
-  if (elm.style.display == 'none') {
+  var speed = 20;
+  var m = 0;
+  if (menu.style.display == "none") {
     var i = 0;
-    if (bool) {
-      elm.style.marginTop = '-480px';
-    } else {
-      elm.style.opacity = 0;
-    }
-    elm.style.display = 'block';
-  } else if (elm.style.opacity == 1 || elm.style.marginTop == 'none') {
+    var step = 2;
+    menu.style.opacity = 0;
+    menu.style.display = "block";
+  } else if (menu.style.opacity == 1) {
     var i = 100;
-    step = -step
+    step = -2
   }
-  if (bool) {
-    t_o = setInterval(function(){
-      var margin = i * i / 12;
-      i += step;
-      if (i > 100) {
-        elm.style.marginTop = 'none';
-        elm.style.display = 'none';
-        clearInterval(t_o);
-        return; 
-      } else if (i < 0) {
-        elm.style.marginTop = 'none';
-        clearInterval(t_o);
-        return; 
-      }
-      elm.style.marginTop = "calc(50vh - 240px - " + margin + "px)";
-    }, speed);
-  } else {
-    t_o = setInterval(function(){
-      var opacity = i / 100;
-      i += step; 
-      if (opacity > 1) {
-        clearInterval(t_o);
-        return; 
-      } else if (opacity < 0) {
-        elm.style.display = 'none';
-        clearInterval(t_o);
-        return; 
-      }
-      elm.style.opacity = opacity;
-    }, speed);
-  }
+  t_o = setInterval(function(){
+    m += 0.25;
+    var opacity = i / 100;
+    var margin = (100 - i) ** 2 / 16;
+    i += step; 
+    if (i > 100 + step) {
+      form.style.marginTop = "calc(50vh - 240px)";
+      clearInterval(t_o);
+      return; 
+    } else if (i < 0 + step) {
+      menu.style.display = "none";
+      form.style.marginTop = "calc(50vh - 240px)";
+      clearInterval(t_o);
+      return; 
+    }
+    menu.style.opacity = opacity;
+    form.style.marginTop = "calc(50vh - 240px - " + margin + "px)";
+  }, speed);
 }
 
