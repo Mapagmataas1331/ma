@@ -1,5 +1,4 @@
 var logged = false;
-window.logged = logged;
 
 function log_result(res, text) {
   const res_cont = document.getElementById("log_res-container");
@@ -14,40 +13,36 @@ function log_result(res, text) {
     res_cont.style.backgroundColor = "#ff9933"
   }
 }
-window.log_result = log_result;
 
 function appear(){
-  var menu = document.getElementById("log-menu");
+  var bg = document.getElementById("black-bg");
   var form = document.getElementById("log-form");
   var t_o;
   var speed = 20;
-  var m = 0;
-  if (menu.style.display == "none") {
+  if (bg.style.display == "none") {
     var i = 0;
     var step = 2;
-    menu.style.opacity = 0;
-    menu.style.display = "block";
-  } else if (menu.style.opacity == 1) {
+    bg.style.opacity = 0;
+    bg.style.display = "block";
+  } else if (bg.style.opacity == 1) {
     var i = 100;
-    step = -2
+    var step = -2;
   }
   t_o = setInterval(function(){
-    m += 0.25;
     var opacity = i / 100;
-    var margin = (100 - i) ** 2 / 16;
+    var margin = (100 - i) ** 2 / 16 + 240;
     i += step; 
     if (i > 100 + step) {
-      form.style.marginTop = "calc(50vh - 240px)";
       clearInterval(t_o);
       return; 
     } else if (i < 0 + step) {
-      menu.style.display = "none";
+      bg.style.display = "none";
       form.style.marginTop = "calc(50vh - 240px)";
       clearInterval(t_o);
       return; 
     }
-    menu.style.opacity = opacity;
-    form.style.marginTop = "calc(50vh - 240px - " + margin + "px)";
+    bg.style.opacity = opacity;
+    form.style.marginTop = "calc(50vh - " + margin + "px)";
   }, speed);
 }
 

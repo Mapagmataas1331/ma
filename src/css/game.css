@@ -38,6 +38,7 @@ body {
     background-image: url("../img/game/backgrounds/0.png");
     background-repeat: no-repeat;
     background-size: cover;
+    image-rendering: pixelated;
 }
 #joystick {
     display: none;
