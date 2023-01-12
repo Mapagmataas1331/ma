@@ -106,7 +106,7 @@ function getHeroes() {
       if (userSnap.child("game").exists) {
         if (userSnap.child("game/online").val()) {
           if (userSnap.child("game/afk_time").val() >= 100) {
-            createHero(userSnap.key, `${userSnap.key}\n\nAFK: ${Math.trunc(userSnap.child("game/afk_time").val() / 10)}\nkick: ${Math.trunc((600 - userSnap.child("game/afk_time").val()) / 10) + 1}`, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+            createHero(userSnap.key, `${userSnap.key}\n\n\n\n\nAFK: ${Math.trunc(userSnap.child("game/afk_time").val() / 10)}\nkick: ${Math.trunc((600 - userSnap.child("game/afk_time").val()) / 10) + 1}`, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
           } else {
             createHero(userSnap.key, `${userSnap.key}`, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
           }

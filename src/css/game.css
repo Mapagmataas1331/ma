@@ -33,12 +33,16 @@ body {
     color: #f2f2f2;
 }
 .hero div {
-    height: 64px;
     width: 64px;
-    background-image: url("../img/game/backgrounds/0.png");
     background-repeat: no-repeat;
     background-size: cover;
     image-rendering: pixelated;
+}
+.hero div:nth-child(2) {
+    height: 48px;
+}
+.hero div:nth-child(3) {
+    height: 16px;
 }
 #joystick {
     display: none;

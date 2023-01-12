@@ -77,7 +77,8 @@ function logNext() {
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
     const hero = document.getElementById("hero-" + db_uname);
-    const hero_box = document.getElementById("id", "hero-" + db_uname + "-box")
+    const box0 = document.getElementById("id", "hero-" + db_uname + "-box0")
+    const box1 = document.getElementById("id", "hero-" + db_uname + "-box1")
     if (axis == 0) {
         if (dir == 0) {
             hero_cords.x += 8;
@@ -95,7 +96,6 @@ function moveHero(axis, dir) {
         hero.style.top = `calc(50% - ${hero_cords.y + 48}px)`;
         main.style.top = `calc(50vh + ${hero_cords.y - 720}px)`;
     }
-    return console.log(db_uname, hero_cords);
 }
 
 var newOnce = true;
@@ -135,10 +135,14 @@ function makingHero(user, name, x, y) {
     chHero_name.setAttribute("id", "hero-" + user + "-name");
     chHero_name.innerText = name;
     chHero.appendChild(chHero_name);
-    const chHero_box = document.createElement("div");
-    chHero_box.setAttribute("id", "hero-" + user + "-box");
-    chHero_box.style.backgroundImage = "url('src/img/game/heroes/0.png')";
-    chHero.appendChild(chHero_box);
+    const chHero_box0 = document.createElement("div");
+    chHero_box0.setAttribute("id", "hero-" + user + "-box0");
+    chHero_box0.style.backgroundImage = "url('src/img/game/heroes/00-00.png')";
+    chHero.appendChild(chHero_box0);
+    const chHero_box1 = document.createElement("div");
+    chHero_box1.setAttribute("id", "hero-" + user + "-box1");
+    chHero_box1.style.backgroundImage = "url('src/img/game/heroes/00-10.png')";
+    chHero.appendChild(chHero_box1);
 }
 
 function removeHero(user) {
