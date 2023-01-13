@@ -1,3 +1,4 @@
+var once = {};
 var logged = false;
 
 function log_result(res, text) {
@@ -6,7 +7,7 @@ function log_result(res, text) {
   res_text.innerText = text;
   if (res == 1) {
     res_cont.style.backgroundColor = "#33cc33"
-    console.log(`Welcome ${db_uname}!`);
+    console.log(`Welcome ${db.uname}!`);
     appear();
     logNext();
   } else {

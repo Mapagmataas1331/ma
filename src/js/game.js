@@ -15,6 +15,9 @@ if (isTouch) {
 }
 
 var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
+once.createHero = true;
+once.idleAnim = true;
+db.con = false;
 
 var keymap = {};
 onkeydown = onkeyup = (e) => {
@@ -30,14 +33,14 @@ window.addEventListener('load', () => {
     var onetime = true;
     appear();
     setInterval(() => {
-        db_checkAfk();
-        if (typeof(db_con) !== 'undefined' && db_con) {
+        db.checkAfk();
+        if (typeof(db.con) !== 'undefined' && db.con) {
             checkkey();
             if (isTouch) {
                 checkjoy();
             }
-            db_getHeroes();
-            db_updateHero(hero_cords.x, hero_cords.y);
+            db.getHeroes();
+            db.updateHero(hero_cords.x, hero_cords.y);
             if (onetime) {
                 loopIdleAnim();
                 onetime = false;
@@ -80,50 +83,27 @@ function checkjoy() {
 }
 
 function logNext() {
-    db_logHero();
+    db.logHero();
 }
 
 function loopIdleAnim() {
     var randv = rand(2500, 5000);
     setTimeout(function() {
-        idleAnim(randv);
+        db.idleAnim(randv);
         loopIdleAnim();
     }, randv);
 }
 
-function idleAnim(randv) {
-    const elm = document.getElementById("hero-" + db_uname + "-img0")
-    if (db_afk) {
-        elm.style.backgroundImage = "url('src/img/game/heroes/00-02.png')";
-    } else {
-        setTimeout(function() {
-            elm.style.backgroundImage = "url('src/img/game/heroes/00-01.png')";
-            setTimeout(function() {
-                elm.style.backgroundImage = "url('src/img/game/heroes/00-02.png')";
-                setTimeout(function() {
-                    elm.style.backgroundImage = "url('src/img/game/heroes/00-01.png')";
-                    setTimeout(function() {
-                        elm.style.backgroundImage = "url('src/img/game/heroes/00-00.png')";
-                    }, 0.05 * randv);
-                }, 0.05 * randv);
-            }, 0.05 * randv);
-        }, 0.05 * randv);
-    }
-}
-
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
-    const hero = document.getElementById("hero-" + db_uname);
-    const box = document.getElementById("hero-" + db_uname + "-box")
+    const hero = document.getElementById("hero-" + db.uname);
     if (axis == 0) {
         if (dir == 0) {
             hero_cords.x += 8;
-            box.style.webkitTransform = "scaleX(1)";
-            box.style.transform = "scaleX(1)";
+            db.updateHeroTransform("scaleX(1)");
         } else {
             hero_cords.x -= 8;
-            box.style.webkitTransform = "scaleX(-1)";
-            box.style.transform = "scaleX(-1)";
+            db.updateHeroTransform("scaleX(-1)");
         }
         hero.style.left = `calc(50% - ${-hero_cords.x + 32}px)`;
         main.style.left = `calc(50vw + ${-hero_cords.x - 1280}px)`;
@@ -138,32 +118,50 @@ function moveHero(axis, dir) {
     }
 }
 
-var newOnce = true;
-function createHero(user, name, x, y) {
+function createHero(user, name, hero, img0, img1, transform, x, y) {
     const main = document.getElementById("main");
-    if (user == db_uname && newOnce) {
-        newOnce = false;
-        makingHero(user, name, x, y);
+    const curHeroName = document.getElementById("hero-" + user + "-name");
+    const curHerobox = document.getElementById("hero-" + user + "-box");
+    const curHeroimg1 = document.getElementById("hero-" + user + "-img0");
+    const curHeroimg2 = document.getElementById("hero-" + user + "-img1");
+    if (user == db.uname && once.createHero) {
+        once.createHero = false;
+        makingHero(user, x, y);
         hero_cords = { x: x, y: y };
         main.style.left = `calc(50vw + ${-x - 1280}px)`;
         main.style.top = `calc(50vh + ${y - 720}px)`;
         return;
-    } else if (user == db_uname && !newOnce){
-        document.getElementById("hero-" + user + "-name").innerText = name;
+    } else if (user == db.uname && !once.createHero){
+        checkHeroVals()
         return;
     } else {
         var bgHero = document.getElementById("hero-" + user);
         if (typeof(bgHero) != 'undefined' && bgHero != null) {
             bgHero.style.left = `calc(50% - ${-x + 32}px)`;
             bgHero.style.top = `calc(50% - ${y + 48}px)`;
-            document.getElementById("hero-" + user + "-name").innerText = name;
+            checkHeroVals()
         } else {
-            makingHero(user, name, x, y);
+            makingHero(user, x, y);
+        }
+    }
+    function checkHeroVals() {
+        if (curHeroName.innerText != name) {
+            curHeroName.innerText = name;
+        }
+        if (curHerobox.style.transform != transform) {
+            curHerobox.style.transform = transform;
+            curHerobox.style.webkitTransform = transform;
+        }
+        if (curHeroimg1.style.backgroundImage != `url('src/img/game/heroes/${hero}-0${img0}.png')`) {
+            curHeroimg1.style.backgroundImage = `url('src/img/game/heroes/${hero}-0${img0}.png')`;
+        }
+        if (curHeroimg2.style.backgroundImage != `url('src/img/game/heroes/${hero}-1${img1}.png')`) {
+            curHeroimg2.style.backgroundImage = `url('src/img/game/heroes/${hero}-1${img1}.png')`;
         }
     }
 }
 
-function makingHero(user, name, x, y) {
+function makingHero(user, x, y) {
     const main = document.getElementById("main");
     chHero = document.createElement("div");
     chHero.setAttribute("id", "hero-" + user);
@@ -173,18 +171,15 @@ function makingHero(user, name, x, y) {
     main.appendChild(chHero);
     const chHero_name = document.createElement("p");
     chHero_name.setAttribute("id", "hero-" + user + "-name");
-    chHero_name.innerText = name;
     chHero.appendChild(chHero_name);
     const chHero_box = document.createElement("div");
     chHero_box.setAttribute("id", "hero-" + user + "-box");
     chHero.appendChild(chHero_box);
     const chHero_box0 = document.createElement("div");
     chHero_box0.setAttribute("id", "hero-" + user + "-img0");
-    chHero_box0.style.backgroundImage = "url('src/img/game/heroes/00-00.png')";
     chHero_box.appendChild(chHero_box0);
     const chHero_box1 = document.createElement("div");
     chHero_box1.setAttribute("id", "hero-" + user + "-img1");
-    chHero_box1.style.backgroundImage = "url('src/img/game/heroes/00-10.png')";
     chHero_box.appendChild(chHero_box1);
 }
 

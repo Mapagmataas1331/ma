@@ -13,14 +13,14 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const database = getDatabase(app);
+window.db = {};
 
 function log(login, pass) {
-  get(ref(db, `users/${login}/password`)).then((snapshot) => {
+  get(ref(database, `users/${login}/password`)).then((snapshot) => {
     if (snapshot.exists()) {
       if (pass == snapshot.val()) {
-        var uname = login;
-        window.db_uname = uname;
+        window.db.uname = login;
         log_result(1, "Successfully logged in!");
         return true;
       } else {
@@ -28,39 +28,38 @@ function log(login, pass) {
         return false;
       }
     } else {
-      set(ref(db, `users/${login}`), {
+      set(ref(database, `users/${login}`), {
         password: pass
       });
-      var uname = login;
-      window.db_uname = uname;
+      window.db.uname = login;
       log_result(1, "Successfully registered!");
       return true;
     }
   });
 }
-window.db_log = log;
+window.db.log = log;
 
 // ---------- Game ---------- \\
 function checkAfk() {
-  get(ref(db, 'users')).then((snap) => {
+  get(ref(database, 'users')).then((snap) => {
     snap.forEach((userSnap) => {
       if (userSnap.child("game").exists) {
         if (userSnap.child("game/online").val()) {
           if (userSnap.child("game/cord_x").val() == userSnap.child("game/cordOld_x").val() && userSnap.child("game/cord_y").val() == userSnap.child("game/cordOld_y").val()) {
             if (userSnap.child("game/afk_time").val() >= 600) {
-              update(ref(db, `users/${userSnap.key}/game`), {
+              update(ref(database, `users/${userSnap.key}/game`), {
                 online: false
               });
-              update(ref(db, `users/${userSnap.key}/game`), {
+              update(ref(database, `users/${userSnap.key}/game`), {
                 afk_time: 0
               });
             } else {
-              update(ref(db, `users/${userSnap.key}/game`), {
+              update(ref(database, `users/${userSnap.key}/game`), {
                 afk_time: userSnap.child("game/afk_time").val() + 1
               });
             }
           } else {
-            update(ref(db, `users/${userSnap.key}/game`), {
+            update(ref(database, `users/${userSnap.key}/game`), {
               cordOld_x: userSnap.child("game/cord_x").val(),
               cordOld_y: userSnap.child("game/cord_y").val(),
               afk_time: 0
@@ -71,51 +70,55 @@ function checkAfk() {
     });
   });
 }
-window.db_checkAfk = checkAfk;
+window.db.checkAfk = checkAfk;
 
 function logHero() {
-  get(ref(db, `users/${db_uname}/game`)).then((snapshot) => {
+  get(ref(database, `users/${db.uname}/game`)).then((snapshot) => {
     if (!(snapshot.exists())) {
-      set(ref(db, `users/${db_uname}/game`), {
+      set(ref(database, `users/${db.uname}/game`), {
         cord_x: 0,
         cord_y: 0
       });
     }
-    update(ref(db, `users/${db_uname}/game`), {
-      online: true
+    update(ref(database, `users/${db.uname}/game`), {
+      online: true,
+      img_0: "0",
+      img_1: "0"
     });
-    var con = true;
-    window.db_con = con;
+    window.db.con = true;
   });
 }
-window.db_logHero = logHero;
+window.db.logHero = logHero;
 
 function updateHero(newX, newY) {
-  update(ref(db, `users/${db_uname}/game`), {
+  update(ref(database, `users/${db.uname}/game`), {
     cord_x: newX,
     cord_y: newY
   });
 }
-window.db_updateHero = updateHero;
+window.db.updateHero = updateHero;
 
 function getHeroes() {
   // var id = 0;
-  get(ref(db, 'users')).then((snap) => {
+  get(ref(database, 'users')).then((snap) => {
     snap.forEach((userSnap) => {
       // id += 1;
       if (userSnap.child("game").exists) {
         if (userSnap.child("game/online").val()) {
-          if (userSnap.child("game/afk_time").val() >= 100) {
-            createHero(userSnap.key, `${userSnap.key}\n\n\n\n\nAFK: ${Math.trunc(userSnap.child("game/afk_time").val() / 10)}\nkick: ${Math.trunc((600 - userSnap.child("game/afk_time").val()) / 10) + 1}`, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+          if (userSnap.child("game/afk_time").val() >= 300) {
+            createHero(userSnap.key, `${userSnap.key}\n\n\n\n\nAFK: ${Math.trunc(userSnap.child("game/afk_time").val() / 10)}\nkick: ${Math.trunc((600 - userSnap.child("game/afk_time").val()) / 10) + 1}`,
+            "00", userSnap.child("game/img_0").val(), userSnap.child("game/img_1").val(), userSnap.child("game/transform").val(), userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+            window.db.afk = true;
           } else {
-            createHero(userSnap.key, `${userSnap.key}`, userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+            createHero(userSnap.key, `${userSnap.key}`, "00", userSnap.child("game/img_0").val(), userSnap.child("game/img_1").val(), userSnap.child("game/transform").val(), userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
+            window.db.afk = false;
           }
-          // if (userSnap.child("game/afk_time").val() == 400 && userSnap.key == db_uname) {
+          // if (userSnap.child("game/afk_time").val() == 400 && userSnap.key == db.uname) {
           //   customAlert("warn", "You are AFK!", "If you don't move you will be kicked soon.");
           // }
         } else {
           removeHero(userSnap.key);
-          if (userSnap.key == db_uname) {
+          if (userSnap.key == db.uname) {
             defFunc("reload");
           }
         }
@@ -123,4 +126,50 @@ function getHeroes() {
     });
   });
 }
-window.db_getHeroes = getHeroes;
+window.db.getHeroes = getHeroes;
+
+function idleAnim(randv) {
+  if (db.afk && once.idleAnim) {
+    once.idleAnim = false;
+    setTimeout(function() {
+      update(ref(database, `users/${db.uname}/game`), {
+        img_0: "1",
+      });
+      setTimeout(function() {
+        update(ref(database, `users/${db.uname}/game`), {
+          img_0: "2",
+        });
+      }, 0.05 * randv);
+    }, 0.05 * randv);
+  } else if (!db.afk){
+    once.idleAnim = true;
+    setTimeout(function() {
+      update(ref(database, `users/${db.uname}/game`), {
+        img_0: "1",
+      });
+      setTimeout(function() {
+        update(ref(database, `users/${db.uname}/game`), {
+          img_0: "2",
+        });
+        setTimeout(function() {
+          update(ref(database, `users/${db.uname}/game`), {
+            img_0: "1",
+          });
+         setTimeout(function() {
+          update(ref(database, `users/${db.uname}/game`), {
+            img_0: "0",
+          });
+         }, 0.05 * randv);
+        }, 0.05 * randv);
+      }, 0.05 * randv);
+    }, 0.05 * randv);
+  }
+}
+window.db.idleAnim = idleAnim;
+
+function updateHeroTransform(value) {
+  update(ref(database, `users/${db.uname}/game`), {
+    transform: value
+  });
+}
+window.db.updateHeroTransform = updateHeroTransform;
