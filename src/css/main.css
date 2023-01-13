@@ -92,6 +92,7 @@ body {
     width: 60%;
     margin: 56px auto 32px calc(20% - 0.5px);
     color: #4d4d4d;
+    background-color: #f0f0f0;
 }
 #log-form button:hover {
     border: 1px solid #0099ff;
