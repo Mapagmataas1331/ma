@@ -13,14 +13,14 @@
     <title>Malancholy</title>
     <link rel="stylesheet" href="src/css/malancholy.css">
   </head>
-  <div id="nav-cont">
-    <div onclick="location.href = 'https://ma.kak.si';">
-      <img src="src/img/icon/512.png" alt="Ma">
-      <p>.kak.si</p>
-    </div>
-    <button onclick="appear(nav);">=</button>
-  </div>
   <body>
+    <div id="nav-cont">
+      <div onclick="location.href = 'https://ma.kak.si';">
+        <img src="src/img/icon/512.png" alt="Ma">
+        <p>.kak.si</p>
+      </div>
+      <button onclick="appear(nav);">=</button>
+    </div>
     <div id="unity-container" class="unity-desktop">
       <canvas id="unity-canvas" width=1920 height=1080></canvas>
       <div id="unity-loading-bar">
@@ -71,9 +71,9 @@
       var buildUrl = "src/gamedata/Build";
       var loaderUrl = buildUrl + "/0.loader.js";
       var config = {
-        dataUrl: buildUrl + "/0.data.br",
-        frameworkUrl: buildUrl + "/0.framework.js.br",
-        codeUrl: buildUrl + "/0.wasm.br",
+        dataUrl: buildUrl + "/0.data.unityweb",
+        frameworkUrl: buildUrl + "/0.framework.js.unityweb",
+        codeUrl: buildUrl + "/0.wasm.unityweb",
         streamingAssetsUrl: "src/gamedata/StreamingAssets",
         companyName: "ma.kak.si",
         productName: "Malancholy",
