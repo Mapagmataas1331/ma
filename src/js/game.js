@@ -15,8 +15,8 @@ if (isTouch) {
 }
 
 var hero_cords = { x: 0, y: 0 }, joymap = { x: 0, y: 0 }, speed = 25;
-once.createHero = true;
-once.idleAnim = true;
+valsArr.createHero = true;
+valsArr.idleAnim = true;
 db.con = false;
 
 var keymap = {};
@@ -96,7 +96,7 @@ function loopIdleAnim() {
 
 function moveHero(axis, dir) {
     const main = document.getElementById("main");
-    const hero = document.getElementById("hero-" + db.uname);
+    const hero = document.getElementById("hero-" + valsArr.uname);
     if (axis == 0) {
         if (dir == 0) {
             hero_cords.x += 8;
@@ -124,14 +124,14 @@ function createHero(user, name, hero, img0, img1, transform, x, y) {
     const curHerobox = document.getElementById("hero-" + user + "-box");
     const curHeroimg1 = document.getElementById("hero-" + user + "-img0");
     const curHeroimg2 = document.getElementById("hero-" + user + "-img1");
-    if (user == db.uname && once.createHero) {
-        once.createHero = false;
+    if (user == valsArr.uname && valsArr.createHero) {
+        valsArr.createHero = false;
         makingHero(user, x, y);
         hero_cords = { x: x, y: y };
         main.style.left = `calc(50vw + ${-x - 1280}px)`;
         main.style.top = `calc(50vh + ${y - 720}px)`;
         return;
-    } else if (user == db.uname && !once.createHero){
+    } else if (user == valsArr.uname && !valsArr.createHero){
         checkHeroVals()
         return;
     } else {

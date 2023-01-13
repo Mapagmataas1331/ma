@@ -20,7 +20,7 @@ function log(login, pass) {
   get(ref(database, `users/${login}/password`)).then((snapshot) => {
     if (snapshot.exists()) {
       if (pass == snapshot.val()) {
-        window.db.uname = login;
+        valsArr.uname = login;
         log_result(1, "Successfully logged in!");
         return true;
       } else {
@@ -31,7 +31,7 @@ function log(login, pass) {
       set(ref(database, `users/${login}`), {
         password: pass
       });
-      window.db.uname = login;
+      valsArr.uname = login;
       log_result(1, "Successfully registered!");
       return true;
     }
@@ -73,14 +73,14 @@ function checkAfk() {
 window.db.checkAfk = checkAfk;
 
 function logHero() {
-  get(ref(database, `users/${db.uname}/game`)).then((snapshot) => {
+  get(ref(database, `users/${valsArr.uname}/game`)).then((snapshot) => {
     if (!(snapshot.exists())) {
-      set(ref(database, `users/${db.uname}/game`), {
+      set(ref(database, `users/${valsArr.uname}/game`), {
         cord_x: 0,
         cord_y: 0
       });
     }
-    update(ref(database, `users/${db.uname}/game`), {
+    update(ref(database, `users/${valsArr.uname}/game`), {
       online: true,
       img_0: "0",
       img_1: "0"
@@ -91,7 +91,7 @@ function logHero() {
 window.db.logHero = logHero;
 
 function updateHero(newX, newY) {
-  update(ref(database, `users/${db.uname}/game`), {
+  update(ref(database, `users/${valsArr.uname}/game`), {
     cord_x: newX,
     cord_y: newY
   });
@@ -113,12 +113,12 @@ function getHeroes() {
             createHero(userSnap.key, `${userSnap.key}`, "00", userSnap.child("game/img_0").val(), userSnap.child("game/img_1").val(), userSnap.child("game/transform").val(), userSnap.child("game/cord_x").val(), userSnap.child("game/cord_y").val());
             window.db.afk = false;
           }
-          // if (userSnap.child("game/afk_time").val() == 400 && userSnap.key == db.uname) {
+          // if (userSnap.child("game/afk_time").val() == 400 && userSnap.key == valsArr.uname) {
           //   customAlert("warn", "You are AFK!", "If you don't move you will be kicked soon.");
           // }
         } else {
           removeHero(userSnap.key);
-          if (userSnap.key == db.uname) {
+          if (userSnap.key == valsArr.uname) {
             defFunc("reload");
           }
         }
@@ -129,34 +129,34 @@ function getHeroes() {
 window.db.getHeroes = getHeroes;
 
 function idleAnim(randv) {
-  if (db.afk && once.idleAnim) {
-    once.idleAnim = false;
+  if (db.afk && valsArr.idleAnim) {
+    valsArr.idleAnim = false;
     setTimeout(function() {
-      update(ref(database, `users/${db.uname}/game`), {
+      update(ref(database, `users/${valsArr.uname}/game`), {
         img_0: "1",
       });
       setTimeout(function() {
-        update(ref(database, `users/${db.uname}/game`), {
+        update(ref(database, `users/${valsArr.uname}/game`), {
           img_0: "2",
         });
       }, 0.05 * randv);
     }, 0.05 * randv);
   } else if (!db.afk){
-    once.idleAnim = true;
+    valsArr.idleAnim = true;
     setTimeout(function() {
-      update(ref(database, `users/${db.uname}/game`), {
+      update(ref(database, `users/${valsArr.uname}/game`), {
         img_0: "1",
       });
       setTimeout(function() {
-        update(ref(database, `users/${db.uname}/game`), {
+        update(ref(database, `users/${valsArr.uname}/game`), {
           img_0: "2",
         });
         setTimeout(function() {
-          update(ref(database, `users/${db.uname}/game`), {
+          update(ref(database, `users/${valsArr.uname}/game`), {
             img_0: "1",
           });
          setTimeout(function() {
-          update(ref(database, `users/${db.uname}/game`), {
+          update(ref(database, `users/${valsArr.uname}/game`), {
             img_0: "0",
           });
          }, 0.05 * randv);
@@ -168,7 +168,7 @@ function idleAnim(randv) {
 window.db.idleAnim = idleAnim;
 
 function updateHeroTransform(value) {
-  update(ref(database, `users/${db.uname}/game`), {
+  update(ref(database, `users/${valsArr.uname}/game`), {
     transform: value
   });
 }
