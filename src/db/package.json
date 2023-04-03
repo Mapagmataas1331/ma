@@ -1,0 +1,12 @@
+{
+  "name": "db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "author": "mapagmataas",
+  "license": "ISC",
+  "dependencies": {
+    "firebase": "^9.19.1",
+    "webpack": "^5.77.0"
+  }
+}
