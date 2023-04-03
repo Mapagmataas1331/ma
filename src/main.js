@@ -33,7 +33,7 @@ langBtn.addEventListener("click", () => {
 const trans_arr = [
     ".kak.si", ".как.си",
     "ma.kak.si", "ма.как.си",
-    "Item 1", "Предмет 1",
+    "Author", "Автор",
     "Item 2", "Предмет 2",
     "Item 3", "Предмет 3",
     "Item 4", "Предмет 4",
