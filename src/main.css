@@ -51,12 +51,12 @@ h3, p {
 }
 #nav p {
     color: var(--primary-text-color);
-    font-family: Constantia, "Palatino Linotype", Palatino, Georgia, serif;
+    font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', sans-serif;
     text-shadow: -3px 2px 4px var(--third-color);
     font-weight: 300;
     height: 64px;
-    font-size: 38px;
-    margin: 8px 8px auto 4px;
+    font-size: 32px;
+    margin: 10px 8px auto 0px;
     cursor: pointer;
 }
 #nav a:hover p, #nav p:hover, i:hover{
@@ -64,9 +64,11 @@ h3, p {
     /* text-decoration: underline; */
 }
 #nav a img {
-    margin: 7px 4px auto 8px;
-    height: 48px;
+    margin: 2.5px 0 auto 8px;
+    height: 56px;
     aspect-ratio: 1 / 1;
+    box-shadow: -3px 2px 4px var(--third-color);
+    border-radius: 64px;
 }
 #nav div {
     display: flex;
@@ -75,9 +77,9 @@ h3, p {
 #nav i {
     color: var(--primary-text-color);
     margin: auto 4px auto 4px;
-    height: 48px;
+    height: 40px;
     aspect-ratio: 1 / 1;
-    font-size: 48px;
+    font-size: 40px;
     cursor: pointer;
 }
 .spinner {
@@ -132,80 +134,4 @@ p.spinner {
     opacity: 1;
     transform: scale(1);
   }
-}
-.main-info {
-    margin-top: 120px;
-    text-align: center;
-}
-.main-info img {
-    max-width: 80vw;
-    margin-bottom: 16px;
-}
-.main-info h3 {
-    font-size: 32px;
-}
-.main-info p {
-    font-size: 24px;
-}
-.container-wrapper {
-    position: relative;
-    top: 64px;
-    display: flex;
-    flex-direction: row;
-    justify-content: center;
-} 
-.container {
-    aspect-ratio: 0.64;
-    margin: 2.5vw;
-    min-width: 256px;
-    box-sizing: border-box;
-    padding: 20px;
-    background-color: var(--second-color);
-    color: var(--second-text-color);
-    text-align: center;
-    font-size: 32px;
-    cursor: pointer;
-    transition: 500ms;
-}
-.container:hover {
-    box-shadow: 0px 8px 16px var(--third-color);
-    margin-top: 3vw;
-}
-.container img {
-    max-width: 100%;
-    margin-bottom: 16px;
-}
-.container h3 {
-    font-size: 24px;
-    margin-bottom: 8px;
-}
-.container p {
-    font-size: 16px;
-}
-.container-wrapper:nth-of-type(3) .container:nth-child(1) {
-    background-color: goldenrod;
-}
-.container-wrapper:nth-of-type(3) .container:nth-child(2) {
-    background-color: darkgreen;
-}
-.container-wrapper:nth-of-type(3) .container:nth-child(3) {
-    background-color: gray;
-    background-image: url(./img/wood.png);
-}
-.container-wrapper:nth-of-type(4) .container:nth-child(1) {
-    background-color: midnightblue;
-}
-.container-wrapper:nth-of-type(4) .container:nth-child(2) {
-    background-color: purple;
-}
-.container-wrapper:nth-of-type(4) .container:nth-child(3) {
-    background-color: lightskyblue;
-}
-@media (max-width: 900px) {
-    .container-wrapper {
-        flex-direction: column;
-    }
-    .container {
-        margin: 5vw;
-    }
 }

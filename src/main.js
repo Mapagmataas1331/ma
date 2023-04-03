@@ -31,28 +31,14 @@ langBtn.addEventListener("click", () => {
 });
 
 const trans_arr = [
-    "NB", "НБ",
-    "Novo-Business", "Ново-Бизнес",
+    ".kak.si", ".как.си",
+    "ma.kak.si", "ма.как.си",
     "Item 1", "Предмет 1",
     "Item 2", "Предмет 2",
     "Item 3", "Предмет 3",
     "Item 4", "Предмет 4",
     "Item 5", "Предмет 5",
     "Item 6", "Предмет 6",
-    "Project", "Проект",
-    "Many many many many many many many many many many info about project.", "Много много много много много много много много много много инфы о проекте.",
-    "Container 1", "Контейнер 1",
-    "Many many many many many many many many many many info about Container 1.", "Много много много много много много много много много много инфы о контейнере 1.",
-    "Container 2", "Контейнер 2",
-    "Many many many many many many many many many many info about Container 2.", "Много много много много много много много много много много инфы о контейнере 2.",
-    "Container 3", "Контейнер 3",
-    "Many many many many many many many many many many info about Container 3.", "Много много много много много много много много много много инфы о контейнере 3.",
-    "Container 4", "Контейнер 4",
-    "Many many many many many many many many many many info about Container 4.", "Много много много много много много много много много много инфы о контейнере 4.",
-    "Container 5", "Контейнер 5",
-    "Many many many many many many many many many many info about Container 5.", "Много много много много много много много много много много инфы о контейнере 5.",
-    "Container 6", "Контейнер 6",
-    "Many many many many many many many many many many info about Container 6.", "Много много много много много много много много много много инфы о контейнере 6.",
 ];
 function translate(Lang, text) {
     var result;
