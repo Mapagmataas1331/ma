@@ -40,7 +40,7 @@ a {
   box-shadow: -3px 2px 4px var(--third-color);
   top: 0;
   left: 0;
-  width: 100%;
+  width: 100vw;
   height: 64px;
   background-color: var(--second-color);
   z-index: 100;
