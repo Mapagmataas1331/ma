@@ -103,7 +103,7 @@ p.spinner {
 }
 #dropdown-menu {
   z-index: 100;
-  position: absolute;
+  position: fixed;
   top: 64px;
   right: 0;
   min-width: 160px;
@@ -139,5 +139,35 @@ p.spinner {
   100% {
   opacity: 1;
   transform: scale(1);
+  }
+}
+@media screen and (min-width: 0px) {
+  #nav {
+    height: 40px;
+  }
+  #nav p, #nav label, #nav select {
+    font-size: 22.5px;
+  }
+  #nav i {
+    font-size: 25px;
+    height: 25px;
+  }
+  #dropdown-menu {
+    top: 40px;
+  }
+}
+@media screen and (min-width: 480px) {
+  #nav {
+    height: 64px;
+  }
+  #nav p, #nav label, #nav select {
+    font-size: 36px;
+  }
+  #nav i {
+    font-size: 40px;
+    height: 40px;
+  }
+  #dropdown-menu {
+    top: 64px;
   }
 }
