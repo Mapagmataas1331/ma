@@ -46,21 +46,19 @@ a {
   z-index: 100;
 }
 #nav form {
-  margin: 8px auto auto 10px;
+  margin: auto auto auto 10px;
 }
 #nav p, #nav label, #nav select {
   color: var(--primary-text-color);
   text-shadow: -3px 2px 4px var(--third-color);
   font-weight: 300;
-  height: 64px;
   font-size: 36px;
-  margin: 10px 8px auto 0px;
+  margin: auto 8px auto 0px;
 }
 #nav select {
   appearance: none;
   background-color: var(--second-color);
   border: 0!important;
-  outline: 0!important;
   margin: 0 0 0 -12px;
   height: 36px;
   z-index: 100;
