@@ -1,5 +1,5 @@
 function hrefTo(page) {
-  if (typeof page != undefined && page != null) {
+  if (typeof page != undefined && page != null && page != "index") {
     location.href="/"+page;
   } else location.href="/";
 }
