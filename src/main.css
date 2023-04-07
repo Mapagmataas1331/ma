@@ -46,14 +46,14 @@ a {
   z-index: 100;
 }
 #nav form {
-  margin: 10px auto auto 10px;
+  margin: 8px auto auto 10px;
 }
 #nav p, #nav label, #nav select {
   color: var(--primary-text-color);
   text-shadow: -3px 2px 4px var(--third-color);
   font-weight: 300;
   height: 64px;
-  font-size: 32px;
+  font-size: 36px;
   margin: 10px 8px auto 0px;
 }
 #nav select {
@@ -72,7 +72,6 @@ a {
 a:hover, #lang-btn:hover, i:hover, #nav select:hover{
   color: var(--second-text-color)!important;
   cursor: pointer;
-  /* text-decoration: underline; */
 }
 #nav a img {
   margin: 2.5px 0 auto 8px;
@@ -84,9 +83,6 @@ a:hover, #lang-btn:hover, i:hover, #nav select:hover{
 #nav div {
   display: flex;
   margin: 0 4px 0 auto;
-}
-#lang-btn {
-  font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', sans-serif;
 }
 #nav i {
   color: var(--primary-text-color);
@@ -103,9 +99,6 @@ a:hover, #lang-btn:hover, i:hover, #nav select:hover{
 p.spinner {
   transform-origin: center 32.5%;
 }
-/* .spinner.in {
-  transform: rotate(180deg);
-} */
 .spinner.out {
   transform: rotate(360deg);
 }
