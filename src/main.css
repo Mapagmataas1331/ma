@@ -152,11 +152,17 @@ p.spinner {
 }
 #content div:first-child {
   text-align: center;
-  font-size: 32px;
+  font-size: 40px;
+  font-weight: 600;
 }
 #content div:first-child img {
   width: 50%;
+  min-width: 224px;
   max-width: 512px;
+}
+#content div:first-child p {
+  color: var(--second-color);
+  text-shadow: 1px -1px 4px var(--second-text-color);
 }
 
 @media screen and (min-width: 0px) {
@@ -174,7 +180,7 @@ p.spinner {
     top: 40px;
   }
   #content div:first-child {
-    font-size: 24px;
+    font-size: 32px;
   }
 }
 @media screen and (min-width: 480px) {
@@ -192,6 +198,6 @@ p.spinner {
     top: 64px;
   }
   #content div:first-child {
-    font-size: 32px;
+    font-size: 40px;
   }
 }
