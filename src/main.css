@@ -45,6 +45,7 @@ a {
   height: 64px;
   background-color: var(--second-color);
   z-index: 100;
+  transition: none;
 }
 #nav form {
   margin: auto auto auto 10px;
