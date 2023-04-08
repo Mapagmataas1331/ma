@@ -25,6 +25,7 @@ body.light{
   padding: 0;
   font-family: Constantia, "Palatino Linotype", Palatino, Georgia, serif;
   color: var(--primary-text-color);
+  transition: 0.4s;
 }
 body {
   overflow-x: hidden;
@@ -133,14 +134,30 @@ p.spinner {
 }
 @keyframes scaleZ {
   0% {
-  opacity: 0;
-  transform: scale(0);
+    opacity: 0;
+    transform: scale(0);
   }
   100% {
-  opacity: 1;
-  transform: scale(1);
+    opacity: 1;
+    transform: scale(1);
   }
 }
+
+#content {
+  position: absolute;
+  top: 64px;
+  width: 100%;
+  padding: 2vw;
+}
+#content div:first-child {
+  text-align: center;
+  font-size: 32px;
+}
+#content div:first-child img {
+  width: 50%;
+  max-width: 512px;
+}
+
 @media screen and (min-width: 0px) {
   #nav {
     height: 40px;
@@ -152,8 +169,11 @@ p.spinner {
     font-size: 25px;
     height: 25px;
   }
-  #dropdown-menu {
+  #dropdown-menu, #content {
     top: 40px;
+  }
+  #content div:first-child {
+    font-size: 24px;
   }
 }
 @media screen and (min-width: 480px) {
@@ -167,7 +187,10 @@ p.spinner {
     font-size: 40px;
     height: 40px;
   }
-  #dropdown-menu {
+  #dropdown-menu, #content {
     top: 64px;
+  }
+  #content div:first-child {
+    font-size: 32px;
   }
 }
