@@ -65,8 +65,11 @@ addEventListenerList(document.querySelectorAll(".nav-item"), "click", (e) => {
 });
 
 // settings
+var tTimeOut = false;
 addEventListenerList(document.querySelectorAll(".setting-param"), "click", (e) => {
+  var to = tTimeOut;
   eval("change" + e.target.parentElement.firstElementChild.id + "('" + e.target.id + "');");
+  if (e.target.parentElement.firstElementChild.id == "lang" && to) return;
   var params = e.target.parentElement.querySelectorAll(".setting-param");
   for (var i = 0; i < params.length; i++) {
     if (params[i].classList.contains("current")) params[i].classList.remove("current");
@@ -80,7 +83,6 @@ function changetheme(theme) {
     document.querySelector("body").className = theme;
   }
 }
-var tTimeOut = false;
 const langEls = document.querySelectorAll('[data-translate]');
 var trans_arr = [
   "main page", "главная страница",
