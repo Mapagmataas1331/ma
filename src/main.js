@@ -3,7 +3,7 @@ function addEventListenerList(list, event, fn) {
       list[i].addEventListener(event, fn, false);
 }}
 function hrefTo(page) {
-  for (let i = 0; i <= 100; i++) {
+  for (var i = 0; i <= 100; i++) {
     document.getElementById("content").style.left = -i+"%"
   }
   setTimeout(() => {
@@ -14,7 +14,7 @@ function hrefTo(page) {
 }
 
 window.addEventListener("load", () => {
-  for (let i = 100; i >= 0; i--) {
+  for (var i = 100; i >= 0; i--) {
     document.getElementById("content").style.left = i+"%"
   }
 }, false);
@@ -63,3 +63,58 @@ document.getElementById("navigation").addEventListener("mouseleave", () => {
 addEventListenerList(document.querySelectorAll(".nav-item"), "click", (e) => {
   hrefTo("/" + e.target.parentElement.firstElementChild.innerHTML);
 });
+
+// settings
+addEventListenerList(document.querySelectorAll(".setting-param"), "click", (e) => {
+  eval("change" + e.target.parentElement.firstElementChild.id + "('" + e.target.id + "');");
+  var params = e.target.parentElement.querySelectorAll(".setting-param");
+  for (var i = 0; i < params.length; i++) {
+    if (params[i].classList.contains("current")) params[i].classList.remove("current");
+  }
+  e.target.classList.add("current");
+});
+function changetheme(theme) {
+  if (theme == "dark") {
+    document.querySelector("body").className = "";
+  } else {
+    document.querySelector("body").className = theme;
+  }
+}
+var tTimeOut = false;
+const langEls = document.querySelectorAll('[data-translate]');
+var trans_arr = [
+  "main page", "главная страница",
+  "about author", "об авторе",
+  "your account", "ваш аккаунт",
+  "General Settings", "Основные Настройки",
+  "Theme:", "Тема:",
+  "Dark", "Тёмная",
+  "Light", "Светлая",
+  "Purple", "Фиолетовая",
+  "Language:", "Язык:",
+  "English", "Английский",
+  "Russian", "Русский",
+];
+function changelang(lang) {
+  if (!tTimeOut) {
+    tTimeOut = true;
+    langEls.forEach((e) => {
+      e.innerHTML = translate(lang, e.innerHTML);
+    });
+    setTimeout(() => {
+      tTimeOut = false;
+    }, 1000);
+  } else console.log("Timeout")
+}
+function translate(lang, text) {
+  if (lang != "en") {
+    for (let i = 0; i < trans_arr.length - 1; i+=2) {
+      if (trans_arr[i] == text) return trans_arr[i+1];
+    }
+  } else {
+    for (let i = 1; i < trans_arr.length; i+=2) {
+      if (trans_arr[i] == text) return trans_arr[i-1];
+    }
+  }
+  return text;
+}

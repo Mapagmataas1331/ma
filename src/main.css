@@ -12,6 +12,13 @@ body.light{
   --second-text-color: #404040;
   --third-color: #8c8c8c;
 }
+body.purple{
+  --primary-color: #8a00e6;
+  --primary-text-color: #ffff00;
+  --second-color: #6b00b3;
+  --second-text-color: #ffffb3;
+  --third-color: #4d004d;
+}
 .noselect, img {
   -webkit-touch-callout: none;
   -webkit-user-select: none;
