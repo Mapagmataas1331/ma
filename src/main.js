@@ -30,17 +30,34 @@ if (page == "" || page.slice(0, 3) == "ind") {
   hrefTo("/")
 }
 document.getElementById("title").innerHTML = "ma." + page;
-const header_page = document.getElementById("current-page");
-header_page.innerHTML = page;
+document.getElementById("current-page").innerHTML = page;
 document.getElementById(page).style.backgroundColor = "var(--third-color)";
+
+document.getElementById("header").firstElementChild.addEventListener("click", () => {
+  if (document.getElementById("navigation").style.display == "none") {
+    document.getElementById("settings-menu").style.display = "none";
+    document.getElementById("navigation").style.display = "block";
+  } else {
+    document.getElementById("navigation").style.display = "none";
+  }
+}, false);
+
+document.getElementById("header").lastElementChild.addEventListener("click", () => {
+  if (document.getElementById("settings-menu").style.display == "none") {
+    document.getElementById("navigation").style.display = "none";
+    document.getElementById("settings-menu").style.display = "block";
+  } else {
+    document.getElementById("settings-menu").style.display = "none";
+  }
+}, false);
 
 // navigation
 addEventListenerList(document.querySelectorAll(".nav-item"), "mouseover", (e) => {
-  header_page.innerHTML = e.target.parentElement.id;
+  document.getElementById("current-page").innerHTML = e.target.parentElement.id;
   document.getElementById(page).style = null;
 });
 document.getElementById("navigation").addEventListener("mouseleave", () => {
-  header_page.innerHTML = page;
+  document.getElementById("current-page").innerHTML = page;
   document.getElementById(page).style.backgroundColor = "var(--third-color)";
 }, false);
 addEventListenerList(document.querySelectorAll(".nav-item"), "click", (e) => {
