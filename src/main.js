@@ -53,8 +53,12 @@ document.getElementById("header").lastElementChild.addEventListener("click", () 
 
 // custom alerts
 cusAlert("notify", "Notify Example", "many many many many many many many many many many words");
-cusAlert("alert", "Alert Example", "many many many many many many many many many many words");
-cusAlert("error", "Error Example", "many many many many many many many many many many words");
+setTimeout(() => {
+  cusAlert("alert", "Alert Example", "many many many many many many many many many many words");
+  setTimeout(() => {
+    cusAlert("error", "Error Example", "many many many many many many many many many many words");
+  }, 3000);
+}, 3000);
 function cusAlert(type, title, message) {
   var newAlert = document.createElement("div");
   newAlert.className = "notification " + type;
