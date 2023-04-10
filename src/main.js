@@ -93,6 +93,8 @@ var trans_arr = [
   "Dark", "Тёмная",
   "Light", "Светлая",
   "Purple", "Фиолетовая",
+  "Purple", "Фиолетовая",
+  "Ocean", "Морская",
   "Language:", "Язык:",
   "English", "Английский",
   "Russian", "Русский",
