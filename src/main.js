@@ -10,7 +10,7 @@ function hrefTo(page) {
     if (typeof page != undefined && page != null && page != "/index") {
       location.href = page;
     } else location.href = "/";
-  }, 500);
+  }, 250);
 }
 
 window.addEventListener("load", () => {
