@@ -138,6 +138,38 @@ a {
   padding: 0 0 8px 12px;
   color: var(--second-text-color);
 }
+.settings-section {
+  margin: 16px;
+}
+.settings-section-name {
+  font-size: 24px;
+  font-weight: 600;
+  text-shadow: -3px 2px 4px var(--third-color);
+}
+.setting {
+  display: flex;
+  margin: 6px;
+  font-size: 18px;
+}
+.setting-name {
+  margin: 0 8px 0 0;
+  color: var(--second-text-color);
+  text-shadow: -2.25px 1.5px 3px var(--third-color);
+}
+.setting-param {
+  margin: 0 4px;
+  padding: 2px 6px;
+  color: var(--second-text-color);
+  cursor: pointer;
+}
+.setting-param:hover {
+  color: var(--primary-text-color);
+}
+.setting-param.current {
+  background-color: var(--third-color);
+  border-radius: 8px;
+  
+}
 #content {
   position: absolute;
   left: 100%;
