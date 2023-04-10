@@ -12,6 +12,16 @@ function hrefTo(page) {
     } else location.href = "/";
   }, 250);
 }
+function roundChange(el, after) {
+  if (el.classList.contains("out")) {
+    el.classList.remove("out");
+  } else {
+    el.classList.add("out");
+  }
+  setTimeout(() => {
+    el.innerHTML = after;
+  }, 250);
+};
 
 window.addEventListener("load", () => {
   for (let i = 100; i >= 0; i--) {
