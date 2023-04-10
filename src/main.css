@@ -106,7 +106,7 @@ a {
 #navigation, #settings-menu {
   position: fixed;
   background-color: var(--second-color);
-
+  box-shadow: -3px 2px 4px var(--third-color);
   z-index: 50;
 }
 #navigation {
@@ -122,6 +122,13 @@ a {
   min-width: 460px;
   border-radius: 0 0 0 8px;
 }
+.nav-item:last-child {
+  border-radius: 0 0 8px 0;
+}
+.nav-item:hover {
+  background-color: var(--third-color);
+  cursor: pointer;
+}
 .nav-item-title {
   padding: 4px 0 4px 8px;
   font-size: 20px;
@@ -130,10 +137,6 @@ a {
 .nav-item-description {
   padding: 0 0 8px 12px;
   color: var(--second-text-color);
-}
-.nav-item:hover {
-  background-color: var(--third-color);
-  cursor: pointer;
 }
 #content {
   position: absolute;
