@@ -13,6 +13,12 @@ function hrefTo(page) {
   }, 500);
 }
 
+window.addEventListener("load", () => {
+  for (let i = 100; i >= 0; i--) {
+    document.getElementById("content").style.left = i+"%"
+  }
+}, false);
+
 var page = document.location.pathname.split("/").slice(-1);
 if (page == null || page == "index.html") { page = "in";
 } else if (page == "account.html") { page = "acc";
