@@ -19,10 +19,16 @@ window.addEventListener("load", () => {
   }
 }, false);
 
-var page = document.location.pathname.split("/").slice(-1);
-if (page == "" || page == "index.html") { page = "in";
-} else if (page == "account.html") { page = "acc";
-} else page = page.slice(0, -5);
+var page = String(document.location.pathname.split("/").slice(-1));
+if (page == "" || page.slice(0, 3) == "ind") {
+  page = "in";
+} else if (page.slice(0, 3) == "acc") {
+  page = "acc";
+} else if (page.slice(0, 3) == "aut") {
+  page = "author"
+} else {
+  hrefTo("/")
+}
 document.getElementById("title").innerHTML = "ma." + page;
 const header_page = document.getElementById("current-page");
 header_page.innerHTML = page;
