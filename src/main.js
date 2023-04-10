@@ -51,6 +51,36 @@ document.getElementById("header").lastElementChild.addEventListener("click", () 
   }
 }, false);
 
+// custom alerts
+cusAlert("notify", "Notify Example", "many many many many many many many many many many words");
+cusAlert("alert", "Alert Example", "many many many many many many many many many many words");
+cusAlert("error", "Error Example", "many many many many many many many many many many words");
+function cusAlert(type, title, message) {
+  var newAlert = document.createElement("div");
+  newAlert.className = "notification " + type;
+  var alertTitle = document.createElement("p");
+  alertTitle.className = "notification-title";
+  alertTitle.innerHTML = title;
+  newAlert.appendChild(alertTitle);
+  var alertMessage = document.createElement("p");
+  alertMessage.className = "notification-message";
+  alertMessage.innerHTML = message;
+  newAlert.appendChild(alertMessage);
+  document.getElementById("notification-zone").appendChild(newAlert);
+  setTimeout(() => {
+    alertTitle.innerHTML = "• " + title;
+    setTimeout(() => {
+      alertTitle.innerHTML = "•• " + title;
+      setTimeout(() => {
+        alertTitle.innerHTML = "••• " + title;
+        setTimeout(() => {
+          document.getElementById("notification-zone").removeChild(newAlert);
+        }, 1000);
+      }, 1000);
+    }, 1000);
+  }, 5000);
+}
+
 // navigation
 addEventListenerList(document.querySelectorAll(".nav-item"), "mouseover", (e) => {
   document.getElementById("current-page").innerHTML = e.target.parentElement.id;
