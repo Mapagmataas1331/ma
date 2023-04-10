@@ -14,8 +14,7 @@ function hrefTo(page) {
 }
 
 var page = document.location.pathname.split("/").slice(-1);
-alert(page);
-if (page == "index.html") { page = "in";
+if (page == "") { page = "in";
 } else if (page = "account.html") { page = "acc";
 } else page = page.slice(0, -5);
 document.getElementById("title").innerHTML = "ma." + page;
