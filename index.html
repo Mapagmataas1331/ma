@@ -13,38 +13,52 @@
   <link rel="stylesheet" href="src/main.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 </head>
+<title>ma.in</title>
 <body>
-  <div id="nav" class="noselect">
-    <form id="exp">
-      <label for="exp">ma.</label>
-      <select id="exp-sel" name="exp">
-        <option value="index">in</option>
-        <option value="author">author</option>
-        <option value="index">in</option>
-        <option value="index">in</option>
-      </select>
-     </form>
+  <div id="notification-zone">
+    <!-- <div class="notification notify">
+
+    </div>
+    <div class="notification alert">
+      
+    </div>
+    <div class="notification error">
+      
+    </div> -->
+  </div>
+  <div id="header" class="noselect">
     <div>
-      <p id="lang-btn" class="spinner">Ru</p>
-      <i id="mode-btn" class="material-icons spinner">light_mode</i>
-      <i id="menu-btn" class="material-icons spinner">menu</i>
+      <p>ma.</p>
+      <p id="current-page" class="link">in</p>
+    </div>
+    <div onclick="">
+      <i class="material-icons spinner link">
+        settings
+      </i>
     </div>
   </div>
-  <ul id="dropdown-menu" style="display: none;" class="noselect">
-    <li class="dropdown-item" onclick="hrefTo('author')" data-translate>Author</li>
-    <li class="dropdown-item" onclick="hrefTo()" data-translate>Item 2</li>
-    <li class="dropdown-item" onclick="hrefTo()" data-translate>Item 3</li>
-    <li class="dropdown-item" onclick="hrefTo()" data-translate>Item 4</li>
-    <li class="dropdown-item" onclick="hrefTo()" data-translate>Item 5</li>
-    <li class="dropdown-item" onclick="hrefTo()" data-translate>Item 6</li>
-  </ul>
-  <title>ma.in</title>
+  <div id="navigation" style="display: block;">
+    <div class="nav-item" id="index">
+      <p class="nav-item-title">in (index)</p>
+      <p class="nav-item-description">main page</p>
+    </div>
+    <div class="nav-item" id="author">
+      <p class="nav-item-title">author</p>
+      <p class="nav-item-description">about author</p>
+    </div>
+    <div class="nav-item" id="account">
+      <p class="nav-item-title">account</p>
+      <p class="nav-item-description">your account</p>
+    </div>
+  </div>
+  <div id="settings-menu" class="noselect" style="display: none;">
+
+  </div>
+
   <div id="content">
-    <div>
-      <img src="src/img/ma-icon.png" alt="ma-icon">
-      <p>ma.kak.si</p>
-    </div>
+    <a href="/aaa">aaa</a>
   </div>
+
   <script src="src/bundle.js"></script>
   <script src="src/main.js"></script>
 </body>
