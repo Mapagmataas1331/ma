@@ -1,5 +1,1 @@
-@echo off
-cd src/_module
-echo Running script...
-npm run wp
-pause
+@echo off && cd src/_module && webpack -c .\\webpack.config.js && pause

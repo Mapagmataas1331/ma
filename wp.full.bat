@@ -1,0 +1,1 @@
+@echo off && cd src/_module && echo Installing webpack... && npm run gd && echo Updating dependencies... && npm run dup && echo Webpacking... && npm run wp && pause
