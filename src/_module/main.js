@@ -1,8 +1,5 @@
-const { initializeApp } = require('firebase/app');
-const { getAnalytics } = require('firebase/analytics');
-const { getDatabase, ref, set, get, update, child } = require('firebase/database');
-
-const bcrypt = require('bcryptjs');
+import { initializeApp } from 'firebase/app';
+import { getDatabase, ref, set, get, update } from 'firebase/database';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCPdKPTedeFiYCAJvypIgTR3dFxq17yKlc",
@@ -16,11 +13,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const db = getDatabase(app);
 
 const fpPromise = import('@fingerprintjs/fingerprintjs')
 .then(FingerprintJS => FingerprintJS.load());
+
+import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
 window.user = {name: null, vid: null};
 
@@ -38,17 +36,17 @@ function tryToLog(vid) {
       if (childSnapshot.child("visitor_id").val() == vid) {
         user.name = childSnapshot.key;
         cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
-        console.log("Logged in as:\n" + user.name);
+        console.log("\nLogged in as:\n" + user.name + "\n\n");
         return;
       }
     });
   });
 }
 
-window.reglog = async (uname, pass) => {
-  return get(ref(db, "users/" + uname)).then(async (snapshot) => {
+window.reglog = (uname, pass) => {
+  return get(ref(db, "users/" + uname)).then((snapshot) => {
     if (snapshot.exists()) {
-      if (await bcrypt.compareSync(pass, snapshot.child("salted_password").val())) {
+      if (compareSync(pass, snapshot.child("salted_password").val())) {
         cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged in!");
       } else {
         cusAlert("error", "Wrong password,", "try one more time!");
@@ -56,7 +54,7 @@ window.reglog = async (uname, pass) => {
       }
     } else {
       set(ref(db, "users/" + uname), {
-        salted_password: await bcrypt.hashSync(pass, await bcrypt.genSaltSync(10))
+        salted_password: hashSync(pass, genSaltSync(10))
       });
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
     }
@@ -72,13 +70,13 @@ function updateVisitorID(uname, vid) {
         update(ref(db, "users/" + childSnapshot.key), {
           visitor_id: "none"
         });
-        console.log("Logged out on:\n" + childSnapshot.key);
+        console.log("\nLogged out on:\n" + childSnapshot.key + "\n\n");
       }
     });
   }).then(() => {
     update(ref(db, "users/" + uname), {
       visitor_id: vid
     });
-    console.log("Logged in as:\n" + user.name);
+    console.log("\nLogged in as:\n" + user.name + "\n\n");
   });
 }
