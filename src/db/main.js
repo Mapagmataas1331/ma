@@ -20,13 +20,63 @@ const db = getDatabase(app);
 const fpPromise = import('@fingerprintjs/fingerprintjs')
 .then(FingerprintJS => FingerprintJS.load());
 
+window.user = {name: null, vid: null};
+
 fpPromise
 .then(fp => fp.get())
 .then(result => {
-  const visitorId = result.visitorId
-  console.log("\n- Visitor identifier:\n" + visitorId + "\n\n");
+  user.vid = result.visitorId;
+  console.log("\nVisitor identifier:\n" + user.vid + "\n\n");
+  tryToLog(user.vid);
 });
 
-function reglog(user, pass) {
-  cusAlert("error", user + ",", "this zone is not done!")
+function tryToLog(vid) {
+  return get(ref(db, "users")).then((snapshot) => {
+    return snapshot.forEach(childSnapshot => {
+      if (childSnapshot.child("visitor_id").val() == vid) {
+        user.name = childSnapshot.key;
+        cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged!");
+        console.log("Logged in as:\n" + user.name);
+        return;
+      }
+    });
+  });
+}
+
+window.reglog = (uname, pass) => {
+  return get(ref(db, "users/" + uname)).then((snapshot) => {
+    if (snapshot.exists()) {
+      if (snapshot.child("password").val() == pass) {
+        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged!");
+      } else {
+        cusAlert("error", "Wrong password,", "try one more time!");
+        return;
+      }
+    } else {
+      set(ref(db, "users/" + uname), {
+        password: pass
+      });
+      cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
+    }
+    user.name = uname;
+    updateVisitorID(user.name, user.vid)
+    return;
+  });
+}
+function updateVisitorID(uname, vid) {
+  get(ref(db, "users")).then((snapshot) => {
+    snapshot.forEach(childSnapshot => {
+      if (childSnapshot.child("visitor_id").val() == vid && childSnapshot.key != uname) {
+        update(ref(db, "users/" + childSnapshot.key), {
+          visitor_id: "none"
+        });
+        console.log("Logged out:\n" + childSnapshot.key);
+      }
+    });
+  }).then(() => {
+    update(ref(db, "users/" + uname), {
+      visitor_id: vid
+    });
+    console.log("Logged in as:\n" + user.name);
+  });
 }
