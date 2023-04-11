@@ -1,6 +1,7 @@
 const { initializeApp } = require('firebase/app');
 const { getAnalytics } = require('firebase/analytics');
 const { getDatabase, ref, set, get, update, child } = require('firebase/database');
+import Fingerprint2 from 'fingerprintjs2';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCPdKPTedeFiYCAJvypIgTR3dFxq17yKlc",
@@ -16,3 +17,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const db = getDatabase(app);
+
+if (window.requestIdleCallback) {
+  requestIdleCallback(function () {
+    Fingerprint2.get(result => {
+      const values = result.map(function (component) { return component.value });
+      const visitorId = Fingerprint2.x64hash128(values.join(''), 31);
+      console.log("Visitor identifier: " + visitorId);
+      });
+  });
+} else {
+  setTimeout(function () {
+    Fingerprint2.get(result => {
+      const values = result.map(function (component) { return component.value });
+      const visitorId = Fingerprint2.x64hash128(values.join(''), 31);
+      console.log("Visitor identifier: " + visitorId);
+    });
+  }, 500);
+}
