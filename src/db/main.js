@@ -26,3 +26,7 @@ fpPromise
   const visitorId = result.visitorId
   console.log("\n- Visitor identifier:\n" + visitorId + "\n\n");
 });
+
+function reglog(user, pass) {
+  cusAlert("error", user + ",", "this zone is not done!")
+}
