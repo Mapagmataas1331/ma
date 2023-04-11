@@ -12,6 +12,31 @@ function hrefTo(page) {
     } else location.href = "/";
   }, 250);
 }
+function cusAlert(type, title, message) {
+  var newAlert = document.createElement("div");
+  newAlert.className = "notification " + type;
+  var alertTitle = document.createElement("p");
+  alertTitle.className = "notification-title";
+  alertTitle.innerHTML = title;
+  newAlert.appendChild(alertTitle);
+  var alertMessage = document.createElement("p");
+  alertMessage.className = "notification-message";
+  alertMessage.innerHTML = message;
+  newAlert.appendChild(alertMessage);
+  document.getElementById("notification-zone").appendChild(newAlert);
+  setTimeout(() => {
+    alertTitle.innerHTML = "• " + title;
+    setTimeout(() => {
+      alertTitle.innerHTML = "•• " + title;
+      setTimeout(() => {
+        alertTitle.innerHTML = "••• " + title;
+        setTimeout(() => {
+          document.getElementById("notification-zone").removeChild(newAlert);
+        }, 1000);
+      }, 1000);
+    }, 1000);
+  }, 5000);
+}
 
 window.addEventListener("load", () => {
   for (var i = 100; i >= 0; i--) {
@@ -50,32 +75,6 @@ document.getElementById("header").lastElementChild.addEventListener("click", () 
     document.getElementById("settings-menu").style.display = "none";
   }
 }, false);
-
-function cusAlert(type, title, message) {
-  var newAlert = document.createElement("div");
-  newAlert.className = "notification " + type;
-  var alertTitle = document.createElement("p");
-  alertTitle.className = "notification-title";
-  alertTitle.innerHTML = title;
-  newAlert.appendChild(alertTitle);
-  var alertMessage = document.createElement("p");
-  alertMessage.className = "notification-message";
-  alertMessage.innerHTML = message;
-  newAlert.appendChild(alertMessage);
-  document.getElementById("notification-zone").appendChild(newAlert);
-  setTimeout(() => {
-    alertTitle.innerHTML = "• " + title;
-    setTimeout(() => {
-      alertTitle.innerHTML = "•• " + title;
-      setTimeout(() => {
-        alertTitle.innerHTML = "••• " + title;
-        setTimeout(() => {
-          document.getElementById("notification-zone").removeChild(newAlert);
-        }, 1000);
-      }, 1000);
-    }, 1000);
-  }, 5000);
-}
 
 // navigation
 addEventListenerList(document.querySelectorAll(".nav-item"), "mouseover", (e) => {
