@@ -88,10 +88,10 @@ a {
 }
 .notification.error {
   background-color: #ff9999;
-  border: 2px solid #ff4d4d;
+  border: 2px solid #ff0000;
 }
 .notification.error p {
-  color: #ff4d4d;
+  color: #ff0000;
 }
 .notification-title {
   font-size: 18px;

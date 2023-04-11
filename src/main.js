@@ -51,14 +51,6 @@ document.getElementById("header").lastElementChild.addEventListener("click", () 
   }
 }, false);
 
-// custom alerts
-cusAlert("notify", "Notify Example", "many many many many many many many many many many words");
-setTimeout(() => {
-  cusAlert("alert", "Alert Example", "many many many many many many many many many many words");
-  setTimeout(() => {
-    cusAlert("error", "Error Example", "many many many many many many many many many many words");
-  }, 3000);
-}, 3000);
 function cusAlert(type, title, message) {
   var newAlert = document.createElement("div");
   newAlert.className = "notification " + type;
@@ -142,7 +134,7 @@ function changelang(lang) {
     setTimeout(() => {
       tTimeOut = false;
     }, 1000);
-  } else console.log("Timeout")
+  } else cusAlert("alert", "Timeout", "Calm down! You are changing language too fast.");
 }
 function translate(lang, text) {
   if (lang != "en") {
