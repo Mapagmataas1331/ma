@@ -37,7 +37,7 @@ function tryToLog(vid) {
     return snapshot.forEach(childSnapshot => {
       if (childSnapshot.child("visitor_id").val() == vid) {
         user.name = childSnapshot.key;
-        cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged!");
+        cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
         console.log("Logged in as:\n" + user.name);
         return;
       }
@@ -49,7 +49,7 @@ window.reglog = async (uname, pass) => {
   return get(ref(db, "users/" + uname)).then(async (snapshot) => {
     if (snapshot.exists()) {
       if (await bcrypt.compareSync(pass, snapshot.child("salted_password").val())) {
-        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged!");
+        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged in!");
       } else {
         cusAlert("error", "Wrong password,", "try one more time!");
         return;
@@ -72,7 +72,7 @@ function updateVisitorID(uname, vid) {
         update(ref(db, "users/" + childSnapshot.key), {
           visitor_id: "none"
         });
-        console.log("Logged out:\n" + childSnapshot.key);
+        console.log("Logged out on:\n" + childSnapshot.key);
       }
     });
   }).then(() => {
