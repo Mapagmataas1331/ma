@@ -2,6 +2,8 @@ const { initializeApp } = require('firebase/app');
 const { getAnalytics } = require('firebase/analytics');
 const { getDatabase, ref, set, get, update, child } = require('firebase/database');
 
+const bcrypt = require('bcryptjs');
+
 const firebaseConfig = {
   apiKey: "AIzaSyCPdKPTedeFiYCAJvypIgTR3dFxq17yKlc",
   authDomain: "ma-d0t.firebaseapp.com",
@@ -43,10 +45,10 @@ function tryToLog(vid) {
   });
 }
 
-window.reglog = (uname, pass) => {
-  return get(ref(db, "users/" + uname)).then((snapshot) => {
+window.reglog = async (uname, pass) => {
+  return get(ref(db, "users/" + uname)).then(async (snapshot) => {
     if (snapshot.exists()) {
-      if (snapshot.child("password").val() == pass) {
+      if (await bcrypt.compareSync(pass, snapshot.child("salted_password").val())) {
         cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged!");
       } else {
         cusAlert("error", "Wrong password,", "try one more time!");
@@ -54,7 +56,7 @@ window.reglog = (uname, pass) => {
       }
     } else {
       set(ref(db, "users/" + uname), {
-        password: pass
+        salted_password: await bcrypt.hashSync(pass, await bcrypt.genSaltSync(10))
       });
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
     }
