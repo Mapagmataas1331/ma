@@ -85,6 +85,7 @@ window.reglog = (uname, pass) => {
     }
     user.name = uname;
     updateVisitorID(user.name, user.vid)
+    setPreferences()
     return;
   });
 }
