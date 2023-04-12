@@ -50,12 +50,11 @@ a {
 }
 #notification-zone {
   position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translate(-50%, 0);
+  top: 64px;
+  right: 8px;
   width: 100%;
-  min-width: 256px;
-  max-width: 460px;
+  min-width: 160px;
+  max-width: 320px;
   z-index: 100;
 }
 .notification {
@@ -225,7 +224,8 @@ p.spinner {
 
 @media screen and (min-width: 0px) {
   #notification-zone {
-    width: calc(100% - 16px);
+    top: 42px;
+    width: calc(100% - 14px);
   }
   #header {
     height: 42px;
@@ -261,6 +261,7 @@ p.spinner {
 }
 @media screen and (min-width: 480px) {
   #notification-zone {
+    top: 56px;
     width: 30%;
   }
   #header {
