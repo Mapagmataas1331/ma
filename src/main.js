@@ -95,6 +95,7 @@ addEventListenerList(document.querySelectorAll(".setting-param"), "click", (e) =
   var to = tTimeOut;
   eval("change" + e.target.parentElement.firstElementChild.id + "('" + e.target.id + "');");
   if (e.target.parentElement.firstElementChild.id == "lang" && to) return;
+  if (user.name != null) savePreference(e.target.parentElement.firstElementChild.id, e.target.id);
   var params = e.target.parentElement.querySelectorAll(".setting-param");
   for (var i = 0; i < params.length; i++) {
     if (params[i].classList.contains("current")) params[i].classList.remove("current");
@@ -123,6 +124,7 @@ var trans_arr = [
   "Language:", "Язык:",
   "English", "Английский",
   "Russian", "Русский",
+  "Report a problem:", "Сообщить о проблеме:",
 ];
 function changelang(lang) {
   if (!tTimeOut) {

@@ -27,7 +27,9 @@ fpPromise
 .then(result => {
   user.vid = result.visitorId;
   console.log("\nVisitor identifier:\n" + user.vid + "\n\n");
-  tryToLog(user.vid);
+  tryToLog(user.vid).then (() => {
+    if (user.name != null) setPreferences()
+  });
 });
 
 function tryToLog(vid) {
@@ -41,6 +43,29 @@ function tryToLog(vid) {
       }
     });
   });
+}
+
+function setPreferences() {
+  get(ref(db, "users/" + user.name + "/preferences")).then((snapshot) => {
+    snapshot.forEach(childSnapshot => {
+      var active = document.getElementById(childSnapshot.val());
+      if (typeof active != "undefined" && active != null) {
+        var params = active.parentElement.querySelectorAll(".setting-param");
+        for (var i = 0; i < params.length; i++) {
+          if (params[i].classList.contains("current")) params[i].classList.remove("current");
+        }
+        active.classList.add("current");
+        eval("change" + childSnapshot.key + "('" + childSnapshot.val() + "');");
+      }
+    });
+  });
+}
+
+window.savePreference = (name, value) => {
+  update(ref(db, "users/" + user.name + "/preferences"), {
+    [name]: value
+  });
+  console.log("\n" + name + " remembered:\n" + value + "\n\n");
 }
 
 window.reglog = (uname, pass) => {
