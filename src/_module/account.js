@@ -17,6 +17,10 @@ const db = getDatabase(app);
 
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
+window.onLogin = () => {
+  hrefTo("/account#" + user.name);
+}
+
 window.login = (uname, pass) => {
   get(ref(db, "users/" + uname)).then((snapshot) => {
     if (snapshot.exists()) {

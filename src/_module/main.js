@@ -29,6 +29,9 @@ fpPromise
   .then(uname => {
     if (typeof uname != "undefined" && uname != null) {
       updateVisitor(uname, user.vid);
+      if (typeof onLogin != "undefined" && onLogin != null) {
+        onLogin();
+      }
     }
   });
 });
