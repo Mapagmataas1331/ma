@@ -71,40 +71,44 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
 
   <div id="content">
     <div id="log-form" class="log-reg">
-      <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
-        <legend data-translate="">Login form</legend>
-        <p>
-          <label for="uname" data-translate>*Username:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" size="14"
+      <form class="centered" action="javascript:;" onsubmit="login(uname.value, pass.value);">
+        <p data-translate="">Login form</p>
+        <p data-translate>*Username:</p>
+        <input type="text" name="uname" id="uname" placeholder="yourusername" minlength="4" maxlength="12" size="14"
           pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Write your alphanumeric username (4-12 symbols)" required>
-        </p>
-        <p>
-          <label for="pass" data-translate>*Password:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
-        </p>
-        <input type="submit" value="Send">
+        <p data-translate>*Password:</p>
+        <input type="text" name="pass" id="pass" placeholder="yourpassword" minlength="4" maxlength="12" size="14" required>
         <p class="link" onclick="logregForms(0, 1)" data-translate>Registration form</p>
+        <input type="submit" value="Send">
       </form>
     </div>
     <div id="reg-form" class="log-reg" style="display:none">
-      <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
-        <legend data-translate>Registration form</legend>
-        <p>
-          <label for="uname" data-translate>*Username:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" size="14"
+      <form class="centered" action="javascript:;" onsubmit="register(uname.value, pass.value, fname.value, lname.value, mail.value, tg.value);">
+        <p data-translate="">Registration form</p>
+        <p data-translate>*Username:</p>
+        <input type="text" name="uname" id="uname" placeholder="yourusername" minlength="4" maxlength="12" size="14"
           pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Come up with an alphanumeric username (4-12 symbols)" required>
-        </p>
-        <p>
-          <label for="pass" data-translate>*Password:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
-        </p>
-        <input type="submit" value="Send">
+        <p data-translate>*First name:</p>
+        <input type="text" name="fname" id="fname" placeholder="Elon" minlength="2" maxlength="20" size="14" required>
+        <p data-translate>*Last name:</p>
+        <input type="text" name="lname" id="lname" placeholder="Musk" minlength="2" maxlength="20" size="14" required>
+        <p data-translate>*Password:</p>
+        <input type="text" name="pass" id="pass" placeholder="yourpassword" minlength="4" maxlength="12" size="14" required>
+        <p data-translate>Email:</p>
+        <input type="email" name="mail" id="mail" placeholder="yourmail@domain.tld" minlength="4" maxlength="26" size="14">
+        <p data-translate>Telegram:</p>
+        <input type="text" name="tg" id="tg" placeholder="@username" minlength="4" maxlength="20" size="14">
         <p class="link" onclick="logregForms(1, 0)" data-translate>Login form</p>
+        <input type="submit" value="Send">
       </form>
     </div>
     <div id="profile" style="display: none;">
       <div id="avatar"></div>
       <p id="username"></p>
+      <p id="first_name"></p>
+      <p id="last_name"></p>
+      <p id="email"></p>
+      <p id="telegram"></p>
     </div>
   </div>
 

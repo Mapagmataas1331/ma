@@ -3,16 +3,25 @@
   margin: 5vh 0;
   text-align: center;
 }
-.log-reg legend {
-  margin: 16px 4px;
+.log-reg form p:first-of-type {
+  margin: 16px 4px 32px;
+  font-size: 24px;
+  font-weight: 300;
+  text-shadow: -3px 2px 4px var(--third-color);
 }
-.log-reg label {
-  margin: auto 16px auto 4px;
+.log-reg p {
+  margin: 16px 4px 0;
+  font-size: 20px;
+  text-shadow: -2.25px 1.5px 3px var(--third-color);
+}
+.log-reg form p:last-of-type {
+  margin: 16px 4px;
+  font-size: 16px;
 }
 .log-reg input {
   margin: 12px 4px;
 }
 .log-reg input[type="submit"] {
   width: 128px;
-  margin: 18px 4px 26px;
+  margin: 12px 4px;
 }

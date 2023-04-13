@@ -18,6 +18,10 @@ function userPage() {
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
       document.getElementById("username").innerHTML = snapshot.child("username").val();
+      document.getElementById("first_name").innerHTML = snapshot.child("first_name").val();
+      document.getElementById("last_name").innerHTML = snapshot.child("last_name").val();
+      document.getElementById("email").innerHTML = snapshot.child("email").val();
+      document.getElementById("telegram").innerHTML = snapshot.child("telegram").val();
     } else {
       cusAlert("alert", "No such user,", "if you aren't trying to see any profile, remove " + location.hash + " from url");
     }
@@ -49,14 +53,18 @@ window.login = (uname, pass) => {
   });
 }
 
-window.register = (uname, pass) => {
+window.register = (uname, pass, fname, lname, email, tg) => {
   get(ref(db, "users/" + uname.toLowerCase())).then(snapshot => {
     if (snapshot.exists()) {
       cusAlert("alert", "Username \"" + uname + "\" is already taken,", "looks like you'll have to come up with something else.");
     } else {
       set(ref(db, "users/" + uname.toLowerCase()), {
         username: uname,
-        salted_password: hashSync(pass, genSaltSync(10))
+        salted_password: hashSync(pass, genSaltSync(10)),
+        first_name: fname,
+        last_name: lname,
+        email: email,
+        telegram: tg
       });
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
       updateVisitor(uname.toLowerCase(), uname, user.vid);

@@ -48,11 +48,6 @@ body {
 a {
   text-decoration: none;
 }
-form legend {
-  font-size: 24px;
-  font-weight: 300;
-  text-shadow: -3px 2px 4px var(--third-color);
-}
 form label {
   font-size: 20px;
   text-shadow: -2.25px 1.5px 3px var(--third-color);
@@ -66,6 +61,12 @@ form input {
   background-color: var(--second-color);
   color: var(--second-text-color);
   box-shadow: -2.25px 1.5px 3px var(--third-color);
+}
+form.centered input {
+  text-align: center;
+}
+form.centered input:focus {
+  text-align: left;
 }
 form input[type="submit"] {
   opacity: 0.5;
