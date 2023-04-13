@@ -245,6 +245,7 @@ p.spinner {
 .setting form i {
   margin: auto 0;
   font-size: 32px;
+  color: var(--second-text-color);
 }
 .setting form input {
   margin: auto 6px;
