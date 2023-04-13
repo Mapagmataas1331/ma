@@ -38,7 +38,7 @@ async function cusAlert(type, title, message, link) {
         }, 1000);
       }, 1000);
     }, 1000);
-  }, 5000);
+  }, 2000);
 }
 
 window.addEventListener("load", () => {

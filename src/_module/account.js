@@ -26,21 +26,21 @@ window.login = (uname, pass) => {
         cusAlert("alert", "Wrong password,", "try one more time!");
       }
     } else {
-      cusAlert("alert", "No such account,", "first you need to register.")
+      cusAlert("alert", "No such account,", "first you need to register.");
     }
   });
-  }
-  
-  window.register = () => {
-    get(ref(db, "users/" + uname)).then((snapshot) => {
-      if (snapshot.exists()) {
-        cusAlert("alert", "Username \"" + uname + "\" is already taken,", "looks like you'll have to come up with something else.");
-      } else {
-        set(ref(db, "users/" + uname), {
-          salted_password: hashSync(pass, genSaltSync(10))
-        });
-        cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
-        updateVisitor(uname, user.vid);
-      }
-    });
-  }
+}
+
+window.register = (uname, pass) => {
+  get(ref(db, "users/" + uname)).then((snapshot) => {
+    if (snapshot.exists()) {
+      cusAlert("alert", "Username \"" + uname + "\" is already taken,", "looks like you'll have to come up with something else.");
+    } else {
+      set(ref(db, "users/" + uname), {
+        salted_password: hashSync(pass, genSaltSync(10))
+      });
+      cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
+      updateVisitor(uname, user.vid);
+    }
+  });
+}
