@@ -2,6 +2,9 @@
     width: 100%;
     text-align: center;
 }
-.log-reg * {
+.log-reg label {
+    margin: 8px auto;
+}
+.log-reg input {
     margin: 8px auto;
 }
