@@ -1,0 +1,7 @@
+.log-reg {
+    width: 100%;
+    text-align: center;
+}
+.log-reg * {
+    margin: 8px auto;
+}

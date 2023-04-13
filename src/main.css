@@ -48,16 +48,35 @@ body {
 a {
   text-decoration: none;
 }
+form {
+  display: block;
+}
+form label {
+  font-size: 24px;
+  font-weight: 300;
+  text-shadow: -2.25px 1.5px 3px var(--third-color);
+}
 form input {
   padding: 4px 8px;
   border: 0;
   border-radius: 8px;
+  font-size: 18px;
   background-color: var(--second-color);
   color: var(--second-text-color);
   box-shadow: -2.25px 1.5px 3px var(--third-color);
 }
 form input[type="submit"] {
   cursor: pointer;
+}
+.spinner {
+  transition: transform 0.4s linear;
+  transform-origin: center;
+}
+p.spinner {
+  transform-origin: center 32.5%;
+}
+.spinner.go {
+  transform: rotate(360deg);
 }
 #notification-zone {
   position: fixed;
@@ -228,30 +247,18 @@ form input[type="submit"] {
   font-size: 32px;
 }
 .setting form input {
-  width: initial;
   margin: auto 6px;
+  font-size: 16px;
   background-color: var(--third-color);
 }
 .setting form input:focus {
   width: calc(100% - 12px);
 }
-
 #content {
   position: absolute;
   left: 100%;
   width: 100%;
   z-index: 0;
-}
-
-.spinner {
-  transition: transform 0.4s linear;
-  transform-origin: center;
-}
-p.spinner {
-  transform-origin: center 32.5%;
-}
-.spinner.go {
-  transform: rotate(360deg);
 }
 .link:hover, #header div:first-child:hover p:nth-child(2) {
   color: var(--second-text-color)!important;
