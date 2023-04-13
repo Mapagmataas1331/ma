@@ -12,7 +12,7 @@ function hrefTo(page) {
     } else location.href = "/";
   }, 250);
 }
-function cusAlert(type, title, message) {
+async function cusAlert(type, title, message) {
   var newAlert = document.createElement("div");
   newAlert.className = "notification " + type;
   var alertTitle = document.createElement("p");

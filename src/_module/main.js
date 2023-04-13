@@ -27,25 +27,30 @@ fpPromise
 .then(result => {
   user.vid = result.visitorId;
   console.log("\nVisitor identifier:\n" + user.vid + "\n\n");
-  tryToLog(user.vid).then (() => {
-    if (user.name != null) setPreferences()
+  tryToLog(user.vid)
+  .then(uname => {
+    if (typeof uname != "undefined" && uname != null) {
+      user.name = uname;
+      updateVisitorID(user.name, user.vid);
+      cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
+      setPreferences();
+    }
   });
 });
 
-function tryToLog(vid) {
-  return get(ref(db, "users")).then((snapshot) => {
-    return snapshot.forEach(childSnapshot => {
-      if (childSnapshot.child("visitor_id").val() == vid) {
-        user.name = childSnapshot.key;
-        cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
-        console.log("\nLogged in as:\n" + user.name + "\n\n");
-        return;
-      }
-    });
+async function tryToLog(vid) {
+  return get(ref(db, "visitor_ids/" + vid)).then((snapshot) => {
+    return snapshot.child("user").val();
   });
 }
 
-function setPreferences() {
+async function timeFromLastVisit(vid) {
+  return get(ref(db, "visitor_ids/" + vid)).then((snapshot) => {
+    return ((new Date() - Date.parse(snapshot.child("last_visit").val())) / 60000).toFixed(2);
+  });
+}
+
+async function setPreferences() {
   get(ref(db, "users/" + user.name + "/preferences")).then((snapshot) => {
     snapshot.forEach(childSnapshot => {
       var active = document.getElementById(childSnapshot.val());
@@ -61,7 +66,7 @@ function setPreferences() {
   });
 }
 
-window.savePreference = (name, value) => {
+window.savePreference = async (name, value) => {
   update(ref(db, "users/" + user.name + "/preferences"), {
     [name]: value
   });
@@ -89,20 +94,11 @@ window.reglog = (uname, pass) => {
     return;
   });
 }
-function updateVisitorID(uname, vid) {
-  get(ref(db, "users")).then((snapshot) => {
-    snapshot.forEach(childSnapshot => {
-      if (childSnapshot.child("visitor_id").val() == vid && childSnapshot.key != uname) {
-        update(ref(db, "users/" + childSnapshot.key), {
-          visitor_id: "none"
-        });
-        console.log("\nLogged out on:\n" + childSnapshot.key + "\n\n");
-      }
-    });
-  }).then(() => {
-    update(ref(db, "users/" + uname), {
-      visitor_id: vid
-    });
-    console.log("\nLogged in as:\n" + user.name + "\n\n");
+async function updateVisitorID(uname, vid) {
+  console.log("\nLogged in as:\n" + user.name + "\n\n");
+  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n")
+  set(ref(db, "visitor_ids/" + vid), {
+    user: uname,
+    last_visit: `${new Date()}`
   });
 }
