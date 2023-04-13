@@ -49,10 +49,15 @@ a {
   text-decoration: none;
 }
 form input {
-  background-color: var(--third-color);
-  color: var(--second-text-color);
+  padding: 4px 8px;
   border: 0;
-  border-radius: 4px;
+  border-radius: 8px;
+  background-color: var(--second-color);
+  color: var(--second-text-color);
+  box-shadow: -2.25px 1.5px 3px var(--third-color);
+}
+form input[type="submit"] {
+  cursor: pointer;
 }
 #notification-zone {
   position: fixed;
@@ -219,14 +224,13 @@ form input {
   margin: 6px 0;
 }
 .setting form i {
-  display: flex;
+  margin: auto 0;
   font-size: 32px;
-  color: var(--second-text-color);
 }
 .setting form input {
   width: initial;
   margin: auto 6px;
-  padding: 4px 6px;
+  background-color: var(--third-color);
 }
 .setting form input:focus {
   width: calc(100% - 12px);

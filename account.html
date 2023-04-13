@@ -63,18 +63,36 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
       <div class="setting">
         <form action="javascript:;" onsubmit="sendReport(msg.value);">
           <i class="material-icons spinner">report</i>
-          <input type="text" name="msg" id="msg" placeholder="Your message" required>
+          <input type="text" name="msg" id="msg" placeholder="Your message" maxlength="100" required>
         </form>
       </div>
     </div>
   </div>
 
   <div id="content">
-    <form style="text-align: center;" action="javascript:;" onsubmit="reglog(uname.value, pass.value);">
-      <input style="background-color: black;" type="text" name="uname" id="uname" value="username" required>
-      <input style="background-color: black;" type="password" name="pass" id="pass" value="password" required>
-      <input style="background-color: black;" type="submit" value="send">
-    </form>
+    <div id="log-reg-menu">
+      <div id="log-menu">
+        <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
+          <label for="uname" data-translate>First name:</label>
+          <input type="text" name="uname" id="uname" placeholder="username" required>
+          <label for="pass" data-translate>First name:</label>
+          <input type="text" name="pass" id="pass" placeholder="password" required>
+          <input type="submit" value="send">
+        </form>
+      </div>
+      <div id="reg-menu">
+        <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
+          <label for="uname" data-translate>First name:</label>
+          <input type="text" name="uname" id="uname" placeholder="username" required>
+          <label for="pass" data-translate>First name:</label>
+          <input type="text" name="pass" id="pass" placeholder="password" required>
+          <input type="submit" value="send">
+        </form>
+      </div>
+    </div>
+    <div id="account">
+
+    </div>
   </div>
 
   <script src="src/main.js"></script>

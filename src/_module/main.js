@@ -82,7 +82,26 @@ window.savePreference = async (name, value) => {
   console.log("\n" + name + " remembered:\n" + value + "\n\n");
 }
 
-window.reglog = (uname, pass) => {
+window.login = (uname, pass) => {
+  return get(ref(db, "users/" + uname)).then((snapshot) => {
+    if (snapshot.exists()) {
+      if (compareSync(pass, snapshot.child("salted_password").val())) {
+        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged in!");
+      } else {
+        cusAlert("alert", "Wrong password,", "try one more time!");
+        return;
+      }
+    } else {
+      cusAlert("alert", "Welcome " + uname + ",", "you are successfully registered!");
+    }
+    user.name = uname;
+    updateVisitorID(user.name, user.vid);
+    setPreferences();
+    return;
+  });
+}
+
+window.register = () => {
   return get(ref(db, "users/" + uname)).then((snapshot) => {
     if (snapshot.exists()) {
       if (compareSync(pass, snapshot.child("salted_password").val())) {
