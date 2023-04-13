@@ -70,7 +70,7 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
   </div>
 
   <div id="content">
-    <div id="log-menu" class="log-reg">
+    <div id="log-form" class="log-reg">
       <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
         <legend data-translate="">Login form</legend>
         <p>
@@ -83,10 +83,10 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
           <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
         </p>
         <input type="submit" value="send">
-        <p class="link" data-translate>Registration form</p>
+        <p class="link" onclick="logregForms(0, 1)" data-translate>Registration form</p>
       </form>
     </div>
-    <div id="reg-menu" class="log-reg">
+    <div id="reg-form" class="log-reg" style="display:none">
       <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
         <legend data-translate>Registration form</legend>
         <p>
@@ -99,7 +99,7 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
           <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
         </p>
         <input type="submit" value="send">
-        <p class="link" data-translate>Login form</p>
+        <p class="link" onclick="logregForms(1, 0)" data-translate>Login form</p>
       </form>
     </div>
     <div id="account">

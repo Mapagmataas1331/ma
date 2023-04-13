@@ -49,3 +49,14 @@ window.register = (uname, pass) => {
     }
   });
 }
+
+window.logregForms = (log, reg) => {
+  const logForm = document.getElementById("log-form");
+  if (log == 0) {
+    logForm.style.display = "none";
+  } else logForm.style.display = "block";
+  const regForm = document.getElementById("reg-form");
+  if (reg == 0) {
+    regForm.style.display = "none";
+  } else regForm.style.display = "block";
+}
