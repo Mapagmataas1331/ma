@@ -48,6 +48,12 @@ body {
 a {
   text-decoration: none;
 }
+form input {
+  background-color: var(--third-color);
+  color: var(--second-text-color);
+  border: 0;
+  border-radius: 4px;
+}
 #notification-zone {
   position: fixed;
   top: 64px;
@@ -198,8 +204,26 @@ a {
 .setting-param.current {
   background-color: var(--third-color);
   border-radius: 8px;
-  
 }
+.setting form {
+  display: flex;
+  width: 100%;
+  margin: 6px 0;
+}
+.setting form i {
+  display: flex;
+  font-size: 32px;
+  color: var(--second-text-color);
+}
+.setting form input {
+  width: initial;
+  margin: auto 6px;
+  padding: 4px 6px;
+}
+.setting form input:focus {
+  width: calc(100% - 12px);
+}
+
 #content {
   position: absolute;
   left: 100%;
@@ -258,6 +282,9 @@ p.spinner {
   .setting {
     display: block;
   }
+  .setting form input {
+    width: calc(100% - 12px);
+  }
 }
 @media screen and (min-width: 480px) {
   #notification-zone {
@@ -294,5 +321,8 @@ p.spinner {
   }
   .setting {
     display: flex;
+  }
+  .setting form input {
+    width: initial;
   }
 }
