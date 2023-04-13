@@ -1,0 +1,24 @@
+{
+  "name": "modulejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "wp": "webpack -c .\\webpack.config.js",
+    "gd": "npm i -g webpack@latest && npm i -g webpack-cli@latest",
+    "dup": "npm update firebase && npm update @fingerprintjs/fingerprintjs && npm update bcryptjs && npm update crypto-browserify && npm update stream-browserify && npm update events && npm update buffer",
+    "din": "npm i firebase@latest && npm i @fingerprintjs/fingerprintjs@latest && npm i bcryptjs@latest && npm i crypto-browserify@latest && npm i stream-browserify@latest && npm i events@latest && npm i buffer@latest",
+    "dun": "npm uninstall firebase && npm uninstall @fingerprintjs/fingerprintjs && npm uninstall bcryptjs && npm uninstall crypto-browserify && npm uninstall stream-browserify && npm uninstall events && npm uninstall buffer"
+  },
+  "author": "Mapagmataas",
+  "license": "ISC",
+  "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^3.4.1",
+    "bcryptjs": "^2.4.3",
+    "buffer": "^6.0.3",
+    "crypto-browserify": "^3.12.0",
+    "events": "^3.3.0",
+    "firebase": "^9.19.1",
+    "stream-browserify": "^3.0.0"
+  }
+}
