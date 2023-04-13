@@ -68,7 +68,11 @@ form input {
   box-shadow: -2.25px 1.5px 3px var(--third-color);
 }
 form input[type="submit"] {
+  opacity: 0.5;
   cursor: pointer;
+}
+form input[type="submit"]:hover {
+  opacity: 1;
 }
 .spinner {
   transition: transform 0.4s linear;
