@@ -70,22 +70,22 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
   </div>
 
   <div id="content">
-    <div id="log-reg-menu">
+    <div id="log-reg-menu" class="log-reg">
       <div id="log-menu">
         <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
           <label for="uname" data-translate>First name:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" required>
+          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" required>
           <label for="pass" data-translate>First name:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" required>
+          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
           <input type="submit" value="send">
         </form>
       </div>
-      <div id="reg-menu">
+      <div id="reg-menu" class="log-reg">
         <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
           <label for="uname" data-translate>First name:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" required>
+          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" required>
           <label for="pass" data-translate>First name:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" required>
+          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
           <input type="submit" value="send">
         </form>
       </div>
