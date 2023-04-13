@@ -17,6 +17,11 @@ const db = getDatabase(app);
 
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
+trans_arr.push(
+  "*Username:", "*Имя Пользователя:",
+  "*Password:", "*Пароль:",
+);
+
 userPage();
 function userPage() {
   if (location.hash == "") return;
