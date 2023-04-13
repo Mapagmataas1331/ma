@@ -51,13 +51,13 @@ async function timeFromLastVisit(vid) {
 window.updateVisitor = async (uname, vid) => {
   user.name = uname;
   console.log("\nLogged in as:\n" + user.name + "\n\n");
+  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n");
   set(ref(db, "visitor_ids/" + vid), {
     user: uname,
     last_visit: String(new Date())
   });
   setPreferences();
   cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
-  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n");
 }
 
 async function setPreferences() {

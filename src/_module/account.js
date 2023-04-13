@@ -17,8 +17,17 @@ const db = getDatabase(app);
 
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
+userPage();
+function userPage() {
+  if (location.hash == "") return;
+  console.log(location.hash.substring(1));
+}
+
 window.onLogin = () => {
-  hrefTo("/account#" + user.name);
+  if (location.hash == "") {
+    location.hash = user.name;
+    userPage();
+  }
 }
 
 window.login = (uname, pass) => {
