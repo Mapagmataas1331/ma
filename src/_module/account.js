@@ -17,11 +17,11 @@ function userPage() {
     if (snapshot.exists()) {
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
-      document.getElementById("username").innerHTML = snapshot.child("username").val();
-      document.getElementById("first_name").innerHTML = snapshot.child("first_name").val();
-      document.getElementById("last_name").innerHTML = snapshot.child("last_name").val();
-      document.getElementById("email").innerHTML = snapshot.child("email").val();
-      document.getElementById("telegram").innerHTML = snapshot.child("telegram").val();
+      document.getElementById("username").innerHTML = "Username: " + snapshot.child("username").val();
+      document.getElementById("first_name").innerHTML = "First name: " + snapshot.child("first_name").val();
+      document.getElementById("last_name").innerHTML = "Last name: " + snapshot.child("last_name").val();
+      document.getElementById("email").innerHTML = "Email: " + snapshot.child("email").val();
+      document.getElementById("telegram").innerHTML = "Telegram: " + snapshot.child("telegram").val();
     } else {
       cusAlert("alert", "No such user,", "if you aren't trying to see any profile, remove " + location.hash + " from url");
     }
