@@ -9,9 +9,12 @@ module.exports = {
   },
   mode: 'none',
   devtool: 'eval-source-map',
-  entry: './main.js',
+  entry: {
+    main: './main.js',
+    account: './account.js'
+  },
   output: {
     path: path.resolve(__dirname, '../bundle'),
-    filename: 'bundle.js'
+    filename: '[name].bundle.js'
   }
 };

@@ -75,7 +75,7 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
         <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
           <label for="uname" data-translate>*Username:</label>
           <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
-          pattern="[A-Za-zА-Яа-я1-9]" title="Write your alphanumeric username" required>
+          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Write your alphanumeric username" required>
           <label for="pass" data-translate>*Password:</label>
           <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
           <input type="submit" value="send">
@@ -85,7 +85,7 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
         <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
           <label for="uname" data-translate>*Username:</label>
           <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
-          pattern="[A-Za-zА-Яа-я1-9]" title="Come up with an alphanumeric username" required>
+          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Come up with an alphanumeric username" required>
           <label for="pass" data-translate>*Password:</label>
           <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
           <input type="submit" value="send">
@@ -98,6 +98,7 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
   </div>
 
   <script src="src/main.js"></script>
-  <script src="src/bundle/bundle.js"></script>
+  <script src="src/bundle/main.bundle.js"></script>
+  <script src="src/bundle/account.bundle.js"></script>
 </body>
 </html>

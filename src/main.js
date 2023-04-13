@@ -79,7 +79,6 @@ document.getElementById("header").lastElementChild.addEventListener("click", () 
   }
 }, false);
 
-// navigation
 addEventListenerList(document.querySelectorAll(".nav-item"), "mouseover", (e) => {
   document.getElementById("current-page").innerHTML = e.target.parentElement.id;
   document.getElementById(page).style = null;
@@ -92,7 +91,6 @@ addEventListenerList(document.querySelectorAll(".nav-item"), "click", (e) => {
   hrefTo("/" + e.target.parentElement.firstElementChild.innerHTML);
 });
 
-// settings
 var tTimeOut = false;
 addEventListenerList(document.querySelectorAll(".setting-param"), "click", (e) => {
   var to = tTimeOut;

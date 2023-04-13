@@ -18,8 +18,6 @@ const db = getDatabase(app);
 const fpPromise = import('@fingerprintjs/fingerprintjs')
 .then(FingerprintJS => FingerprintJS.load());
 
-import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
-
 window.user = {name: null, vid: null};
 
 fpPromise
@@ -30,10 +28,7 @@ fpPromise
   tryToLog(user.vid)
   .then(uname => {
     if (typeof uname != "undefined" && uname != null) {
-      user.name = uname;
-      updateVisitorID(user.name, user.vid);
-      cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
-      setPreferences();
+      updateVisitor(uname, user.vid);
     }
   });
 });
@@ -50,13 +45,16 @@ async function timeFromLastVisit(vid) {
   });
 }
 
-async function updateVisitorID(uname, vid) {
+window.updateVisitor = async (uname, vid) => {
+  user.name = uname;
   console.log("\nLogged in as:\n" + user.name + "\n\n");
-  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n")
   set(ref(db, "visitor_ids/" + vid), {
     user: uname,
     last_visit: String(new Date())
   });
+  setPreferences();
+  cusAlert("notify", "Welcome back " + user.name + ",", "you are successfully logged in!");
+  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n");
 }
 
 async function setPreferences() {
@@ -80,47 +78,6 @@ window.savePreference = async (name, value) => {
     [name]: value
   });
   console.log("\n" + name + " remembered:\n" + value + "\n\n");
-}
-
-window.login = (uname, pass) => {
-  return get(ref(db, "users/" + uname)).then((snapshot) => {
-    if (snapshot.exists()) {
-      if (compareSync(pass, snapshot.child("salted_password").val())) {
-        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged in!");
-      } else {
-        cusAlert("alert", "Wrong password,", "try one more time!");
-        return;
-      }
-    } else {
-      cusAlert("alert", "Welcome " + uname + ",", "you are successfully registered!");
-    }
-    user.name = uname;
-    updateVisitorID(user.name, user.vid);
-    setPreferences();
-    return;
-  });
-}
-
-window.register = () => {
-  return get(ref(db, "users/" + uname)).then((snapshot) => {
-    if (snapshot.exists()) {
-      if (compareSync(pass, snapshot.child("salted_password").val())) {
-        cusAlert("notify", "Welcome back " + uname + ",", "you are successfully logged in!");
-      } else {
-        cusAlert("error", "Wrong password,", "try one more time!");
-        return;
-      }
-    } else {
-      set(ref(db, "users/" + uname), {
-        salted_password: hashSync(pass, genSaltSync(10))
-      });
-      cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
-    }
-    user.name = uname;
-    updateVisitorID(user.name, user.vid)
-    setPreferences()
-    return;
-  });
 }
 
 window.sendReport = (text) => {
