@@ -54,10 +54,10 @@ fpPromise
   tryToLog(user.vid)
   .then(uname => {
     if (typeof uname != "undefined" && uname != null) {
-      updateVisitor(uname, user.vid);
-      if (typeof onLogin != "undefined" && onLogin != null) {
-        onLogin();
-      }
+      get(ref(db, "users/" + uname)).then((snapshot) => {
+        updateVisitor(uname, snapshot.child("username").val(), user.vid);
+        if (typeof onLogin != "undefined" && onLogin != null) onLogin();
+      });
     }
   });
 });
@@ -74,12 +74,13 @@ async function timeFromLastVisit(vid) {
   });
 }
 
-window.updateVisitor = async (uname, vid) => {
-  user.name = uname;
-  console.log("\nLogged in as:\n" + user.name + "\n\n");
+window.updateVisitor = async (uname, upname, vid) => {
+  user.id = uname;
+  user.name = upname;
+  console.log("\nLogged in as:\n" + user.id + "\n\n");
   console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n");
   set(ref(db, "visitor_ids/" + vid), {
-    user: uname,
+    user: user.id,
     last_visit: String(new Date())
   });
   setPreferences();
@@ -87,7 +88,7 @@ window.updateVisitor = async (uname, vid) => {
 }
 
 async function setPreferences() {
-  get(ref(db, "users/" + user.name + "/preferences")).then((snapshot) => {
+  get(ref(db, "users/" + user.id + "/preferences")).then((snapshot) => {
     snapshot.forEach(childSnapshot => {
       var active = document.getElementById(childSnapshot.val());
       if (typeof active != "undefined" && active != null) {
@@ -103,15 +104,15 @@ async function setPreferences() {
 }
 
 async function savePreference(name, value) {
-  update(ref(db, "users/" + user.name + "/preferences"), {
+  update(ref(db, "users/" + user.id + "/preferences"), {
     [name]: value
   });
   console.log("\n" + name + " remembered:\n" + value + "\n\n");
 }
 
 window.sendReport = async (text) => {
-  if (user.name != null) {
-    update(ref(db, "reports/" + user.name), {
+  if (user.id != null) {
+    update(ref(db, "reports/" + user.id), {
       [String(new Date())]: text
     })
     cusAlert("notify", "Thank you " + user.name + ",", "your report has been sent!");
@@ -217,7 +218,7 @@ addEventListenerList(document.querySelectorAll(".setting-param"), "click", (e) =
   var to = tTimeOut;
   eval("change" + e.target.parentElement.firstElementChild.id + "('" + e.target.id + "');");
   if (e.target.parentElement.firstElementChild.id == "lang" && to) return;
-  if (user.name != null) savePreference(e.target.parentElement.firstElementChild.id, e.target.id);
+  if (user.id != null) savePreference(e.target.parentElement.firstElementChild.id, e.target.id);
   var params = e.target.parentElement.querySelectorAll(".setting-param");
   for (var i = 0; i < params.length; i++) {
     if (params[i].classList.contains("current")) params[i].classList.remove("current");

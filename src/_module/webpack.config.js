@@ -11,10 +11,7 @@ module.exports = {
   devtool: 'eval-source-map',
   entry: {
     main: './main.js',
-    account: {
-      dependOn: 'main',
-      import: './account.js'
-    }
+    account: './account.js'
   },
   output: {
     path: path.resolve(__dirname, '../js'),

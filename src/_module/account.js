@@ -12,45 +12,64 @@ trans_arr.push(
 userPage();
 function userPage() {
   if (location.hash == "") return;
-  console.log(location.hash.substring(1));
+  location.href = location.href.toLowerCase();
+  get(ref(db, "users/" + location.hash.substring(1))).then((snapshot) => {
+    if (snapshot.exists()) {
+      logregForms(0, 0);
+      document.getElementById("profile").style.display = "block";
+      document.getElementById("username").innerHTML = snapshot.child("username").val();
+    } else {
+      cusAlert("alert", "No such user,", "if you aren't trying to see any profile, remove " + location.hash + " from url");
+    }
+  });
 }
 
 window.onLogin = () => {
   if (location.hash == "") {
-    location.hash = user.name;
+    location.hash = user.id;
     userPage();
   }
 }
 
 window.login = (uname, pass) => {
-  get(ref(db, "users/" + uname)).then((snapshot) => {
+  get(ref(db, "users/" + uname.toLowerCase())).then((snapshot) => {
     if (snapshot.exists()) {
       if (compareSync(pass, snapshot.child("salted_password").val())) {
-        updateVisitor(uname, user.vid);
+        updateVisitor(uname.toLowerCase(), uname, user.vid);
+        if (location.hash == "") {
+          location.hash = user.id;
+          userPage();
+        }
       } else {
         cusAlert("alert", "Wrong password,", "try one more time!");
       }
     } else {
-      cusAlert("alert", "No such account,", "first you need to register.");
+      cusAlert("alert", "No such user,", "looks like you need to register.");
     }
   });
 }
 
 window.register = (uname, pass) => {
-  get(ref(db, "users/" + uname)).then((snapshot) => {
+  get(ref(db, "users/" + uname.toLowerCase())).then((snapshot) => {
     if (snapshot.exists()) {
       cusAlert("alert", "Username \"" + uname + "\" is already taken,", "looks like you'll have to come up with something else.");
     } else {
-      set(ref(db, "users/" + uname), {
+      set(ref(db, "users/" + uname.toLowerCase()), {
+        username: uname,
         salted_password: hashSync(pass, genSaltSync(10))
       });
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
-      updateVisitor(uname, user.vid);
+      updateVisitor(uname.toLowerCase(), uname, user.vid);
+      if (location.hash == "") {
+        location.hash = user.id;
+        userPage();
+      }
     }
   });
 }
 
-window.logregForms = (log, reg) => {
+window.logregForms = logregForms;
+function logregForms(log, reg) {
   const logForm = document.getElementById("log-form");
   if (log == 0) {
     logForm.style.display = "none";
