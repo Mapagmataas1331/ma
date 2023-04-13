@@ -1,0 +1,17 @@
+.log-reg {
+  width: 100%;
+  text-align: center;
+  margin: 5vh 0;
+}
+.log-reg legend {
+  margin: 16px 4px;
+}
+.log-reg label {
+  margin: auto 16px auto 4px;
+}
+.log-reg input {
+  margin: 12px 4px;
+}
+.log-reg input[type="submit"] {
+  margin: 18px 4px 26px;
+}

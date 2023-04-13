@@ -12,7 +12,7 @@ ma, ma., madot, ma dot, ma_dot, makak, ma kak, makaksi, ma kak si, ma.kak.si,
 mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
 
   <link rel="icon" type="image/png" href="src/imgs/ma-icon.png">
-  <link rel="stylesheet" href="src/main.css">
+  <link rel="stylesheet" href="src/css/main.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
 </head>
 <title id="title">ma.</title>
@@ -70,36 +70,45 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
   </div>
 
   <div id="content">
-    <div id="log-reg-menu" class="log-reg">
-      <div id="log-menu">
-        <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
+    <div id="log-menu" class="log-reg">
+      <form action="javascript:;" onsubmit="login(uname.value, pass.value);">
+        <legend data-translate="">Login form</legend>
+        <p>
           <label for="uname" data-translate>*Username:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
-          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Write your alphanumeric username" required>
+          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" size="14"
+          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Write your alphanumeric username (4-12 symbols)" required>
+        </p>
+        <p>
           <label for="pass" data-translate>*Password:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
-          <input type="submit" value="send">
-        </form>
-      </div>
-      <div id="reg-menu" class="log-reg">
-        <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
+          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
+        </p>
+        <input type="submit" value="send">
+        <p class="link" data-translate>Registration form</p>
+      </form>
+    </div>
+    <div id="reg-menu" class="log-reg">
+      <form action="javascript:;" onsubmit="register(uname.value, pass.value);">
+        <legend data-translate>Registration form</legend>
+        <p>
           <label for="uname" data-translate>*Username:</label>
-          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
-          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Come up with an alphanumeric username" required>
+          <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12" size="14"
+          pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Come up with an alphanumeric username (4-12 symbols)" required>
+        </p>
+        <p>
           <label for="pass" data-translate>*Password:</label>
-          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
-          <input type="submit" value="send">
-        </form>
-      </div>
+          <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" size="14" required>
+        </p>
+        <input type="submit" value="send">
+        <p class="link" data-translate>Login form</p>
+      </form>
     </div>
     <div id="account">
 
     </div>
   </div>
 
-  <link rel="stylesheet" href="src/account.css">
-  <script src="src/main.js"></script>
-  <script src="src/bundle/main.bundle.js"></script>
-  <script src="src/bundle/account.bundle.js"></script>
+  <link rel="stylesheet" href="src/css/account.css">
+  <script src="src/js/main.js"></script>
+  <script src="src/js/account.js"></script>
 </body>
 </html>
