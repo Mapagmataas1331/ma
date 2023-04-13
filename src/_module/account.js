@@ -13,7 +13,7 @@ userPage();
 function userPage() {
   if (location.hash == "") return;
   location.href = location.href.toLowerCase();
-  get(ref(db, "users/" + location.hash.substring(1))).then((snapshot) => {
+  get(ref(db, "users/" + location.hash.substring(1))).then(snapshot => {
     if (snapshot.exists()) {
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
@@ -32,7 +32,7 @@ window.onLogin = () => {
 }
 
 window.login = (uname, pass) => {
-  get(ref(db, "users/" + uname.toLowerCase())).then((snapshot) => {
+  get(ref(db, "users/" + uname.toLowerCase())).then(snapshot => {
     if (snapshot.exists()) {
       if (compareSync(pass, snapshot.child("salted_password").val())) {
         updateVisitor(uname.toLowerCase(), uname, user.vid);
@@ -50,7 +50,7 @@ window.login = (uname, pass) => {
 }
 
 window.register = (uname, pass) => {
-  get(ref(db, "users/" + uname.toLowerCase())).then((snapshot) => {
+  get(ref(db, "users/" + uname.toLowerCase())).then(snapshot => {
     if (snapshot.exists()) {
       cusAlert("alert", "Username \"" + uname + "\" is already taken,", "looks like you'll have to come up with something else.");
     } else {
