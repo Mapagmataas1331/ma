@@ -20,6 +20,7 @@
 }
 .log-reg input {
   margin: 12px 4px;
+  width: 256px;
 }
 .log-reg input[type="submit"] {
   width: 128px;

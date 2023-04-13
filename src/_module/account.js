@@ -3,10 +3,14 @@ import { getDatabase, ref, set, get, update } from 'firebase/database';
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
 trans_arr.push(
-  "*Username:", "*Никнейм:",
-  "*Password:", "*Пароль:",
   "Login form", "Форма Входа",
   "Registration form", "Форма Регистрации",
+  "*Username:", "*Никнейм:",
+  "*Password:", "*Пароль:",
+  "*First name:", "*Ваше имя:",
+  "*Last name:", "*Фамилия:",
+  "Email:", "Почта:",
+  "Telegram:", "Телеграм:",
 );
 
 userPage();
