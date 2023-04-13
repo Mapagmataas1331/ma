@@ -50,6 +50,15 @@ async function timeFromLastVisit(vid) {
   });
 }
 
+async function updateVisitorID(uname, vid) {
+  console.log("\nLogged in as:\n" + user.name + "\n\n");
+  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n")
+  set(ref(db, "visitor_ids/" + vid), {
+    user: uname,
+    last_visit: String(new Date())
+  });
+}
+
 async function setPreferences() {
   get(ref(db, "users/" + user.name + "/preferences")).then((snapshot) => {
     snapshot.forEach(childSnapshot => {
@@ -94,11 +103,14 @@ window.reglog = (uname, pass) => {
     return;
   });
 }
-async function updateVisitorID(uname, vid) {
-  console.log("\nLogged in as:\n" + user.name + "\n\n");
-  console.log("\nSince last visit:\n" + await timeFromLastVisit(vid) + " minutes\n\n")
-  set(ref(db, "visitor_ids/" + vid), {
-    user: uname,
-    last_visit: `${new Date()}`
-  });
+
+window.sendReport = (text) => {
+  if (user.name != null) {
+    update(ref(db, "reports/" + user.name), {
+      [String(new Date())]: text
+    })
+    cusAlert("notify", "Thank you " + user.name + ",", "your report has been sent!");
+  } else {
+    cusAlert("alert", "First you need to log in,", "click me to go to login page.", "https://ma.kak.si/account")
+  }
 }

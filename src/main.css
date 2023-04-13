@@ -61,7 +61,11 @@ form input {
   width: 100%;
   min-width: 160px;
   max-width: 320px;
+  max-height: calc(100% - 56px);
   z-index: 100;
+}
+#notification-zone:hover {
+  overflow: hidden scroll;
 }
 .notification {
   position: relative;
@@ -175,7 +179,11 @@ form input {
   color: var(--second-text-color);
 }
 .settings-section {
-  margin: 16px;
+  margin: 0 16px 4px 16px;
+  padding: 8px 0;
+}
+.settings-section:not(:last-of-type) {
+  border-bottom: 2px solid var(--primary-color);
 }
 .settings-section-name {
   font-size: 24px;
@@ -296,7 +304,7 @@ p.spinner {
     box-shadow: -3px 2px 4px var(--third-color);
   }
   #footer {
-    height: 42px;
+    height: 56px;
     box-shadow: -3px -2px 4px var(--third-color);
   }
   #header p , #footer p, #header i, #footer i {

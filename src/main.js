@@ -12,7 +12,7 @@ function hrefTo(page) {
     } else location.href = "/";
   }, 250);
 }
-async function cusAlert(type, title, message) {
+async function cusAlert(type, title, message, link) {
   var newAlert = document.createElement("div");
   newAlert.className = "notification " + type;
   var alertTitle = document.createElement("p");
@@ -24,6 +24,9 @@ async function cusAlert(type, title, message) {
   alertMessage.innerHTML = message;
   newAlert.appendChild(alertMessage);
   document.getElementById("notification-zone").appendChild(newAlert);
+  if (typeof link != "undefined" && link != null) newAlert.addEventListener("click", () => {
+    hrefTo(link);
+  }, false);
   setTimeout(() => {
     alertTitle.innerHTML = "• " + title;
     setTimeout(() => {
