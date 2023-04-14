@@ -26,3 +26,60 @@
   width: 128px;
   margin: 12px 4px;
 }
+#avatar {
+  width: calc(100% - 32px);
+  max-width: 512px;
+  aspect-ratio: 1;
+  margin: 16px auto 32px;
+  border-radius: 128px;
+  background-image: url("../imgs/profile-default.png");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+#profile div:not(#avatar):not(#logout) {
+  display: flex;
+  width: calc(100% - 8px);
+  margin: 12px 4px;
+  text-align: center;
+}
+#profile div p:first-child {
+  margin: auto 4px auto auto;
+  font-size: 22px;
+  font-weight: 300;
+  text-shadow: -2.25px 1.5px 3px var(--third-color);
+}
+#profile div p:last-child {
+  margin: auto auto auto 4px;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 20px;
+}
+#logout {
+  display: none;
+  width: 100%;
+  margin: 32px 0;
+  text-align: center;
+}
+
+@media screen and (min-width: 0px) {
+  #profile div:not(#avatar):not(#logout) {
+    display: block;
+  }
+  #profile div p:first-child {
+    margin: 0;
+  }
+  #profile div p:last-child {
+    margin: 0;
+  }
+}
+@media screen and (min-width: 480px) {
+  #profile div:not(#avatar):not(#logout) {
+    display: flex;
+  }
+  #profile div p:first-child {
+    margin: auto 4px auto auto;
+  }
+  #profile div p:last-child {
+    margin: auto auto auto 4px;
+  }
+}

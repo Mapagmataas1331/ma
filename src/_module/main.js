@@ -53,10 +53,12 @@ fpPromise
   console.log("\nVisitor identifier:\n" + user.vid + "\n\n");
   tryToLog(user.vid)
   .then(uname => {
-    if (typeof uname != "undefined" && uname != null) {
+    if (typeof uname != "undefined" && uname != null && uname != "") {
       get(ref(db, "users/" + uname)).then((snapshot) => {
-        updateVisitor(uname, snapshot.child("username").val(), user.vid);
-        if (typeof onLogin != "undefined" && onLogin != null) onLogin();
+        if (snapshot.exists()) {
+          updateVisitor(uname, snapshot.child("username").val(), user.vid);
+          if (typeof onLogin != "undefined" && onLogin != null && onLogin != "") onLogin();
+        }
       });
     }
   });
@@ -91,7 +93,7 @@ async function setPreferences() {
   get(ref(db, "users/" + user.id + "/preferences")).then((snapshot) => {
     snapshot.forEach(childSnapshot => {
       var active = document.getElementById(childSnapshot.val());
-      if (typeof active != "undefined" && active != null) {
+      if (typeof active != "undefined" && active != null && active != "") {
         var params = active.parentElement.querySelectorAll(".setting-param");
         for (var i = 0; i < params.length; i++) {
           if (params[i].classList.contains("current")) params[i].classList.remove("current");
@@ -149,7 +151,7 @@ window.cusAlert = async (type, title, message, link) => {
   alertMessage.innerHTML = message;
   newAlert.appendChild(alertMessage);
   document.getElementById("notification-zone").appendChild(newAlert);
-  if (typeof link != "undefined" && link != null) newAlert.addEventListener("click", () => {
+  if (typeof link != "undefined" && link != null && link != "") newAlert.addEventListener("click", () => {
     hrefTo(link);
   }, false);
   setTimeout(() => {

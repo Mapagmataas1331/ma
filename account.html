@@ -73,10 +73,10 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
     <div id="log-form" class="log-reg">
       <form class="centered" action="javascript:;" onsubmit="login(uname.value, pass.value);">
         <p data-translate="">Login form</p>
-        <p data-translate>*Username:</p>
+        <p data-translate>Username:</p>
         <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
           pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Write your alphanumeric username (4-12 symbols)" required>
-        <p data-translate>*Password:</p>
+        <p data-translate>Password:</p>
         <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12" required>
         <p class="link" onclick="logregForms(0, 1)" data-translate>Registration form</p>
         <input type="submit" value="Send">
@@ -85,14 +85,14 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
     <div id="reg-form" class="log-reg" style="display:none">
       <form class="centered" action="javascript:;" onsubmit="register(uname.value, pass.value, fname.value, lname.value, mail.value, tg.value);">
         <p data-translate="">Registration form</p>
-        <p data-translate>*Username:</p>
+        <p data-translate>Username:</p>
         <input type="text" name="uname" id="uname" placeholder="username" minlength="4" maxlength="12"
           pattern="[A-Za-zА-Яа-яЁё0-9]{4,12}" title="Come up with an alphanumeric username (4-12 symbols)" required>
-        <p data-translate>*First name:</p>
+        <p data-translate>First name:</p>
         <input type="text" name="fname" id="fname" placeholder="Elon" minlength="2" maxlength="20"required>
-        <p data-translate>*Last name:</p>
+        <p data-translate>Last name:</p>
         <input type="text" name="lname" id="lname" placeholder="Musk" minlength="2" maxlength="20"required>
-        <p data-translate>*Password:</p>
+        <p data-translate>Password:</p>
         <input type="text" name="pass" id="pass" placeholder="password" minlength="4" maxlength="12"required>
         <p data-translate>Email:</p>
         <input type="email" name="mail" id="mail" placeholder="yourmail@domain.tld" minlength="4" maxlength="26">
@@ -104,11 +104,12 @@ mr, mr., mrdot, mr dot, mr_dot, mrkak, mr kak, mrkaksi, mr kak si, mr.kak.si">
     </div>
     <div id="profile" style="display: none;">
       <div id="avatar"></div>
-      <p id="username"></p>
-      <p id="first_name"></p>
-      <p id="last_name"></p>
-      <p id="email"></p>
-      <p id="telegram"></p>
+      <div id="username"><p data-translate>Username:</p><p></p></div>
+      <div id="first_name"><p data-translate>First name:</p><p></p></div>
+      <div id="last_name"><p data-translate>Last name:</p><p></p></div>
+      <div id="email"><p data-translate>Email:</p><p></p></div>
+      <div id="telegram"><p data-translate>Telegram:</p><p></p></div>
+      <div class="link" id="logout" data-translate>Log out</div>
     </div>
   </div>
 

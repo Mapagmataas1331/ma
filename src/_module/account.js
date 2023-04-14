@@ -5,27 +5,37 @@ import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 trans_arr.push(
   "Login form", "Форма Входа",
   "Registration form", "Форма Регистрации",
-  "*Username:", "*Никнейм:",
-  "*Password:", "*Пароль:",
-  "*First name:", "*Ваше имя:",
-  "*Last name:", "*Фамилия:",
+  "Username:", "Никнейм:",
+  "Password:", "Пароль:",
+  "First name:", "Имя:",
+  "Last name:", "Фамилия:",
   "Email:", "Почта:",
   "Telegram:", "Телеграм:",
+  "Log out", "Выйти",
 );
 
+function logpage() {
+  location.hash = user.id;
+  userPage();
+  document.getElementById("logout").style.display = "block";
+}
+
 userPage();
-function userPage() {
+async function userPage() {
   if (location.hash == "") return;
   location.href = location.href.toLowerCase();
   get(ref(db, "users/" + location.hash.substring(1))).then(snapshot => {
     if (snapshot.exists()) {
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
-      document.getElementById("username").innerHTML = "Username: " + snapshot.child("username").val();
-      document.getElementById("first_name").innerHTML = "First name: " + snapshot.child("first_name").val();
-      document.getElementById("last_name").innerHTML = "Last name: " + snapshot.child("last_name").val();
-      document.getElementById("email").innerHTML = "Email: " + snapshot.child("email").val();
-      document.getElementById("telegram").innerHTML = "Telegram: " + snapshot.child("telegram").val();
+      if (snapshot.child("avatar").exists() && snapshot.child("avatar").val() != null && snapshot.child("avatar").val() != "") {
+        document.getElementById("avatar").style.backgroundImage = "url(\"" + snapshot.child("avatar").val() + "\")";
+      }
+      document.getElementById("username").lastChild.innerHTML = snapshot.child("username").val();
+      document.getElementById("first_name").lastChild.innerHTML = snapshot.child("first_name").val();
+      document.getElementById("last_name").lastChild.innerHTML = snapshot.child("last_name").val();
+      document.getElementById("email").lastChild.innerHTML = snapshot.child("email").val();
+      document.getElementById("telegram").lastChild.innerHTML = snapshot.child("telegram").val();
     } else {
       cusAlert("alert", "No such user,", "if you aren't trying to see any profile, remove " + location.hash + " from url");
     }
@@ -33,10 +43,7 @@ function userPage() {
 }
 
 window.onLogin = () => {
-  if (location.hash == "") {
-    location.hash = user.id;
-    userPage();
-  }
+  if (location.hash == "") logpage();
 }
 
 window.login = (uname, pass) => {
@@ -46,6 +53,7 @@ window.login = (uname, pass) => {
         updateVisitor(uname.toLowerCase(), uname, user.vid);
         if (location.hash == "") {
           location.hash = user.id;
+          document.getElementById("logout").style.display = "block";
           userPage();
         }
       } else {
@@ -73,8 +81,7 @@ window.register = (uname, pass, fname, lname, email, tg) => {
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
       updateVisitor(uname.toLowerCase(), uname, user.vid);
       if (location.hash == "") {
-        location.hash = user.id;
-        userPage();
+        logpage();
       }
     }
   });
@@ -91,3 +98,11 @@ function logregForms(log, reg) {
     regForm.style.display = "none";
   } else regForm.style.display = "block";
 }
+
+document.getElementById("avatar").addEventListener("click", () => {
+  if (user.name == null || user.name != location.hash.substring(1)) {
+    cusAlert("alert", "No", "You not")
+    return;
+  }
+
+}, false);
