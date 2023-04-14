@@ -14,18 +14,13 @@ trans_arr.push(
   "Log out", "Выйти",
 );
 
-function logpage() {
-  location.hash = user.id;
-  userPage();
-  document.getElementById("logout").style.display = "block";
-}
-
 userPage();
 async function userPage() {
   if (location.hash == "") return;
   location.href = location.href.toLowerCase();
   get(ref(db, "users/" + location.hash.substring(1))).then(snapshot => {
     if (snapshot.exists()) {
+      if (snapshot.key == user.id) document.getElementById("logout").style.display = "block";
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
       if (snapshot.child("avatar").exists() && snapshot.child("avatar").val() != null && snapshot.child("avatar").val() != "") {
@@ -43,7 +38,10 @@ async function userPage() {
 }
 
 window.onLogin = () => {
-  if (location.hash == "") logpage();
+  if (location.hash == "" || location.hash.substring(1) == user.id || location.hash.substring(1) == user.name) {
+    location.hash = user.id;
+    userPage();
+  }
 }
 
 window.login = (uname, pass) => {
@@ -51,11 +49,8 @@ window.login = (uname, pass) => {
     if (snapshot.exists()) {
       if (compareSync(pass, snapshot.child("salted_password").val())) {
         updateVisitor(uname.toLowerCase(), uname, user.vid);
-        if (location.hash == "") {
-          location.hash = user.id;
-          document.getElementById("logout").style.display = "block";
-          userPage();
-        }
+        location.hash = user.id;
+        userPage();
       } else {
         cusAlert("alert", "Wrong password,", "try one more time!");
       }
@@ -80,9 +75,8 @@ window.register = (uname, pass, fname, lname, email, tg) => {
       });
       cusAlert("notify", "Welcome " + uname + ",", "you are successfully registered!");
       updateVisitor(uname.toLowerCase(), uname, user.vid);
-      if (location.hash == "") {
-        logpage();
-      }
+      location.hash = user.id;
+      userPage();
     }
   });
 }
