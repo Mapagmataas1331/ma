@@ -45,7 +45,7 @@ window.addEventListener("load", () => {
 const fpPromise = import('@fingerprintjs/fingerprintjs')
 .then(FingerprintJS => FingerprintJS.load());
 
-window.user = {name: null, vid: null};
+window.user = {id: null, name: null, vid: null};
 
 fpPromise
 .then(fp => fp.get())
