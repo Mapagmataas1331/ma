@@ -48,9 +48,11 @@ body {
 a {
   text-decoration: none;
 }
-form label {
+span {
+  outline: 0;
+  border-radius: 4px;
+  font-family: 'Times New Roman', Times, serif;
   font-size: 20px;
-  text-shadow: -2.25px 1.5px 3px var(--third-color);
 }
 form input {
   padding: 4px 8px;

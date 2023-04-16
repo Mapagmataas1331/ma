@@ -31,6 +31,7 @@ window.trans_arr = [
   "Language:", "Язык:",
   "English", "Английский",
   "Russian", "Русский",
+  "Page Settings", "Настройки страницы",
   "Report a problem:", "Сообщить о проблеме:",
 ];
 var tTimeOut = false;
