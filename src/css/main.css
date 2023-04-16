@@ -49,8 +49,12 @@ a {
   text-decoration: none;
 }
 span {
-  outline: 0;
+  min-width: 128px;
+  padding: 2px 8px;
   border-radius: 4px;
+  outline: 0;
+  background-color: var(--second-color);
+  box-shadow: -2.25px 1.5px 3px var(--third-color);
   font-family: 'Times New Roman', Times, serif;
   font-size: 20px;
 }
@@ -64,10 +68,10 @@ form input {
   color: var(--second-text-color);
   box-shadow: -2.25px 1.5px 3px var(--third-color);
 }
-form.centered input {
+form.centered input, span.centered {
   text-align: center;
 }
-form.centered input:focus {
+form.centered input:focus, span.centered:focus {
   text-align: left;
 }
 form input[type="submit"] {
