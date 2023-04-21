@@ -1,5 +1,4 @@
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, get, update } from 'firebase/database';
+import { ref, set, get, update, remove } from 'firebase/database';
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
 trans_arr.push(
@@ -20,17 +19,34 @@ async function userPage() {
   location.href = location.href.toLowerCase();
   get(ref(db, "users/" + location.hash.substring(1))).then(snapshot => {
     if (snapshot.exists()) {
-      if (snapshot.key == user.id) document.getElementById("logout").style.display = "block";
+      if (snapshot.key == user.id) {
+        document.getElementById("logout").style.display = "block";
+        document.getElementById("logout").addEventListener("click", () => {
+          remove(ref(db, "visitor_ids/" + user.vid)).then(() => {
+            location.reload();
+          });
+        }, false);
+        document.getElementById("avatar").style.cursor = "pointer";
+        document.getElementById("avatar").addEventListener("click", () => {
+          alert("gg");
+        }, false);
+        document.getElementById("username").lastChild.innerHTML = "<span>" + snapshot.child("username").val() + "</span>";
+        document.getElementById("first_name").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("first_name").val() + "</span>";
+        document.getElementById("last_name").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("last_name").val() + "</span>";
+        document.getElementById("email").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("email").val() + "</span>";
+        document.getElementById("telegram").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("telegram").val() + "</span>";
+      } else {
+        document.getElementById("username").lastChild.innerHTML = snapshot.child("username").val();
+        document.getElementById("first_name").lastChild.innerHTML = snapshot.child("first_name").val();
+        document.getElementById("last_name").lastChild.innerHTML = snapshot.child("last_name").val();
+        document.getElementById("email").lastChild.innerHTML = snapshot.child("email").val();
+        document.getElementById("telegram").lastChild.innerHTML = snapshot.child("telegram").val();
+      }
       logregForms(0, 0);
       document.getElementById("profile").style.display = "block";
       if (snapshot.child("avatar").exists() && snapshot.child("avatar").val() != null && snapshot.child("avatar").val() != "") {
         document.getElementById("avatar").style.backgroundImage = "url(\"" + snapshot.child("avatar").val() + "\")";
       }
-      document.getElementById("username").lastChild.innerHTML = snapshot.child("username").val();
-      document.getElementById("first_name").lastChild.innerHTML = snapshot.child("first_name").val();
-      document.getElementById("last_name").lastChild.innerHTML = snapshot.child("last_name").val();
-      document.getElementById("email").lastChild.innerHTML = snapshot.child("email").val();
-      document.getElementById("telegram").lastChild.innerHTML = snapshot.child("telegram").val();
     } else {
       cusAlert("alert", "No such user,", "if you aren't trying to see any profile, remove " + location.hash + " from url");
     }
@@ -92,11 +108,3 @@ function logregForms(log, reg) {
     regForm.style.display = "none";
   } else regForm.style.display = "block";
 }
-
-document.getElementById("avatar").addEventListener("click", () => {
-  if (user.name == null || user.name != location.hash.substring(1)) {
-    cusAlert("alert", "No", "You not")
-    return;
-  }
-
-}, false);
