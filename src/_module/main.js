@@ -125,9 +125,8 @@ window.sendReport = async (text) => {
 }
 
 window.addEventListenerList = (list, event, fn) => {
-  for (var i = 0, len = list.length; i < len; i++) {
-      list[i].addEventListener(event, fn, false);
-}}
+  list.forEach(snapshot => { snapshot.addEventListener(event, fn, false) });
+}
 
 window.hrefTo = (page) => {
   for (var i = 0; i <= 100; i++) {
