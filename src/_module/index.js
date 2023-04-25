@@ -4,5 +4,9 @@ trans_arr.push(
   "en", "ру",
 );
 
-document.getElementById("imgs").addEventListener("click", hrefTo(), false);
-// document.getElementById("imgs").lastChild.addEventListener("click", hrefTo(), false);
+document.getElementById("imgs").firstChild.addEventListener("click", () => {
+  hrefTo("ma.kak.si");
+}, false);
+document.getElementById("imgs").lastChild.addEventListener("click", () => {
+  hrefTo("mr.kak.si");
+}, false);
