@@ -5,8 +5,8 @@ trans_arr.push(
 );
 
 document.getElementById("imgs").querySelectorAll("img")[0].addEventListener("click", () => {
-  hrefTo("ma.kak.si");
+  hrefTo("https://ma.kak.si");
 }, false);
 document.getElementById("imgs").querySelectorAll("img")[1].addEventListener("click", () => {
-  hrefTo("mr.kak.si");
+  hrefTo("https://mr.kak.si");
 }, false);
