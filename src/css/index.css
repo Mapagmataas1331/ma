@@ -1,11 +1,11 @@
 #imgs {
   display: flex;
-  margin: 16px 4px 0;
+  margin: 16px 8px 0;
   text-align: center;
 }
 #imgs img {
-  margin: 16px auto;
-  width: 35%;
+  margin: 8px auto;
+  width: 40%;
   max-width: 512px;
 }
 @media screen and (min-width: 0px) {
@@ -13,7 +13,7 @@
     display: block;
   }
   #imgs img {
-    width: 70%;
+    width: 80%;
   }
   }
 @media screen and (min-width: 480px) {
@@ -21,6 +21,6 @@
     display: flex;
   }
   #imgs img {
-    width: 35%;
+    width: 40%;
   }
 }
