@@ -4,9 +4,9 @@ trans_arr.push(
   "en", "ру",
 );
 
-document.getElementById("imgs").firstChild.addEventListener("click", () => {
+document.getElementById("imgs").querySelectorAll("img")[0].addEventListener("click", () => {
   hrefTo("ma.kak.si");
 }, false);
-document.getElementById("imgs").lastChild.addEventListener("click", () => {
+document.getElementById("imgs").querySelectorAll("img")[1].addEventListener("click", () => {
   hrefTo("mr.kak.si");
 }, false);
