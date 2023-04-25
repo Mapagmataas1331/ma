@@ -1,0 +1,26 @@
+#imgs {
+  display: flex;
+  margin: 16px 4px 0;
+  text-align: center;
+}
+#imgs img {
+  margin: 16px auto;
+  width: 35%;
+  max-width: 512px;
+}
+@media screen and (min-width: 0px) {
+  #imgs {
+    display: block;
+  }
+  #imgs img {
+    width: 70%;
+  }
+  }
+@media screen and (min-width: 480px) {
+  #imgs {
+    display: flex;
+  }
+  #imgs img {
+    width: 35%;
+  }
+}

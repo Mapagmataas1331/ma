@@ -11,6 +11,8 @@ module.exports = {
   devtool: 'eval-source-map',
   entry: {
     main: './main.js',
+    index: './index.js',
+    author: './author.js',
     account: './account.js'
   },
   output: {
