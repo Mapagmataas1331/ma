@@ -1,10 +1,10 @@
 #imgs {
   display: flex;
-  margin: 16px 8px 0;
+  margin: 5vw 8px 0;
   text-align: center;
 }
 #imgs img {
-  margin: 8px auto;
+  margin: 0 auto 8px;
   width: 40%;
   max-width: 512px;
 }
