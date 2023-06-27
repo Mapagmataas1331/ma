@@ -29,7 +29,7 @@
 #avatar {
   width: calc(100% - 32px);
   max-width: 512px;
-  aspect-ratio: 1;
+  aspect-ratio: 1/1;
   margin: 16px auto 32px;
   border-radius: 128px;
   background-image: url("../imgs/profile-default.png");
@@ -61,25 +61,13 @@
   text-align: center;
 }
 
-@media screen and (min-width: 0px) {
+@media screen and (min-width: 0px) and (max-width: 479px) {
   #profile div:not(#avatar):not(#logout) {
     display: block;
   }
-  #profile div p:first-child {
-    margin: 0;
-  }
+
+  #profile div p:first-child,
   #profile div p:last-child {
     margin: 0;
-  }
-}
-@media screen and (min-width: 480px) {
-  #profile div:not(#avatar):not(#logout) {
-    display: flex;
-  }
-  #profile div p:first-child {
-    margin: auto 4px auto auto;
-  }
-  #profile div p:last-child {
-    margin: auto auto auto 4px;
   }
 }

@@ -16,7 +16,8 @@
 .text p {
   font-size: 20px;
 }
-@media screen and (min-width: 0px) {
+
+@media screen and (min-width: 0px) and (max-width: 479px) {
   #imgs {
     display: block;
   }
@@ -25,16 +26,5 @@
   }
   .text p {
     font-size: 14px;
-  }
-}
-@media screen and (min-width: 480px) {
-  #imgs {
-    display: flex;
-  }
-  #imgs img {
-    width: 40%;
-  }
-  .text p {
-    font-size: 20px;
   }
 }

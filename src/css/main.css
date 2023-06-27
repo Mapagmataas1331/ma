@@ -96,8 +96,8 @@ p.spinner {
   top: 64px;
   right: 8px;
   width: 100%;
-  min-width: 160px;
-  max-width: 320px;
+  min-width: 120px;
+  max-width: 400px;
   max-height: calc(100% - 56px);
   z-index: 100;
 }
@@ -107,7 +107,7 @@ p.spinner {
 .notification {
   position: relative;
   width: 100%;
-  margin: 6px auto 6px auto;
+  margin: 6px auto;
   aspect-ratio: 6/1;
   border-radius: 8px;
   opacity: 0.5;
@@ -279,10 +279,10 @@ p.spinner {
   cursor: pointer;
 }
 
-@media screen and (min-width: 0px) {
+@media screen and (min-width: 0px) and (max-width: 479px) {
   #notification-zone {
     top: 42px;
-    width: calc(100% - 14px);
+    width: calc(100% - 12px);
   }
   #header {
     height: 42px;
@@ -317,45 +317,5 @@ p.spinner {
   }
   .setting form input {
     width: calc(100% - 12px);
-  }
-}
-@media screen and (min-width: 480px) {
-  #notification-zone {
-    top: 56px;
-    width: 30%;
-  }
-  #header {
-    height: 56px;
-    box-shadow: -3px 2px 4px var(--third-color);
-  }
-  #footer {
-    height: 56px;
-    box-shadow: -3px -2px 4px var(--third-color);
-  }
-  #header p , #footer p, #header i, #footer i {
-    font-size: 40px;
-    font-weight: 300;
-    text-shadow: -3px 2px 4px var(--third-color);
-  }
-  #header p , #footer p {
-    font-size: 36px;
-  }
-  #content, #navigation, #settings-menu {
-    top: 57px;
-  }
-  #navigation {
-    width: 30%;
-    border-radius: 0 0 8px 0;
-  }
-  #settings-menu {
-    width: 80%;
-    min-width: 496px;
-    border-radius: 0 0 0 8px;
-  }
-  .setting {
-    display: flex;
-  }
-  .setting form input {
-    width: initial;
   }
 }
