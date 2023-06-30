@@ -20,12 +20,6 @@ async function userPage() {
   get(ref(db, "users/" + location.hash.substring(1))).then(snapshot => {
     if (snapshot.exists()) {
       if (snapshot.key == user.id) {
-        document.getElementById("logout").style.display = "block";
-        document.getElementById("logout").addEventListener("click", () => {
-          remove(ref(db, "visitor_ids/" + user.vid)).then(() => {
-            location.reload();
-          });
-        }, false);
         document.getElementById("avatar").style.cursor = "pointer";
         document.getElementById("avatar").addEventListener("click", () => {
           alert("gg");
@@ -35,6 +29,12 @@ async function userPage() {
         document.getElementById("last_name").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("last_name").val() + "</span>";
         document.getElementById("email").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("email").val() + "</span>";
         document.getElementById("telegram").lastChild.innerHTML = "<span contenteditable>" + snapshot.child("telegram").val() + "</span>";
+        document.getElementById("logout").style.display = "block";
+        document.getElementById("logout").addEventListener("click", () => {
+          remove(ref(db, "visitor_ids/" + user.vid)).then(() => {
+            location.reload();
+          });
+        }, false);
       } else {
         document.getElementById("username").lastChild.innerHTML = snapshot.child("username").val();
         document.getElementById("first_name").lastChild.innerHTML = snapshot.child("first_name").val();
