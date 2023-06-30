@@ -1,4 +1,4 @@
-import { ref, set, get, update, remove } from 'firebase/database';
+import { ref, set, get, remove } from 'firebase/database';
 import { compareSync, hashSync, genSaltSync } from 'bcryptjs';
 
 trans_arr.push(

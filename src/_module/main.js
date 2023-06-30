@@ -2,17 +2,18 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, get, update } from 'firebase/database';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCPdKPTedeFiYCAJvypIgTR3dFxq17yKlc",
-  authDomain: "ma-d0t.firebaseapp.com",
-  databaseURL: "https://ma-d0t-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "ma-d0t",
-  storageBucket: "ma-d0t.appspot.com",
-  messagingSenderId: "805036478851",
-  appId: "1:805036478851:web:8c7339f74c4c1bbc8ce6b6",
-  measurementId: "G-HNT2YBHY27"
+  apiKey: "AIzaSyAmxecf29skm49tSkfC3m_3PE9ZY37-gvQ",
+  authDomain: "madot-db.firebaseapp.com",
+  databaseURL: "https://madot-db-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "madot-db",
+  storageBucket: "madot-db.appspot.com",
+  messagingSenderId: "459979697765",
+  appId: "1:459979697765:web:4d723497e5af66acb7208c",
+  measurementId: "G-ZJYS42564D"
 };
 
 const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 window.db = getDatabase(app);
 
 var page = getPage();
