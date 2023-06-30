@@ -35,6 +35,7 @@ window.trans_arr = [
   "Page Settings", "Настройки страницы",
   "Report a problem:", "Сообщить о проблеме:",
 ];
+
 var tTimeOut = false;
 
 window.addEventListener("load", () => {
