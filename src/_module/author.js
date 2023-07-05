@@ -29,13 +29,13 @@ trans_arr.push(
   "Telegram: @mapagmataas", "Telegram: @mapagmataas",
 );
 
-var numSquares = 100;
+var numSquares = 250;
 var background = document.querySelector('#background');
 
 for (var i = 0; i < numSquares; i++) {
   var square = document.createElement('div');
   square.className = 'square';
-  square.style.top = Math.random() * 100 + '%';
-  square.style.left = Math.random() * 100 + '%';
+  square.style.top = Math.floor(Math.random() * 25) * 4 + '%';
+  square.style.left = Math.floor(Math.random() * 25) * 4 + '%';
   background.appendChild(square);
 }
