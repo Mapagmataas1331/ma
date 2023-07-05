@@ -3,12 +3,13 @@
 }
 .img-block {
   display: flex;
+  max-width: 960px;
 }
 #img, .primary-text {
-  width: 40vw;
   margin: 5vw auto;
 }
 #img {
+  width: calc(40% - 4px);
   max-width: 1280px;
   aspect-ratio: 1/1;
   border: 2px solid var(--second-text-color);
@@ -19,10 +20,19 @@
   background-size: cover;
 }
 .primary-text {
+  width: 40%;
   margin: auto;
+  font-size: 22px;
+}
+.primary-text * {
+  margin: 8px 0;
 }
 .second-text {
   margin: 5vw 10vw;
+  font-size: 18px;
+}
+.second-text * {
+  margin: 4px 0;
 }
 
 
@@ -31,10 +41,17 @@
     display: block;
   }
   #img, .primary-text {
-    width: 80vw;
     margin: 10vw auto;
   }
   #img {
+    width: calc(80vw - 4px);
     border-radius: 12px 12px 0 0;
+  }
+  .primary-text {
+    width: 80vw;
+    font-size: 20px;
+  }
+  .second-text {
+    font-size: 16px;
   }
 }
