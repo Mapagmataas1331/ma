@@ -1,0 +1,37 @@
+.img-block {
+  display: flex;
+}
+#img, .primary-text {
+  width: 40vw;
+  margin: 5vw auto;
+}
+#img {
+  max-width: 1280px;
+  aspect-ratio: 1/1;
+  border: 2px solid var(--second-text-color);
+  border-radius: 12px 0 0 0;
+  background-image: url("../imgs/author.jpg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+.primary-text {
+  margin: auto;
+}
+.second-text {
+  margin: 5vw 10vw;
+}
+
+
+@media screen and (min-width: 0px) and (max-width: 599px) {
+  .img-block {
+    display: block;
+  }
+  #img, .primary-text {
+    width: 80vw;
+    margin: 10vw auto;
+  }
+  #img {
+    border-radius: 12px 12px 0 0;
+  }
+}
