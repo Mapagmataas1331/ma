@@ -37,5 +37,21 @@ for (var i = 0; i < numSquares; i++) {
   square.className = 'square';
   square.style.top = Math.floor(Math.random() * 25) * 4 + '%';
   square.style.left = Math.floor(Math.random() * 25) * 4 + '%';
+  if (Math.random() > 0.5) square.style.backgroundColor = 'var(--primary-text-color)';
   background.appendChild(square);
 }
+
+setInterval(() => {
+  var square = background.firstChild;
+  square.style.backgroundColor = 'red';
+  square.style.top = Math.floor(Math.random() * 25) * 4 + '%';
+  square.style.left = Math.floor(Math.random() * 25) * 4 + '%';
+}, 500);
+setTimeout(() => {
+  setInterval(() => {
+    var square = background.lastChild;
+    square.style.backgroundColor = 'green';
+    square.style.top = Math.floor(Math.random() * 25) * 4 + '%';
+    square.style.left = Math.floor(Math.random() * 25) * 4 + '%';
+  }, 500);
+}, 250);
