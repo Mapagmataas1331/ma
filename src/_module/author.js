@@ -28,3 +28,14 @@ trans_arr.push(
   "Email: ma.group.box@gmail.com", "Email: ma.group.box@gmail.com",
   "Telegram: @mapagmataas", "Telegram: @mapagmataas",
 );
+
+var numSquares = 100;
+var background = document.querySelector('#background');
+
+for (var i = 0; i < numSquares; i++) {
+  var square = document.createElement('div');
+  square.className = 'square';
+  square.style.top = Math.random() * 100 + '%';
+  square.style.left = Math.random() * 100 + '%';
+  background.appendChild(square);
+}

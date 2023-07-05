@@ -34,7 +34,19 @@
 .second-text * {
   margin: 4px 0;
 }
-
+#background {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: calc(100% - 970px);
+  height: 100%;
+}
+.square {
+  width: 10px;
+  height: 10px;
+  background-color: var(--second-text-color);
+  position: absolute;
+}
 
 @media screen and (min-width: 0px) and (max-width: 703px) {
   .img-block {
