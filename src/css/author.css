@@ -6,7 +6,7 @@
   max-width: 960px;
 }
 #img, .primary-text {
-  margin: 5vw auto;
+  margin: 5% auto;
 }
 #img {
   width: calc(40% - 4px);
@@ -28,7 +28,7 @@
   margin: 8px 0;
 }
 .second-text {
-  margin: 5vw 10vw;
+  margin: 5% 10%;
   font-size: 18px;
 }
 .second-text * {
@@ -36,22 +36,30 @@
 }
 
 
-@media screen and (min-width: 0px) and (max-width: 599px) {
+@media screen and (min-width: 0px) and (max-width: 703px) {
   .img-block {
     display: block;
   }
   #img, .primary-text {
-    margin: 10vw auto;
+    margin: 10% auto;
   }
   #img {
-    width: calc(80vw - 4px);
+    width: calc(80% - 4px);
     border-radius: 12px 12px 0 0;
   }
   .primary-text {
-    width: 80vw;
+    width: 80%;
     font-size: 20px;
   }
   .second-text {
     font-size: 16px;
+  }
+}
+@media screen and (min-width: 0px) and (max-width: 351px) {
+  .primary-text {
+    font-size: 16px;
+  }
+  .second-text {
+    font-size: 14px;
   }
 }
