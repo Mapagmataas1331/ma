@@ -16,8 +16,8 @@ trans_arr.push(
   "Excellent communication and interpersonal skills", "Отличные навыки коммуникации и взаимодействия",
   "<b>Projects:</b>", "<b>Проекты:</b>",
 
-  "Website: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a></i>",
-  "Сайт: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a></i>",
+  "Website: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Сайт: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Description: Under the guidance of Strategic Thinking and Business Creation",
   "Описание: Под руководством преподавателя Стратегического мышления и создания",
   "teacher Alexander Valeryevich Vasenov, I created the website mr.kak.si/restable.",
@@ -39,8 +39,8 @@ trans_arr.push(
   "like: <i><a class=\"link\" href=\"https://firebase.google.com\">google firebase</a></i>, <i><a class=\"link\" href=\"https://fingerprint.com\">fingerprints</a></i> and more.",
   "таких как: <i><a class=\"link\" href=\"https://firebase.google.com\">Google Firebase</a></i>, <i><a class=\"link\" href=\"https://fingerprint.com\">Fingerprints</a></i> и другие.",
 
-  "Website: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a></i>",
-  "Сайт: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a></i>",
+  "Website: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Сайт: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Description: At the request of Tatyana Yevgenyevna Rostyazhenko, the initial",
   "Описание: По просьбе Татьяны Евгеньевны Ростяженко изначально был создан",
   "telegram bot was created, but for convenience, it has been transformed into the",
