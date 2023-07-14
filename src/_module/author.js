@@ -17,7 +17,7 @@ trans_arr.push(
   "<b>Projects:</b>", "<b>Проекты:</b>",
 
   "Website: <i><a class=\"link\" href=\"https://mr.kak.si/restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
-  "Сайт: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Сайт: <i><a class=\"link\" href=\"https://mr.kak.si/restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Description: Under the guidance of Strategic Thinking and Business Creation",
   "Описание: Под руководством преподавателя Стратегического мышления и создания",
   "teacher Alexander Valeryevich Vasenov, I created the website mr.kak.si/restable.",
