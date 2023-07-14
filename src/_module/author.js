@@ -16,7 +16,7 @@ trans_arr.push(
   "Excellent communication and interpersonal skills", "Отличные навыки коммуникации и взаимодействия",
   "<b>Projects:</b>", "<b>Проекты:</b>",
 
-  "Website: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Website: <i><a class=\"link\" href=\"https://mr.kak.si/restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Сайт: <i><a class=\"link\" href=\"restable\">mr.kak.si/restable</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Description: Under the guidance of Strategic Thinking and Business Creation",
   "Описание: Под руководством преподавателя Стратегического мышления и создания",
@@ -39,8 +39,8 @@ trans_arr.push(
   "like: <i><a class=\"link\" href=\"https://firebase.google.com\">google firebase</a></i>, <i><a class=\"link\" href=\"https://fingerprint.com\">fingerprints</a></i> and more.",
   "таких как: <i><a class=\"link\" href=\"https://firebase.google.com\">Google Firebase</a></i>, <i><a class=\"link\" href=\"https://fingerprint.com\">Fingerprints</a></i> и другие.",
 
-  "Website: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
-  "Сайт: <i><a class=\"link\" href=\"novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Website: <i><a class=\"link\" href=\"https://mr.kak.si/novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
+  "Сайт: <i><a class=\"link\" href=\"https://mr.kak.si/novocoin\">mr.kak.si/novocoin</a> <a class=\"link\" href=\"https://github.com/Mapagmataas1331/mr\">(Github)</a></i>",
   "Description: At the request of Tatyana Yevgenyevna Rostyazhenko, the initial",
   "Описание: По просьбе Татьяны Евгеньевны Ростяженко изначально был создан",
   "telegram bot was created, but for convenience, it has been transformed into the",
@@ -53,7 +53,7 @@ trans_arr.push(
   "в тестовом формате. Кроме того, в процессе создания этого сайта возникла",
   "the creation of this website, the idea of creating a pixel battle for Novocollege",
   "идея создания пиксельной битвы для Новоколледжа, известной как",
-  "emerged, known as <i><a class=\"link\" href=\"pixel\">mr.kak.si/pixel</a></i>. It represents a large field of small cells where",
+  "emerged, known as <i><a class=\"link\" href=\"https://mr.kak.si/pixel\">mr.kak.si/pixel</a></i>. It represents a large field of small cells where",
   "<i><a class=\"link\" href=\"pixel\">mr.kak.si/pixel</a></i>. Она представляет собой большое поле из маленьких ячеек, где",
   "a student or group of students can purchase a field using Novocoins. This not",
   "студент или группа студентов может приобрести ячейку, используя новокоины.",
