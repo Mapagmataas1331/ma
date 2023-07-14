@@ -1,5 +1,5 @@
 trans_arr.push(
-  "Ma_dot is <i class=\"link\">my (Mapagmataas')</i> website with my current projects", "Ма_точка это <i class=\"link\">мой (Mapagmataas')</i> сайт с моими текущими проектами",
+  "Ma_dot is <i><a class=\"link\" href=\"author\">my (author)</a></i> website with my current projects", "Ма_точка это <i><a class=\"link\" href=\"author\">мой (автор)</a></i> сайт с моими текущими проектами",
 );
 
 document.getElementById("imgs").querySelectorAll("img")[0].addEventListener("click", () => {

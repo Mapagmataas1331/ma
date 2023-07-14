@@ -26,6 +26,7 @@
 }
 .primary-text * {
   margin: 8px 0;
+  font-size: 22px;
 }
 .second-text {
   margin: 5% 10%;
@@ -33,6 +34,12 @@
 }
 .second-text * {
   margin: 4px 0;
+  font-size: 18px;
+}
+.second-text span {
+  padding: 0;
+  background: none;
+  box-shadow: none;
 }
 #background {
   position: fixed;
@@ -63,7 +70,13 @@
     width: 80%;
     font-size: 20px;
   }
+  .primary-text * {
+    font-size: 20px;
+  }
   .second-text {
+    font-size: 16px;
+  }
+  .second-text * {
     font-size: 16px;
   }
 }
@@ -71,7 +84,13 @@
   .primary-text {
     font-size: 16px;
   }
+  .primary-text * {
+    font-size: 16px;
+  }
   .second-text {
+    font-size: 14px;
+  }
+  .second-text * {
     font-size: 14px;
   }
 }
