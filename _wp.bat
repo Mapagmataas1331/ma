@@ -1,1 +1,0 @@
-@echo off && cd src/_module && webpack -c .\\webpack.config.js && pause
