@@ -5,7 +5,7 @@ import './signin.scss'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <h1>SIGHIN PAGE</h1>
+    <h1>SIGNIN PAGE</h1>
     <Struct />
   </React.StrictMode>,
 )

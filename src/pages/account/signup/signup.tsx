@@ -5,7 +5,7 @@ import './signup.scss'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <h1>SIGHUP PAGE</h1>
+    <h1>SIGNUP PAGE</h1>
     <Struct />
   </React.StrictMode>,
 )
