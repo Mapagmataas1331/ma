@@ -1,0 +1,17 @@
+a {
+  text-decoration: inherit;
+  color: inherit;
+  font-size: 20px;
+}
+a:hover {
+  color: violet;
+}
+a.el0 {
+  margin-left: 4px;
+}
+a.el1 {
+  margin-left: 10px;
+}
+a.el2 {
+  margin-left: 16px;
+}

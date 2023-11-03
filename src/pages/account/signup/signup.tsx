@@ -1,10 +1,11 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
+import Struct from '../../../assets/templates/struct/struct.tsx'
+import './signup.css'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <h1>SIGHUP PAGE</h1>
+    <Struct />
   </React.StrictMode>,
 )
