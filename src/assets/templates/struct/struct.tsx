@@ -1,4 +1,4 @@
-import './struct.css'
+import './struct.scss'
 
 function Struct() {
   return (
