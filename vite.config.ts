@@ -15,6 +15,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
+        404: resolve(root, '404.html'),
         main: resolve(root, i),
         about: resolve(root, 'about', i),
         account: resolve(root, 'account', i),
