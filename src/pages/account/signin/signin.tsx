@@ -7,5 +7,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <h1>SIGNIN PAGE</h1>
     <Struct />
-  </React.StrictMode>,
+  </React.StrictMode>
 )
