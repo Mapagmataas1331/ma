@@ -3,7 +3,6 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const root = resolve(__dirname, 'src', 'pages')
-const outDir = resolve(__dirname, 'dist')
 const i = 'index.html'
 
 // https://vitejs.dev/config/
@@ -11,7 +10,7 @@ export default defineConfig({
   root,
   plugins: [react()],
   build: {
-    outDir,
+    outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
       input: {
@@ -23,5 +22,6 @@ export default defineConfig({
         signin: resolve(root, 'account', 'signin', i),
       }
     }
-  }
+  },
+  publicDir: resolve(__dirname, 'public'),
 })
