@@ -30,4 +30,5 @@ vite-env.d.ts
 .github/*
 .eslintrc.cjs
 .eslintignore
+.prettierrc.cjs
 .prettierignore
