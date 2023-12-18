@@ -1,4 +1,4 @@
-import { resolve } from 'path';
+import { resolve } from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -20,8 +20,8 @@ export default defineConfig({
         account: resolve(root, 'account', i),
         signup: resolve(root, 'account', 'signup', i),
         signin: resolve(root, 'account', 'signin', i),
-      }
-    }
+      },
+    },
   },
   publicDir: resolve(__dirname, 'public'),
 })
