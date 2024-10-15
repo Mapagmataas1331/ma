@@ -1,27 +1,24 @@
-import { resolve } from 'path'
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vitest/config';
+import { sveltekit } from '@sveltejs/kit/vite';
+import path from 'path';
 
-const root = resolve(__dirname, 'src', 'pages')
-const i = 'index.html'
-
-// https://vitejs.dev/config/
 export default defineConfig({
-  root,
-  plugins: [react()],
-  build: {
-    outDir: resolve(__dirname, 'dist'),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        404: resolve(root, '404.html'),
-        main: resolve(root, i),
-        about: resolve(root, 'about', i),
-        account: resolve(root, 'account', i),
-        signup: resolve(root, 'account', 'signup', i),
-        signin: resolve(root, 'account', 'signin', i),
-      },
-    },
-  },
-  publicDir: resolve(__dirname, 'public'),
-})
+	plugins: [sveltekit()],
+	resolve: {
+		alias: {
+			'@': path.resolve('./src'),
+			$lib: path.resolve('./src/lib'),
+			$shared: path.resolve('./src/lib/shared')
+		}
+	},
+	css: {
+		preprocessorOptions: {
+			scss: {
+				api: 'modern-compiler'
+			}
+		}
+	},
+	test: {
+		include: ['src/**/*.{test,spec}.{js,ts}']
+	}
+});
