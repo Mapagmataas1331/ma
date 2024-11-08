@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset="utf-8" />
-	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 	<link rel="icon" type="image/png" href="/favicon.png" media="(prefers-color-scheme: light)" />
@@ -73,10 +73,11 @@
 			document.documentElement.setAttribute('lang', savedLanguage || browserLanguage);
 		})();
 	</script>
+
 	%sveltekit.head%
 </head>
 
-<body>
+<body data-sveltekit-preload-data="hover">
 	<div class="flex min-h-dvh flex-col">%sveltekit.body%</div>
 
 	<script type="text/javascript">

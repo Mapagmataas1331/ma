@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
 import path from 'path';
 
 export default defineConfig({
@@ -17,8 +17,5 @@ export default defineConfig({
 				api: 'modern-compiler'
 			}
 		}
-	},
-	test: {
-		include: ['src/**/*.{test,spec}.{js,ts}']
 	}
 });
