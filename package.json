@@ -13,7 +13,7 @@
 		"postbuild": "npx svelte-sitemap --domain https://ma.cyou --out-dir build",
 		"deploy": "gh-pages -d build -t true",
 		"preview": "vite preview",
-		"preview:gh": "http-server build",
+		"preview:gh": "http-server build -p 80",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
