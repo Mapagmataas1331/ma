@@ -12,9 +12,7 @@
 	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 	<meta name="apple-mobile-web-app-title" content="macyou" />
 	<link rel="manifest" href="/site.webmanifest" />
-
-	<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
-	<meta name="theme-color" content="#090A0B" media="(prefers-color-scheme: dark)" />
+	<meta name="theme-color" content="#ffffff" />
 
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -60,6 +58,10 @@
 				savedTheme ? savedTheme === 'dark' : prefersDarkScheme
 			);
 
+			document
+				.querySelector('meta[name="theme-color"]')
+				?.setAttribute('content', (savedTheme ? savedTheme === 'dark' : prefersDarkScheme) ? '#090a0b' : '#ffffff');
+
 			const savedLanguage = getCookie('language');
 			const browserLanguage = navigator.language.startsWith('ru') ? 'ru' : 'en';
 			document.documentElement.setAttribute('lang', savedLanguage || browserLanguage);
@@ -67,11 +69,11 @@
 	</script>
 
 	
-		<link rel="modulepreload" href="/_app/immutable/entry/start.C6IRH8VR.js">
-		<link rel="modulepreload" href="/_app/immutable/chunks/entry.EyWU_EPe.js">
+		<link rel="modulepreload" href="/_app/immutable/entry/start.CmQ6-qO5.js">
+		<link rel="modulepreload" href="/_app/immutable/chunks/entry.CqR83JGb.js">
 		<link rel="modulepreload" href="/_app/immutable/chunks/utils.BedhUbme.js">
 		<link rel="modulepreload" href="/_app/immutable/chunks/index.C-WwkpB6.js">
-		<link rel="modulepreload" href="/_app/immutable/entry/app.DpI8vlyk.js">
+		<link rel="modulepreload" href="/_app/immutable/entry/app.BsoNaEHJ.js">
 		<link rel="modulepreload" href="/_app/immutable/chunks/disclose-version.COpIlTjV.js">
 </head>
 
@@ -79,15 +81,15 @@
 	<div class="flex min-h-dvh flex-col">
 			<script>
 				{
-					__sveltekit_2zt3wb = {
+					__sveltekit_q7b0gi = {
 						base: ""
 					};
 
 					const element = document.currentScript.parentElement;
 
 					Promise.all([
-						import("/_app/immutable/entry/start.C6IRH8VR.js"),
-						import("/_app/immutable/entry/app.DpI8vlyk.js")
+						import("/_app/immutable/entry/start.CmQ6-qO5.js"),
+						import("/_app/immutable/entry/app.BsoNaEHJ.js")
 					]).then(([kit, app]) => {
 						kit.start(app, element);
 					});
