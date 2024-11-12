@@ -12,9 +12,7 @@
 	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 	<meta name="apple-mobile-web-app-title" content="macyou" />
 	<link rel="manifest" href="/site.webmanifest" />
-
-	<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
-	<meta name="theme-color" content="#090A0B" media="(prefers-color-scheme: dark)" />
+	<meta name="theme-color" content="#ffffff" />
 
 	<meta name="apple-mobile-web-app-capable" content="yes">
 	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -59,6 +57,10 @@
 				'dark',
 				savedTheme ? savedTheme === 'dark' : prefersDarkScheme
 			);
+
+			document
+				.querySelector('meta[name="theme-color"]')
+				?.setAttribute('content', (savedTheme ? savedTheme === 'dark' : prefersDarkScheme) ? '#090a0b' : '#ffffff');
 
 			const savedLanguage = getCookie('language');
 			const browserLanguage = navigator.language.startsWith('ru') ? 'ru' : 'en';
