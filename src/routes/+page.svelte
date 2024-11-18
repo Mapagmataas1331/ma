@@ -5,6 +5,7 @@
 	import HoverCard from '$shared/components/HoverCard.svelte';
 	import Button from '$shared/components/ui/button/button.svelte';
 	import * as Tooltip from '$shared/components/ui/tooltip';
+	import { toast } from 'svelte-sonner';
 
 	import './page.scss';
 
@@ -12,6 +13,7 @@
 	import { theme } from '$shared/stores/theme';
 
 	const easterEgg = (target: HTMLElement) => {
+		toast('Hello world!');
 		target.innerHTML = '👀';
 		setTimeout(() => (target.style.transform = 'scaleX(-1)'), 500);
 		setTimeout(() => (target.style.transform = ''), 1000);
