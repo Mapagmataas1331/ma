@@ -7,7 +7,7 @@
 </script>
 
 <Header
-	navLinks={{
+	links={{
 		'/': { name: 'Home', nameRu: 'Главная' },
 		'https://more.ma.cyou': { name: 'more', nameRu: 'больше' }
 	}}
