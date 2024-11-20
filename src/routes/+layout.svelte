@@ -9,7 +9,7 @@
 <Header
 	navLinks={{
 		'/': { name: 'Home', nameRu: 'Главная' },
-		'https://more.ma.cyou': { name: 'More', nameRu: 'Больше' }
+		'https://more.ma.cyou': { name: 'more', nameRu: 'больше' }
 	}}
 />
 
