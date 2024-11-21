@@ -1,6 +1,10 @@
 <script lang="ts">
 	import Github from 'lucide-svelte/icons/github';
 	import Send from 'lucide-svelte/icons/send';
+	import Mail from 'lucide-svelte/icons/mail';
+	import Youtube from 'lucide-svelte/icons/youtube';
+	import twitter from 'lucide-svelte/icons/twitter';
+	import Instagram from 'lucide-svelte/icons/instagram';
 
 	import HoverCard from '$shared/components/HoverCard.svelte';
 	import Button from '$shared/components/ui/button/button.svelte';
@@ -11,6 +15,15 @@
 
 	import { language } from '$shared/stores/language';
 	import { theme } from '$shared/stores/theme';
+
+	const links: [string, typeof Github, string, string][] = [
+		['https://github.com/mapagmataas1331/', Github, 'Mapagmataas1331', 'GitHub'],
+		['https://t.me/mapagmataas/', Send, 'Mapagmataas', 'Telegram'],
+		['mailto:dev@ma.cyou', Mail, 'dev@ma.cyou', 'Email'],
+		['https://youtube.com/@mapagmataas/', Youtube, 'Mapagmataas', 'Youtube'],
+		['https://twitter.com/mapagmataas/', twitter, 'Mapagmataas', 'Twitter'],
+		['https://instagram.com/mapagmataas/', Instagram, 'Mapagmataas', 'Instagram']
+	];
 
 	const easterEgg = (target: HTMLElement) => {
 		toast('Hello world!');
@@ -331,53 +344,48 @@
 		</div>
 	</section>
 	<section id="socials" class="relative flex snap-start flex-col items-center justify-center">
-		<div class="container mx-auto text-center">
-			<h2 class="text-4xl font-bold">{$language === 'ru' ? 'Мои Соц. сети' : 'My Social links'}</h2>
-			<div class="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-				<Tooltip.Provider>
-					<Tooltip.Root>
-						<Tooltip.Trigger class="sm:text-right">
-							<Button
-								href="https://github.com/mapagmataas1331"
-								variant="default"
-								target="_blank"
-								class="m-2 min-w-48 font-semibold shadow-lg hover:scale-105"
-							>
-								<Github class="mr-2 !size-6" />
-								@mapagmataas1331
-							</Button>
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p>GitHub</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
-				</Tooltip.Provider>
-
-				<Tooltip.Provider>
-					<Tooltip.Root>
-						<Tooltip.Trigger class="sm:text-left">
-							<Button
-								href="https://t.me/mapagmataas"
-								variant="default"
-								target="_blank"
-								class="m-2 min-w-48 font-semibold shadow-lg hover:scale-105"
-							>
-								<Send class="mr-2 !size-6" />
-								@mapagmataas
-							</Button>
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p>Telegram</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
-				</Tooltip.Provider>
-			</div>
-			<p
-				id="legal"
-				class="absolute bottom-0 left-0 right-0 p-2 text-center text-xs backdrop-blur-sm"
-			>
-				© ma.cyou (<a href="https://github.com/mapagmataas1331" target="_blank">Mapagmataas</a>),
-				2024. All rights reserved.
+		<h2 class="text-4xl font-bold">{$language === 'ru' ? 'Мои Соц. сети' : 'My Social links'}</h2>
+		<div class="mt-5 grid w-fit grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
+			{#each links as [url, Icon, label, tooltip]}
+				<div
+					class="flex w-48 cursor-auto flex-row items-center justify-start gap-2 rounded-lg bg-foreground text-background shadow-lg backdrop-blur-sm"
+				>
+					<Tooltip.Provider>
+						<Tooltip.Root>
+							<Tooltip.Trigger>
+								<Button
+									href={url}
+									variant="default"
+									size="icon"
+									target="_blank"
+									class="font-bold hover:scale-110"
+								>
+									<Icon class="!size-5" />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								<p>{tooltip}</p>
+							</Tooltip.Content>
+						</Tooltip.Root>
+					</Tooltip.Provider>
+					<p>{label}</p>
+				</div>
+			{/each}
+		</div>
+		<div
+			id="legal"
+			class="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center gap-1 p-2 pb-3 text-xs text-muted-foreground backdrop-blur-sm md:flex-row md:gap-1 md:px-4 md:py-3"
+		>
+			<p>
+				© <a class="hover:text-foreground" href="https://ma.cyou/" target="_blank">ma.cyou</a>
+				(<a class="hover:text-foreground" href="https://github.com/mapagmataas1331/" target="_blank"
+					>Mapagmataas</a
+				>)
+			</p>
+			<p>
+				2023 - {new Date().getFullYear()}. {$language === 'ru'
+					? 'Все права защищены.'
+					: 'All rights reserved.'}
 			</p>
 		</div>
 	</section>
