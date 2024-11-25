@@ -3,7 +3,7 @@
 	import Send from 'lucide-svelte/icons/send';
 	import Mail from 'lucide-svelte/icons/mail';
 	import Youtube from 'lucide-svelte/icons/youtube';
-	import Twitter from 'lucide-svelte/icons/Twitter';
+	import Twitter from 'lucide-svelte/icons/twitter';
 	import Instagram from 'lucide-svelte/icons/instagram';
 
 	import HoverCard from '$shared/components/HoverCard.svelte';
