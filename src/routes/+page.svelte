@@ -377,9 +377,8 @@
 			class="absolute bottom-0 left-0 right-0 flex flex-col items-center justify-center gap-1 p-2 pb-3 text-xs text-muted-foreground backdrop-blur-sm md:flex-row md:gap-1 md:px-4 md:py-3"
 		>
 			<p>
-				© <a class="hover:text-foreground" href="https://ma.cyou/" target="_blank">ma.cyou</a>
-				(<a class="hover:text-foreground" href="https://github.com/mapagmataas1331/" target="_blank"
-					>Mapagmataas</a
+				© <a class="hover:text-foreground" href="https://ma.cyou/">ma.cyou</a>
+				(<a class="hover:text-foreground" href="https://github.com/mapagmataas1331/">Mapagmataas</a
 				>)
 			</p>
 			<p>
