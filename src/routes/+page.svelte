@@ -3,7 +3,7 @@
 	import Send from 'lucide-svelte/icons/send';
 	import Mail from 'lucide-svelte/icons/mail';
 	import Youtube from 'lucide-svelte/icons/youtube';
-	import twitter from 'lucide-svelte/icons/twitter';
+	import Twitter from 'lucide-svelte/icons/Twitter';
 	import Instagram from 'lucide-svelte/icons/instagram';
 
 	import HoverCard from '$shared/components/HoverCard.svelte';
@@ -21,7 +21,7 @@
 		['https://t.me/mapagmataas/', Send, 'Mapagmataas', 'Telegram'],
 		['mailto:dev@ma.cyou', Mail, 'dev@ma.cyou', 'Email'],
 		['https://youtube.com/@mapagmataas/', Youtube, 'Mapagmataas', 'Youtube'],
-		['https://twitter.com/mapagmataas/', twitter, 'Mapagmataas', 'Twitter'],
+		['https://Twitter.com/mapagmataas/', Twitter, 'Mapagmataas', 'Twitter'],
 		['https://instagram.com/mapagmataas/', Instagram, 'Mapagmataas', 'Instagram']
 	];
 
@@ -358,9 +358,9 @@
 									variant="default"
 									size="icon"
 									target="_blank"
-									class="font-bold hover:scale-110"
+									class="font-bold hover:scale-110 hover:shadow-[0px_0px_8px_2px] hover:shadow-foreground/50"
 								>
-									<Icon class="!size-5" />
+									<Icon class="!size-5 stroke-[] dark:stroke-[]" />
 								</Button>
 							</Tooltip.Trigger>
 							<Tooltip.Content>
