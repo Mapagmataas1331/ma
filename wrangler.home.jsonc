@@ -1,0 +1,8 @@
+{
+  "name": "ma-home",
+  "compatibility_date": "2026-09-25",
+  "assets": {
+    "directory": "./apps/home/dist",
+    "not_found_handling": "404-page"
+  }
+}
