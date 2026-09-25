@@ -2,16 +2,16 @@
 
 ## Frontends
 
-Create four Cloudflare Pages projects from this repo.
+Create four Cloudflare Workers from this repo. The root directory is `/`. The Worker name in the dashboard must match `name` in the Wrangler file. Pages already installs dependencies, so the build command only compiles that app.
 
-| App | Build command | Output |
-| --- | --- | --- |
-| home | `pnpm install --frozen-lockfile && pnpm --filter @ma/home... build` | `apps/home/dist` |
-| resume | `pnpm install --frozen-lockfile && pnpm --filter @ma/resume... build` | `apps/resume/dist` |
-| projects | `pnpm install --frozen-lockfile && pnpm --filter @ma/projects... build` | `apps/projects/dist` |
-| chat | `pnpm install --frozen-lockfile && pnpm --filter @ma/chat... build` | `apps/chat/dist` |
+| Worker | Domain | Config | Build command | Deploy command |
+| --- | --- | --- | --- | --- |
+| `ma` | [ma.cyou](https://ma.cyou) | `wrangler.home.jsonc` | `pnpm --filter @ma/home... build` | `npx wrangler deploy --config wrangler.home.jsonc` |
+| `me` | [me.ma.cyou](https://me.ma.cyou) | `wrangler.resume.jsonc` | `pnpm --filter @ma/resume... build` | `npx wrangler deploy --config wrangler.resume.jsonc` |
+| `projects` | [projects.ma.cyou](https://projects.ma.cyou) | `wrangler.projects.jsonc` | `pnpm --filter @ma/projects... build` | `npx wrangler deploy --config wrangler.projects.jsonc` |
+| `chat` | [chat.ma.cyou](https://chat.ma.cyou) | `wrangler.chat.jsonc` | `pnpm --filter @ma/chat... build` | `npx wrangler deploy --config wrangler.chat.jsonc` |
 
-Attach `ma.cyou`, `me.ma.cyou`, `projects.ma.cyou`, and `chat.ma.cyou`. `_headers` and `_redirects` ship from each `public/` folder.
+`_headers` and `_redirects` ship from each `public/` folder. Leave `api.ma.cyou` on the Oracle server.
 
 ## API
 
