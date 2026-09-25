@@ -436,9 +436,21 @@ export function PageHeader({ eyebrow, title, lead }: { eyebrow?: string; title: 
 }
 
 export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: string; caption?: string; onClose: () => void }) {
+  const { t } = useTranslation('common')
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()} title={caption || alt}>
-      <img src={src} alt={alt} className="max-h-[70vh] w-full rounded-md object-contain" />
-    </Dialog>
+    <DialogPrimitive.Root open onOpenChange={(v) => !v && onClose()}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/50 backdrop-blur-sm" />
+        <DialogPrimitive.Content className="fixed inset-3 z-50 flex flex-col overflow-hidden rounded-lg border border-line bg-surface-1 shadow-float sm:inset-6">
+          <div className="flex shrink-0 items-center justify-between gap-4 px-4 py-3">
+            <DialogPrimitive.Title className="truncate text-sm font-medium">{caption || alt}</DialogPrimitive.Title>
+            <DialogPrimitive.Close className="rounded-sm p-1 text-muted hover:bg-surface-2" aria-label={t('close')}>
+              <X className="size-4" />
+            </DialogPrimitive.Close>
+          </div>
+          <img src={src} alt={alt} className="min-h-0 flex-1 object-contain" />
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
   )
 }

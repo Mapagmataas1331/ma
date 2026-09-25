@@ -18,6 +18,7 @@ export default defineConfig({
     sitemapPlugin('https://chat.ma.cyou', ['/']),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'script',
       manifest: {
         name: 'ma.cyou chat',
         short_name: 'chat',

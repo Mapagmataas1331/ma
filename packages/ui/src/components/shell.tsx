@@ -57,12 +57,12 @@ export function AppShell({
             </nav>
             <div className="ml-auto flex items-center gap-1">
               {actions}
-              <IconButton label={t('settings')} onClick={() => setSettings(true)}>
-                <Settings className="size-4" />
-              </IconButton>
               <ThemeToggle />
               <IconButton label={t('openMenu')} className="md:hidden" onClick={() => setOpen(true)}>
                 <Menu className="size-4" />
+              </IconButton>
+              <IconButton label={t('settings')} onClick={() => setSettings(true)}>
+                <Settings className="size-4" />
               </IconButton>
             </div>
           </div>

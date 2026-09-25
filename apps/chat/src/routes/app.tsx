@@ -363,7 +363,6 @@ export function ChatApp() {
   if (!unlocked) {
     return (
       <>
-        {chatSettings}
         <form className="mx-auto max-w-md space-y-3" onSubmit={onUnlock}>
           <PageHeader title={t('unlockChat')} lead={t('unlockLead')} />
           <Input type="password" placeholder={t('vaultPassword')} value={vaultPassword} onChange={(e) => setVaultPassword(e.target.value)} required />
