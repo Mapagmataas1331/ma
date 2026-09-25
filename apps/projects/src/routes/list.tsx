@@ -38,8 +38,8 @@ export function ListPage() {
                   <Badge key={t}>{t}</Badge>
                 ))}
               </div>
-              <h2 className="text-lg font-medium">{localized(project, ru).title}</h2>
-              <p className="mt-2 text-sm text-muted">{localized(project, ru).summary}</p>
+              <h2 className="text-lg font-medium break-words">{localized(project, ru).title}</h2>
+              <p className="mt-2 text-sm text-muted break-words">{localized(project, ru).summary}</p>
             </Card>
           </Link>
         ))}

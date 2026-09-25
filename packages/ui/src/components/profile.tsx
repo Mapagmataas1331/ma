@@ -3,6 +3,7 @@ import { House, Link2, Orbit, Sparkles } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from './identicon'
+import { cn } from '../lib/cn'
 import { Dialog, Tooltip } from './primitives'
 
 const icons = {
@@ -40,7 +41,7 @@ export function BadgeRow({ badges }: { badges: string[] }) {
   )
 }
 
-export function ProfileButton({ username, displayName, children }: { username: string; displayName?: string; children?: ReactNode }) {
+export function ProfileButton({ username, displayName, className, actions = [], children }: { username: string; displayName?: string; className?: string; actions?: { id: string; label: string; onSelect: () => void }[]; children?: ReactNode }) {
   const { t } = useTranslation('common')
   const [open, setOpen] = useState(false)
   const [profile, setProfile] = useState<PublicProfile | null>(null)
@@ -55,7 +56,7 @@ export function ProfileButton({ username, displayName, children }: { username: s
 
   return (
     <>
-      <button type="button" onClick={show} className="inline-flex items-center gap-2 text-left">
+      <button type="button" onClick={show} className={cn('inline-flex min-w-0 items-center gap-2 text-left', className)}>
         {children ?? <UserAvatar username={username} />}
       </button>
       <Dialog open={open} onOpenChange={setOpen} title={name} description={`@${username}`}>
@@ -63,6 +64,15 @@ export function ProfileButton({ username, displayName, children }: { username: s
           <UserAvatar username={username} className="size-24" />
           <BadgeRow badges={profile?.badges ?? []} />
           {joined ? <p className="text-sm text-muted">{t('joined')} {joined}</p> : null}
+          {actions.length ? (
+            <div className="flex w-full flex-col">
+              {actions.map((action) => (
+                <button key={action.id} type="button" className="rounded-sm px-2 py-3 text-sm hover:bg-surface-2" onClick={() => { setOpen(false); action.onSelect() }}>
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
       </Dialog>
     </>

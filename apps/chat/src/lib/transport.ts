@@ -20,18 +20,33 @@ export class Transport {
   }
 
   connect() {
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return
     const origin = apiOrigin().replace(/^http/, 'ws')
-    this.ws = new WebSocket(`${origin}/v1/ws`)
-    this.ws.onmessage = (ev) => {
+    const ws = new WebSocket(`${origin}/v1/ws`)
+    this.ws = ws
+    ws.onopen = () => this.emit({ v: 1, t: 'session.ready', id: 'local', p: {} })
+    ws.onclose = () => {
+      if (this.ws === ws) this.ws = null
+      window.setTimeout(() => this.connect(), 1500)
+    }
+    ws.onmessage = (ev) => {
       const frame = signalFrameSchema.parse(JSON.parse(String(ev.data)))
       if (frame.t === 'rtc.offer') void this.answer(frame)
       if (frame.t === 'rtc.answer' || frame.t === 'rtc.ice') void this.applySignal(frame)
-      for (const handler of this.handlers) handler(frame)
+      this.emit(frame)
     }
+  }
+
+  private emit(frame: SignalFrame) {
+    for (const handler of this.handlers) handler(frame)
   }
 
   sendFrame(frame: SignalFrame) {
     this.ws?.send(JSON.stringify(frame))
+  }
+
+  buffered() {
+    return this.ws?.bufferedAmount ?? 0
   }
 
   private async iceServers() {

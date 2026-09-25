@@ -15,7 +15,7 @@ import * as TabsPrimitive from '@radix-ui/react-tabs'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { Command } from 'cmdk'
 import { Check, ChevronDown, X } from 'lucide-react'
-import { createContext, useContext, useEffect, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toaster as Sonner, toast } from 'sonner'
 import { cn } from '../lib/cn'
@@ -50,7 +50,7 @@ export function Input({ className, ...props }: ComponentProps<'input'>) {
   return (
     <input
       className={cn(
-        'h-10 w-full rounded-sm border border-line bg-surface-1 px-3 text-sm text-fg outline-none transition placeholder:text-muted focus:ring-2 focus:ring-ring',
+        'h-11 w-full min-w-0 rounded-sm border border-line bg-surface-1 px-3 text-base text-fg outline-none transition placeholder:text-muted focus:ring-2 focus:ring-ring',
         className,
       )}
       {...props}
@@ -62,7 +62,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        'min-h-24 w-full resize-y rounded-md border border-line bg-surface-1 px-3 py-2 text-sm text-fg outline-none focus:ring-2 focus:ring-ring',
+        'min-h-24 w-full min-w-0 resize-y rounded-md border border-line bg-surface-1 px-3 py-2 text-base text-fg outline-none focus:ring-2 focus:ring-ring',
         className,
       )}
       {...props}
@@ -208,7 +208,7 @@ export function Dialog({ open, onOpenChange, title, description, children }: { o
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/20 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="fixed top-1/2 left-1/2 z-50 w-[min(100%-2rem,32rem)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line bg-surface-1 p-6 shadow-float">
+        <DialogPrimitive.Content className="fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-2rem)] w-[min(100%-1.5rem,32rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line bg-surface-1 p-5 shadow-float sm:p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <DialogPrimitive.Title className="text-lg font-semibold">{title}</DialogPrimitive.Title>
@@ -225,14 +225,77 @@ export function Dialog({ open, onOpenChange, title, description, children }: { o
   )
 }
 
+export function HoldMenu({ label, items, children, className }: { label: string; items: { id: string; label: string; onSelect: () => void }[]; children: ReactNode; className?: string }) {
+  const [open, setOpen] = useState(false)
+  const timer = useRef(0)
+  const suppress = useRef(false)
+  const start = useRef({ x: 0, y: 0 })
+  function openMenu() {
+    suppress.current = true
+    setOpen(true)
+  }
+  if (!items.length) return children
+  return (
+    <>
+      <div
+        className={cn('min-w-0 select-none', className)}
+        style={{ WebkitTouchCallout: 'none' }}
+        onContextMenu={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          openMenu()
+        }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          e.stopPropagation()
+          start.current = { x: e.clientX, y: e.clientY }
+          window.clearTimeout(timer.current)
+          timer.current = window.setTimeout(openMenu, 450)
+        }}
+        onPointerUp={() => window.clearTimeout(timer.current)}
+        onPointerLeave={() => window.clearTimeout(timer.current)}
+        onPointerCancel={() => window.clearTimeout(timer.current)}
+        onPointerMove={(e) => {
+          if (Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 12) window.clearTimeout(timer.current)
+        }}
+        onClickCapture={(e) => {
+          if (!suppress.current) return
+          e.preventDefault()
+          e.stopPropagation()
+          suppress.current = false
+        }}
+      >
+        {children}
+      </div>
+      <Dialog open={open} onOpenChange={setOpen} title={label}>
+        <div className="flex flex-col">
+          {items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="rounded-sm px-2 py-3 text-left text-sm hover:bg-surface-2"
+              onClick={() => {
+                setOpen(false)
+                item.onSelect()
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </Dialog>
+    </>
+  )
+}
+
 export function Sheet({ open, onOpenChange, title, children }: { open: boolean; onOpenChange: (v: boolean) => void; title: string; children: ReactNode }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/20 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="fixed inset-y-0 right-0 z-50 flex w-[min(100%,22rem)] flex-col overflow-hidden border-l border-line bg-surface-1 shadow-float">
+        <DialogPrimitive.Content className="fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(100%,22rem)] flex-col overflow-hidden border-l border-line bg-surface-1 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-float">
           <DialogPrimitive.Title className="shrink-0 px-5 pt-5 text-lg font-semibold">{title}</DialogPrimitive.Title>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -415,12 +478,12 @@ export function SettingsSection({ title, description, children }: { title: strin
 
 export function SettingsRow({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        {hint ? <p className="text-xs text-muted">{hint}</p> : null}
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3">
+      <div className="min-w-0 flex-1 basis-40">
+        <p className="text-sm font-medium break-words">{label}</p>
+        {hint ? <p className="text-xs leading-relaxed break-words text-muted">{hint}</p> : null}
       </div>
-      <div className="sm:min-w-48">{children}</div>
+      <div className="max-w-full">{children}</div>
     </div>
   )
 }
@@ -429,26 +492,88 @@ export function PageHeader({ eyebrow, title, lead }: { eyebrow?: string; title: 
   return (
     <header className="mb-8">
       {eyebrow ? <p className="mb-2 text-xs tracking-[0.18em] text-muted uppercase">{eyebrow}</p> : null}
-      <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl">{title}</h1>
+      <h1 className="text-[clamp(1.75rem,7vw,3rem)] font-semibold tracking-tight break-words">{title}</h1>
       {lead ? <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">{lead}</p> : null}
     </header>
   )
 }
 
-export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: string; caption?: string; onClose: () => void }) {
+export function Lightbox({ src, alt, caption, onClose, fileName, kind = 'image', onDownload }: { src: string; alt: string; caption?: string; onClose: () => void; fileName?: string; kind?: 'image' | 'video'; onDownload?: () => void }) {
   const { t } = useTranslation('common')
+  const shared = useRef<File | null>(null)
+  useEffect(() => {
+    let gone = false
+    shared.current = null
+    const name = fileName || alt || 'file'
+    const type = kind === 'video' ? 'video/mp4' : 'image/jpeg'
+    void fetch(src)
+      .then((res) => res.blob())
+      .then((blob) => {
+        if (!gone) shared.current = new File([blob], name, { type: blob.type || type })
+      })
+      .catch(() => {})
+    return () => {
+      gone = true
+    }
+  }, [src, fileName, alt, kind])
+  function shareFailed(err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') return
+    toast(t('shareUnavailable'))
+  }
+  function share() {
+    const file = shared.current
+    try {
+      if (file && navigator.share && navigator.canShare?.({ files: [file] })) {
+        void navigator.share({ files: [file], title: file.name }).catch(shareFailed)
+        return
+      }
+    } catch (err) {
+      shareFailed(err)
+      return
+    }
+    if (navigator.share && /^https?:/i.test(src)) {
+      void navigator.share({ title: fileName || alt || 'file', url: src }).catch(shareFailed)
+      return
+    }
+    toast(t('shareUnavailable'))
+  }
+  function download() {
+    const link = document.createElement('a')
+    link.href = src
+    link.download = fileName || alt || 'file'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    onDownload?.()
+  }
   return (
     <DialogPrimitive.Root open onOpenChange={(v) => !v && onClose()}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/50 backdrop-blur-sm" />
-        <DialogPrimitive.Content className="fixed inset-3 z-50 flex flex-col overflow-hidden rounded-lg border border-line bg-surface-1 shadow-float sm:inset-6">
-          <div className="flex shrink-0 items-center justify-between gap-4 px-4 py-3">
-            <DialogPrimitive.Title className="truncate text-sm font-medium">{caption || alt}</DialogPrimitive.Title>
-            <DialogPrimitive.Close className="rounded-sm p-1 text-muted hover:bg-surface-2" aria-label={t('close')}>
-              <X className="size-4" />
-            </DialogPrimitive.Close>
-          </div>
-          <img src={src} alt={alt} className="min-h-0 flex-1 object-contain" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(15,25,35,0.92)]" />
+        <DialogPrimitive.Content
+          className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-none outline-none"
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) onClose()
+          }}
+        >
+          <DialogPrimitive.Title className="sr-only">{caption || alt}</DialogPrimitive.Title>
+          <DialogPrimitive.Close className="fixed top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] z-10 flex size-11 items-center justify-center rounded-full border border-white/25 bg-[rgba(15,25,35,0.75)] text-white" aria-label={t('close')}>
+            <X className="size-5" />
+          </DialogPrimitive.Close>
+          <figure className="pointer-events-none m-0 flex max-h-[92dvh] max-w-[min(96vw,120rem)] flex-col items-center gap-3">
+            {kind === 'video' ? (
+              <video src={src} controls playsInline className="pointer-events-auto max-h-[calc(92dvh-6rem)] max-w-full rounded-md bg-black" />
+            ) : (
+              <img src={src} alt={alt} className="pointer-events-auto max-h-[calc(92dvh-6rem)] max-w-full rounded-md object-contain shadow-float" />
+            )}
+            {caption ? <figcaption className="pointer-events-auto max-w-prose text-center text-sm text-[#e8eef2]">{caption}</figcaption> : null}
+            {fileName ? (
+              <div className="pointer-events-auto flex gap-2">
+                <button type="button" className="h-11 rounded-full border border-white/25 bg-[rgba(15,25,35,0.75)] px-4 text-sm text-white" onClick={() => void share()}>{t('share')}</button>
+                <button type="button" className="h-11 rounded-full border border-white/25 bg-[rgba(15,25,35,0.75)] px-4 text-sm text-white" onClick={download}>{t('download')}</button>
+              </div>
+            ) : null}
+          </figure>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>

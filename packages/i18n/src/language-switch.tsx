@@ -8,12 +8,12 @@ export function LanguageSwitch() {
       <span className="sr-only">{t('language')}</span>
       <select
         aria-label={t('language')}
-        className="h-10 rounded-sm border border-line bg-surface-1 px-2 text-sm text-fg"
+        className="h-7 w-14 rounded-sm border border-line bg-surface-1 pl-2 pr-1 text-xs text-fg"
         value={current}
         onChange={(e) => void instance.changeLanguage(e.target.value)}
       >
-        <option value="en">{t('english')}</option>
-        <option value="ru">{t('russian')}</option>
+        <option value="en">EN</option>
+        <option value="ru">RU</option>
       </select>
     </label>
   )

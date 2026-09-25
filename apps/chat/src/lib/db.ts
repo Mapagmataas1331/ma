@@ -24,10 +24,19 @@ export type OutboxPlain = {
   attempts: number
 }
 
+export type FileBlobRow = {
+  id: string
+  size: number
+  savedAt: number
+  nonce: string
+  ciphertext: string
+}
+
 export class ChatDB extends Dexie {
   vault!: Table<VaultRow, string>
   records!: Table<SealedRow, string>
   outbox!: Table<SealedRow, string>
+  files!: Table<FileBlobRow, string>
 
   constructor() {
     super('ma-chat')
@@ -46,6 +55,12 @@ export class ChatDB extends Dexie {
       for (const row of records) {
         await tx.table('records').put({ id: row.id, nonce: row.nonce, ciphertext: row.ciphertext })
       }
+    })
+    this.version(3).stores({
+      vault: 'id',
+      records: 'id',
+      outbox: 'id',
+      files: 'id, savedAt',
     })
   }
 }

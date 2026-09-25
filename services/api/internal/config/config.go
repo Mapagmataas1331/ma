@@ -8,31 +8,31 @@ import (
 )
 
 type Config struct {
-	ListenAddr         string
-	DevInsecureHTTP    bool
-	BehindProxy        bool
-	ACMEHosts          []string
-	ACMEEmail          string
-	ACMECacheDir       string
-	DatabaseURL        string
-	CORSOrigins        []string
-	ServerKEK          string
-	TurnSecret         string
-	TurnURLs           []string
-	VAPIDPublic        string
-	VAPIDPrivate       string
-	VAPIDSubject       string
-	MailboxDir         string
-	MaxFileBytes       int64
-	MaxMessageBytes    int64
-	UserQuotaBytes     int64
-	GlobalQuotaBytes   int64
-	MinFreeBytes       int64
-	FileTTL            time.Duration
-	MessageTTL         time.Duration
-	SessionIdle        time.Duration
-	SessionAbsolute    time.Duration
-	LogLevel           string
+	ListenAddr       string
+	DevInsecureHTTP  bool
+	BehindProxy      bool
+	ACMEHosts        []string
+	ACMEEmail        string
+	ACMECacheDir     string
+	DatabaseURL      string
+	CORSOrigins      []string
+	ServerKEK        string
+	TurnSecret       string
+	TurnURLs         []string
+	VAPIDPublic      string
+	VAPIDPrivate     string
+	VAPIDSubject     string
+	MailboxDir       string
+	MaxFileBytes     int64
+	MaxMessageBytes  int64
+	UserQuotaBytes   int64
+	GlobalQuotaBytes int64
+	MinFreeBytes     int64
+	FileTTL          time.Duration
+	MessageTTL       time.Duration
+	SessionIdle      time.Duration
+	SessionAbsolute  time.Duration
+	LogLevel         string
 }
 
 func Load() Config {
@@ -52,13 +52,13 @@ func Load() Config {
 		VAPIDPrivate:     env("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:     env("VAPID_SUBJECT", "mailto:me@ma.cyou"),
 		MailboxDir:       env("MAILBOX_DIR", "mailbox"),
-		MaxFileBytes:     envInt("MAILBOX_MAX_FILE_BYTES", 26214400),
+		MaxFileBytes:     envInt("MAILBOX_MAX_FILE_BYTES", 5<<30),
 		MaxMessageBytes:  envInt("MAILBOX_MAX_MESSAGE_BYTES", 65536),
-		UserQuotaBytes:   envInt("MAILBOX_USER_QUOTA_BYTES", 524288000),
-		GlobalQuotaBytes: envInt("MAILBOX_GLOBAL_QUOTA_BYTES", 64424509440),
-		MinFreeBytes:     envInt("MAILBOX_MIN_FREE_BYTES", 16106127360),
-		FileTTL:          168 * time.Hour,
-		MessageTTL:       720 * time.Hour,
+		UserQuotaBytes:   envInt("MAILBOX_USER_QUOTA_BYTES", 20<<30),
+		GlobalQuotaBytes: envInt("MAILBOX_GLOBAL_QUOTA_BYTES", 150<<30),
+		MinFreeBytes:     envInt("MAILBOX_MIN_FREE_BYTES", 1<<30),
+		FileTTL:          24 * time.Hour,
+		MessageTTL:       24 * time.Hour,
 		SessionIdle:      30 * 24 * time.Hour,
 		SessionAbsolute:  180 * 24 * time.Hour,
 		LogLevel:         env("LOG_LEVEL", "info"),

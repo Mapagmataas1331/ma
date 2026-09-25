@@ -7,6 +7,7 @@ export { BadgeRow, ProfileButton } from './components/profile'
 export {
   AttachmentPreview,
   ConversationListItem,
+  MessageAttachments,
   DayDivider,
   MessageBubble,
   MessageGroup,
@@ -14,6 +15,7 @@ export {
   TransferProgress,
   TypingIndicator,
 } from './components/chat'
+export type { ChatFile } from './components/chat'
 export {
   Avatar,
   Badge,
@@ -26,6 +28,7 @@ export {
   DropdownItem,
   EmptyState,
   ErrorState,
+  HoldMenu,
   IconButton,
   Input,
   Label,

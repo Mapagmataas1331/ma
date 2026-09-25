@@ -25,12 +25,99 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${apiOrigin()}${path}`, { ...init, headers, credentials: 'include' })
   if (res.status === 204) return undefined as T
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data: unknown = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      throw new ApiError(res.status, 'bad_response', res.ok ? 'The server sent a response that was not JSON.' : text.slice(0, 180) || res.statusText)
+    }
+  }
   if (!res.ok) {
     const parsed = apiErrorSchema.safeParse(data)
     throw new ApiError(res.status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : res.statusText)
   }
   return data as T
+}
+
+export async function apiBlob(path: string): Promise<Blob> {
+  return apiBlobProgress(path)
+}
+
+function readApiError(status: number, text: string, statusText: string): ApiError {
+  const data = text ? JSON.parse(text) : null
+  const parsed = apiErrorSchema.safeParse(data)
+  return new ApiError(status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : statusText)
+}
+
+export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    signal?.addEventListener('abort', abort)
+    xhr.open('POST', `${apiOrigin()}${path}`)
+    xhr.withCredentials = true
+    xhr.setRequestHeader('X-Requested-With', 'ma')
+    xhr.upload.onprogress = (event) => {
+      if (signal?.aborted || !event.lengthComputable) return
+      onProgress?.(event.loaded, event.total)
+    }
+    xhr.onabort = () => {
+      signal?.removeEventListener('abort', abort)
+      reject(new DOMException('aborted', 'AbortError'))
+    }
+    xhr.onload = () => {
+      try {
+        if (xhr.status === 204) {
+          resolve(undefined as T)
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(readApiError(xhr.status, xhr.responseText, xhr.statusText))
+          return
+        }
+        resolve(xhr.responseText ? JSON.parse(xhr.responseText) as T : undefined as T)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    xhr.onerror = () => reject(new ApiError(0, 'network', 'network'))
+    xhr.send(body)
+  })
+}
+
+export function apiBlobProgress(path: string, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    const abort = () => xhr.abort()
+    signal?.addEventListener('abort', abort)
+    xhr.open('GET', `${apiOrigin()}${path}`)
+    xhr.withCredentials = true
+    xhr.responseType = 'blob'
+    xhr.setRequestHeader('X-Requested-With', 'ma')
+    xhr.onabort = () => {
+      signal?.removeEventListener('abort', abort)
+      reject(new DOMException('aborted', 'AbortError'))
+    }
+    xhr.onprogress = (event) => {
+      if (signal?.aborted || !event.lengthComputable) return
+      onProgress?.(event.loaded, event.total)
+    }
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const blob = xhr.response instanceof Blob ? xhr.response : null
+        if (!blob) {
+          reject(readApiError(xhr.status, '', xhr.statusText))
+          return
+        }
+        void blob.text().then((text) => reject(readApiError(xhr.status, text, xhr.statusText))).catch((err) => reject(err))
+        return
+      }
+      resolve(xhr.response as Blob)
+    }
+    xhr.onerror = () => reject(new ApiError(0, 'network', 'network'))
+    xhr.send()
+  })
 }
 
 export type PublicProfile = {
@@ -58,9 +145,11 @@ export const authApi = {
       invited: number
       badges: string[]
       invitees: { username: string; display_name: string; created_at: string }[]
+      open_invites?: { id: string; expires_at: string; created_at: string }[]
     }>('/v1/account'),
   profile: (username: string) => api<PublicProfile>(`/v1/users/${encodeURIComponent(username)}`),
   createInvite: () => api<{ code: string; expires_at: string }>('/v1/invites', { method: 'POST' }),
+  revokeInvite: (id: string) => api(`/v1/invites/${id}`, { method: 'DELETE' }),
   loginAccount: (body: { username: string; password: string }) =>
     api<{ status: string; challenge_id?: string; user?: { id: string; username: string; display_name: string } }>('/v1/auth/login', {
       method: 'POST',

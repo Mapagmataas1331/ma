@@ -79,13 +79,9 @@ func SecurityHeaders(next http.Handler) http.Handler {
 }
 
 func CORS(origins []string, next http.Handler) http.Handler {
-	allow := map[string]struct{}{}
-	for _, o := range origins {
-		allow[o] = struct{}{}
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if _, ok := allow[origin]; ok {
+		if origin != "" && OriginAllowed(origin, origins) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Requested-With")
@@ -101,10 +97,6 @@ func CORS(origins []string, next http.Handler) http.Handler {
 }
 
 func CSRF(origins []string, next http.Handler) http.Handler {
-	allow := map[string]struct{}{}
-	for _, o := range origins {
-		allow[o] = struct{}{}
-	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
@@ -115,11 +107,9 @@ func CSRF(origins []string, next http.Handler) http.Handler {
 			return
 		}
 		origin := r.Header.Get("Origin")
-		if origin != "" {
-			if _, ok := allow[origin]; !ok {
-				WriteError(w, http.StatusForbidden, "csrf", "origin not allowed")
-				return
-			}
+		if origin != "" && !OriginAllowed(origin, origins) {
+			WriteError(w, http.StatusForbidden, "csrf", "origin not allowed")
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

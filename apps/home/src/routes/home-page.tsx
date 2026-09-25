@@ -14,7 +14,7 @@ export function HomePage() {
   return (
     <div>
       <PageHeader eyebrow="ma.cyou" title="Timofey" lead={t('lead')} />
-      <p className="mb-8 max-w-2xl text-muted">{t('intro')}</p>
+      <p className="mb-8 max-w-2xl text-muted break-words">{t('intro')}</p>
       <div className="grid gap-4 md:grid-cols-3">
         {links.map((link) => (
           <a key={link.href} href={link.href} className="block transition hover:-translate-y-0.5">

@@ -19,4 +19,10 @@ func TestCheckFile(t *testing.T) {
 	if err := l.CheckFile(10, 0, 0, 1000); err != nil {
 		t.Fatal(err)
 	}
+	if EnoughFree(10, 100, 0.20) {
+		t.Fatal("expected the disk to look full")
+	}
+	if !EnoughFree(20, 100, 0.20) || !EnoughFree(0, 0, 0.20) {
+		t.Fatal("expected enough free space")
+	}
 }

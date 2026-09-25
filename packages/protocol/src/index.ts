@@ -68,7 +68,8 @@ export const plaintextMessageSchema = z.object({
 
 export type PlaintextMessage = z.infer<typeof plaintextMessageSchema>
 
-export const MAILBOX_MAX_FILE_BYTES = 26_214_400
+export const MAILBOX_MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
+export const MAILBOX_DIRECT_FILE_BYTES = 26_214_400
 export const MAILBOX_MAX_MESSAGE_BYTES = 65_536
 
 export function newFrame(t: string, p: Record<string, unknown> = {}, to?: SignalFrame['to']): SignalFrame {

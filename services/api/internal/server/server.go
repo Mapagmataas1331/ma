@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -44,10 +46,10 @@ type challenge struct {
 }
 
 type pairSession struct {
-	UserID    uuid.UUID
-	DeviceID  uuid.UUID
-	Code      string
-	Expires   time.Time
+	UserID   uuid.UUID
+	DeviceID uuid.UUID
+	Code     string
+	Expires  time.Time
 }
 
 func New(cfg config.Config, db *store.Store) *App {
@@ -72,6 +74,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/users/{username}", a.profile)
 	mux.HandleFunc("GET /v1/account", a.account)
 	mux.HandleFunc("POST /v1/invites", a.createInvite)
+	mux.HandleFunc("DELETE /v1/invites/{id}", a.revokeInvite)
 	mux.HandleFunc("PUT /v1/users/me/identity-keys", a.identity)
 	mux.HandleFunc("GET /v1/devices", a.devices)
 	mux.HandleFunc("POST /v1/devices/{id}/revoke", a.revokeDevice)
@@ -81,6 +84,8 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/contacts", a.contacts)
 	mux.HandleFunc("POST /v1/contacts", a.addContact)
 	mux.HandleFunc("POST /v1/contacts/{id}/accept", a.acceptContact)
+	mux.HandleFunc("POST /v1/contacts/{id}/block", a.blockContact)
+	mux.HandleFunc("DELETE /v1/contacts/{id}/block", a.unblockContact)
 	mux.HandleFunc("GET /v1/contacts/{id}/keys", a.contactKeys)
 	mux.HandleFunc("GET /v1/conversations", a.conversations)
 	mux.HandleFunc("POST /v1/conversations", a.createConversation)
@@ -88,6 +93,9 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/mailbox/messages", a.getMessages)
 	mux.HandleFunc("POST /v1/mailbox/messages/{id}/ack", a.ackMessage)
 	mux.HandleFunc("POST /v1/mailbox/files", a.postFile)
+	mux.HandleFunc("GET /v1/mailbox/files", a.getFiles)
+	mux.HandleFunc("GET /v1/mailbox/files/{id}", a.downloadFile)
+	mux.HandleFunc("POST /v1/mailbox/files/{id}/ack", a.ackFile)
 	mux.HandleFunc("GET /v1/turn/credentials", a.turnCreds)
 	mux.HandleFunc("POST /v1/auth/2fa/totp/setup", a.totpSetup)
 	mux.HandleFunc("POST /v1/auth/2fa/totp/confirm", a.totpConfirm)
@@ -147,6 +155,10 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := auth.ValidatePassword(body.Password); err != nil {
 		httpx.WriteError(w, 400, err.Error(), "choose a longer password")
+		return
+	}
+	if err := a.ensureSpace(r.Context(), 0.10); err != nil {
+		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, try again in a bit")
 		return
 	}
 	sum := sha256.Sum256([]byte(body.Invite))
@@ -326,9 +338,14 @@ func (a *App) account(w http.ResponseWriter, r *http.Request) {
 	for _, person := range info.People {
 		people = append(people, map[string]string{"username": person.Username, "display_name": person.DisplayName, "created_at": person.CreatedAt.Format(time.RFC3339)})
 	}
+	open, _ := a.DB.OpenInvites(r.Context(), p.User.ID)
+	codes := []map[string]string{}
+	for _, item := range open {
+		codes = append(codes, map[string]string{"id": item.ID.String(), "expires_at": item.ExpiresAt.Format(time.RFC3339), "created_at": item.CreatedAt.Format(time.RFC3339)})
+	}
 	httpx.WriteJSON(w, 200, map[string]any{
 		"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName,
-		"invite_credits": info.Credits, "invited": info.Invited, "badges": info.Badges, "invitees": people,
+		"invite_credits": info.Credits, "invited": info.Invited, "badges": info.Badges, "invitees": people, "open_invites": codes,
 	})
 }
 
@@ -354,6 +371,23 @@ func (a *App) createInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, 201, map[string]any{"code": code, "expires_at": expires.Format(time.RFC3339)})
+}
+
+func (a *App) revokeInvite(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	if err := a.DB.RevokeInvite(r.Context(), p.User.ID, id); err != nil {
+		httpx.WriteError(w, 404, "not_found", "invite was already used")
+		return
+	}
+	w.WriteHeader(204)
 }
 
 func (a *App) identity(w http.ResponseWriter, r *http.Request) {
@@ -495,6 +529,8 @@ func (a *App) addContact(w http.ResponseWriter, r *http.Request) {
 	_ = a.DB.AddContact(r.Context(), p.User.ID, other.ID)
 	_ = a.DB.AddContact(r.Context(), other.ID, p.User.ID)
 	_, _ = a.DB.Pool.Exec(r.Context(), `UPDATE contacts SET state='accepted' WHERE (owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1)`, p.User.ID, other.ID)
+	a.touch(r.Context(), p.User.ID, "contacts.updated")
+	a.touch(r.Context(), other.ID, "contacts.updated")
 	httpx.WriteJSON(w, 201, map[string]string{"status": "accepted"})
 }
 
@@ -509,6 +545,40 @@ func (a *App) acceptContact(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.DB.AcceptContact(r.Context(), p.User.ID, id)
+	w.WriteHeader(204)
+}
+
+func (a *App) blockContact(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil || id == p.User.ID {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	if err := a.DB.SetBlocked(r.Context(), p.User.ID, id, true); err != nil {
+		httpx.WriteError(w, 500, "internal", "block")
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (a *App) unblockContact(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	if err := a.DB.SetBlocked(r.Context(), p.User.ID, id, false); err != nil {
+		httpx.WriteError(w, 500, "internal", "block")
+		return
+	}
 	w.WriteHeader(204)
 }
 
@@ -568,6 +638,7 @@ func (a *App) createConversation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 500, "internal", "conversation")
 		return
 	}
+	a.touch(r.Context(), body.User, "conversations.updated")
 	httpx.WriteJSON(w, 201, map[string]any{"id": conv.ID, "peer_id": conv.PeerID, "peer_name": conv.Peer})
 }
 
@@ -584,6 +655,14 @@ func (a *App) postMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := httpx.ReadJSON(r, &body); err != nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
+		return
+	}
+	if err := a.ensureSpace(r.Context(), 0.20); err != nil {
+		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
+		return
+	}
+	if blocked, _ := a.DB.IsBlocked(r.Context(), body.Recipient, p.User.ID); blocked {
+		httpx.WriteError(w, 403, "blocked", "blocked")
 		return
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(body.Envelope)
@@ -635,8 +714,13 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := r.ParseMultipartForm(a.Cfg.MaxFileBytes + 1024); err != nil {
-		httpx.WriteError(w, 400, "bad_request", "upload")
+	if err := a.ensureSpace(r.Context(), 0.20); err != nil {
+		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, a.Cfg.MaxFileBytes+1<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
 		return
 	}
 	file, hdr, err := r.FormFile("file")
@@ -651,10 +735,14 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	}
 	userUsed, _ := a.DB.UserUsage(r.Context(), p.User.ID)
 	globalUsed, _ := a.DB.GlobalUsage(r.Context())
-	free := diskFree(a.Cfg.MailboxDir)
+	free, _ := a.disk()
 	lim := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
 	if err := lim.CheckFile(hdr.Size, userUsed, globalUsed, free); err != nil {
-		httpx.WriteError(w, 507, "quota_exceeded", err.Error())
+		if errors.Is(err, quota.ErrTooLarge) {
+			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+			return
+		}
+		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 		return
 	}
 	fileID, err := uuid.Parse(r.FormValue("file_id"))
@@ -663,7 +751,14 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	}
 	conv, _ := uuid.Parse(r.FormValue("conversation_id"))
 	rec, _ := uuid.Parse(r.FormValue("recipient_user_id"))
-	env, _ := base64.RawURLEncoding.DecodeString(r.FormValue("envelope"))
+	if blocked, _ := a.DB.IsBlocked(r.Context(), rec, p.User.ID); blocked {
+		httpx.WriteError(w, 403, "blocked", "blocked")
+		return
+	}
+	env, err := base64.RawURLEncoding.DecodeString(r.FormValue("envelope"))
+	if err != nil || len(env) == 0 {
+		env = []byte(`{}`)
+	}
 	dir := filepath.Join(a.Cfg.MailboxDir, time.Now().Format("2006"), time.Now().Format("01"))
 	_ = os.MkdirAll(dir, 0o750)
 	path := filepath.Join(dir, fileID.String())
@@ -673,18 +768,112 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(out, h), file)
+	n, err := io.Copy(io.MultiWriter(out, h), io.LimitReader(file, a.Cfg.MaxFileBytes+1))
 	_ = out.Close()
+	if n > a.Cfg.MaxFileBytes {
+		_ = os.Remove(path)
+		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+		return
+	}
 	if err != nil {
+		_ = os.Remove(path)
 		httpx.WriteError(w, 500, "internal", "disk")
 		return
 	}
 	if err := a.DB.PutFile(r.Context(), conv, p.User.ID, rec, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL)); err != nil {
+		_ = os.Remove(path)
 		httpx.WriteError(w, 500, "internal", "mailbox")
 		return
 	}
 	a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
 	httpx.WriteJSON(w, 201, map[string]string{"status": "stored", "sha256": hex.EncodeToString(h.Sum(nil))})
+}
+
+func (a *App) getFiles(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	list, err := a.DB.InboxFiles(r.Context(), p.User.ID)
+	if err != nil {
+		httpx.WriteError(w, 500, "internal", "mailbox")
+		return
+	}
+	out := []map[string]any{}
+	for _, f := range list {
+		name, mime := fileMeta(f.Envelope)
+		out = append(out, map[string]any{"id": f.ID.String(), "conversation_id": f.Conversation.String(), "name": name, "mime": mime, "size": f.Size})
+	}
+	httpx.WriteJSON(w, 200, out)
+}
+
+func (a *App) downloadFile(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	f, err := a.DB.OpenFile(r.Context(), p.User.ID, id)
+	if err != nil {
+		httpx.WriteError(w, 404, "not_found", "This file is no longer on the server")
+		return
+	}
+	body, err := os.Open(f.Path)
+	if err != nil {
+		httpx.WriteError(w, 404, "not_found", "This file is no longer on the server")
+		return
+	}
+	defer body.Close()
+	name, mime := fileMeta(f.Envelope)
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(name, "\"", "")+"\"")
+	w.WriteHeader(200)
+	_, _ = io.Copy(w, body)
+}
+
+func (a *App) ackFile(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	path, err := a.DB.AckFile(r.Context(), p.User.ID, id)
+	if err == nil && path != "" {
+		_ = os.Remove(path)
+	}
+	w.WriteHeader(204)
+}
+
+func (a *App) touch(ctx context.Context, user uuid.UUID, kind string) {
+	a.Hub.Notify(ctx, user, signaling.Frame{V: 1, T: kind, ID: uuid.NewString(), P: map[string]any{}})
+}
+
+func fileMeta(envelope []byte) (string, string) {
+	var meta struct {
+		Name string `json:"name"`
+		Mime string `json:"mime"`
+	}
+	_ = json.Unmarshal(envelope, &meta)
+	name := strings.TrimSpace(meta.Name)
+	if name == "" || strings.ContainsAny(name, `/\`) {
+		name = "file"
+	}
+	mime := meta.Mime
+	switch {
+	case strings.HasPrefix(mime, "image/"), strings.HasPrefix(mime, "video/"), strings.HasPrefix(mime, "audio/"):
+	case mime == "application/pdf":
+	default:
+		mime = "application/octet-stream"
+	}
+	return name, mime
 }
 
 func (a *App) turnCreds(w http.ResponseWriter, r *http.Request) {
@@ -791,6 +980,7 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 		dev = *p.Device
 	}
 	c := &signaling.Conn{User: p.User.ID, Device: dev, WS: conn}
+	conn.SetReadLimit(1 << 20)
 	a.Hub.Add(c)
 	defer func() {
 		a.Hub.Remove(p.User.ID, dev)
@@ -859,8 +1049,52 @@ func (a *App) CleanupLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			_ = a.DB.Cleanup(ctx)
+			dropped, err := a.DB.Cleanup(ctx)
+			if err == nil {
+				a.releaseMailbox(ctx, dropped)
+			}
 		}
+	}
+}
+
+func (a *App) disk() (free, total uint64) {
+	_ = os.MkdirAll(a.Cfg.MailboxDir, 0o750)
+	return diskUsage(a.Cfg.MailboxDir)
+}
+
+func (a *App) ensureSpace(ctx context.Context, min float64) error {
+	free, total := a.disk()
+	if quota.EnoughFree(free, total, min) {
+		return nil
+	}
+	dropped, err := a.DB.DropMailbox(ctx, 12*time.Hour)
+	if err == nil {
+		a.releaseMailbox(ctx, dropped)
+	}
+	free, total = a.disk()
+	if quota.EnoughFree(free, total, min) {
+		return nil
+	}
+	return errors.New("overloaded")
+}
+
+func (a *App) releaseMailbox(ctx context.Context, dropped []store.DroppedMail) {
+	for _, row := range dropped {
+		for _, path := range row.Paths {
+			_ = os.Remove(path)
+		}
+		messages := make([]string, 0, len(row.Messages))
+		for _, id := range row.Messages {
+			messages = append(messages, id.String())
+		}
+		files := make([]string, 0, len(row.Files))
+		for _, id := range row.Files {
+			files = append(files, id.String())
+		}
+		if len(messages) == 0 && len(files) == 0 {
+			continue
+		}
+		a.Hub.Notify(ctx, row.Sender, signaling.Frame{V: 1, T: "chat.expired", ID: uuid.NewString(), P: map[string]any{"message_ids": messages, "file_ids": files}})
 	}
 }
 
@@ -873,11 +1107,6 @@ func randomCode() string {
 		out[i] = alphabet[int(b[i])%len(alphabet)]
 	}
 	return string(out)
-}
-
-func diskFree(path string) uint64 {
-	_ = path
-	return 1 << 40
 }
 
 func jsonUnmarshal(b []byte, v any) error {

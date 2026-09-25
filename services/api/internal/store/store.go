@@ -207,20 +207,62 @@ func (s *Store) ProfileByName(ctx context.Context, username string) (PublicProfi
 	return out, nil
 }
 
+type OpenInvite struct {
+	ID        uuid.UUID
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+
+func (s *Store) OpenInvites(ctx context.Context, userID uuid.UUID) ([]OpenInvite, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT id, expires_at, created_at FROM invites WHERE created_by=$1 AND uses < max_uses AND expires_at > now() ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []OpenInvite
+	for rows.Next() {
+		var item OpenInvite
+		if err := rows.Scan(&item.ID, &item.ExpiresAt, &item.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) RevokeInvite(ctx context.Context, userID, inviteID uuid.UUID) error {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx, `DELETE FROM invites WHERE id=$1 AND created_by=$2 AND uses=0`, inviteID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return errors.New("not_unused")
+	}
+	if _, err = tx.Exec(ctx, `UPDATE users SET invite_credits = invite_credits + 1 WHERE id=$1`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Store) CreateInvite(ctx context.Context, hash []byte, uses int, expires time.Time) error {
 	_, err := s.Pool.Exec(ctx, `INSERT INTO invites (code_hash, max_uses, expires_at) VALUES ($1,$2,$3)`, hash, uses, expires)
 	return err
 }
 
 type Device struct {
-	ID         uuid.UUID
-	UserID     uuid.UUID
-	Name       string
-	Platform   string
-	Trust      string
-	LastSeen   *time.Time
-	Ed         []byte
-	X          []byte
+	ID       uuid.UUID
+	UserID   uuid.UUID
+	Name     string
+	Platform string
+	Trust    string
+	LastSeen *time.Time
+	Ed       []byte
+	X        []byte
 }
 
 func (s *Store) UpsertDevice(ctx context.Context, userID uuid.UUID, name, platform string, ed, x []byte, first bool) (Device, error) {
@@ -336,6 +378,22 @@ func (s *Store) AcceptContact(ctx context.Context, owner, contact uuid.UUID) err
 	return err
 }
 
+func (s *Store) SetBlocked(ctx context.Context, owner, contact uuid.UUID, blocked bool) error {
+	state := "accepted"
+	if blocked {
+		state = "blocked"
+	}
+	_, err := s.Pool.Exec(ctx, `INSERT INTO contacts (owner_id, contact_id, state) VALUES ($1,$2,$3)
+		ON CONFLICT (owner_id, contact_id) DO UPDATE SET state=EXCLUDED.state`, owner, contact, state)
+	return err
+}
+
+func (s *Store) IsBlocked(ctx context.Context, owner, contact uuid.UUID) (bool, error) {
+	var blocked bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2 AND state='blocked')`, owner, contact).Scan(&blocked)
+	return blocked, err
+}
+
 type Conversation struct {
 	ID       uuid.UUID
 	PeerID   uuid.UUID
@@ -343,15 +401,23 @@ type Conversation struct {
 	Username string
 }
 
-func directConversation(ctx context.Context, tx pgx.Tx, a, b uuid.UUID) (uuid.UUID, error) {
-	key := a.String() + ":" + b.String()
-	if b.String() < a.String() {
-		key = b.String() + ":" + a.String()
+func pairKey(a, b uuid.UUID) string {
+	as, bs := a.String(), b.String()
+	if bs < as {
+		return bs + ":" + as
 	}
+	return as + ":" + bs
+}
+
+func directConversation(ctx context.Context, tx pgx.Tx, a, b uuid.UUID) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := tx.QueryRow(ctx, `INSERT INTO conversations (kind, created_by, direct_key) VALUES ('direct',$1,$2)
-		ON CONFLICT (direct_key) DO UPDATE SET direct_key=EXCLUDED.direct_key RETURNING id`, a, key).Scan(&id)
+		ON CONFLICT (direct_key) DO UPDATE SET direct_key=EXCLUDED.direct_key RETURNING id`, a, pairKey(a, b)).Scan(&id)
 	if err != nil {
+		return id, err
+	}
+	if a == b {
+		_, err = tx.Exec(ctx, `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, id, a)
 		return id, err
 	}
 	_, err = tx.Exec(ctx, `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1,$2),($1,$3) ON CONFLICT DO NOTHING`, id, a, b)
@@ -359,29 +425,36 @@ func directConversation(ctx context.Context, tx pgx.Tx, a, b uuid.UUID) (uuid.UU
 }
 
 func (s *Store) DirectConversation(ctx context.Context, a, b uuid.UUID) (Conversation, error) {
-	key := a.String()
-	if b.String() < key {
-		key = b.String() + ":" + a.String()
-	} else {
-		key = a.String() + ":" + b.String()
-	}
-	var id uuid.UUID
-	err := s.Pool.QueryRow(ctx, `INSERT INTO conversations (kind, created_by, direct_key) VALUES ('direct',$1,$2)
-		ON CONFLICT (direct_key) DO UPDATE SET direct_key=EXCLUDED.direct_key RETURNING id`, a, key).Scan(&id)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return Conversation{}, err
 	}
-	_, _ = s.Pool.Exec(ctx, `INSERT INTO conversation_members (conversation_id, user_id) VALUES ($1,$2),($1,$3) ON CONFLICT DO NOTHING`, id, a, b)
-	name := ""
-	_ = s.Pool.QueryRow(ctx, `SELECT display_name FROM users WHERE id=$1`, b).Scan(&name)
-	return Conversation{ID: id, PeerID: b, Peer: name}, nil
+	defer tx.Rollback(ctx)
+	id, err := directConversation(ctx, tx, a, b)
+	if err != nil {
+		return Conversation{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return Conversation{}, err
+	}
+	name, username := "", ""
+	_ = s.Pool.QueryRow(ctx, `SELECT display_name, username FROM users WHERE id=$1`, b).Scan(&name, &username)
+	return Conversation{ID: id, PeerID: b, Peer: name, Username: username}, nil
 }
 
 func (s *Store) Conversations(ctx context.Context, user uuid.UUID) ([]Conversation, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT c.id, u.id, u.display_name, u.username FROM conversations c
+	rows, err := s.Pool.Query(ctx, `SELECT c.id,
+		COALESCE(other_user.id, self.id),
+		COALESCE(other_user.display_name, self.display_name),
+		COALESCE(other_user.username, self.username)
+		FROM conversations c
 		JOIN conversation_members me ON me.conversation_id=c.id AND me.user_id=$1
-		JOIN conversation_members other ON other.conversation_id=c.id AND other.user_id<>$1
-		JOIN users u ON u.id=other.user_id`, user)
+		JOIN users self ON self.id=$1
+		LEFT JOIN conversation_members other_m ON other_m.conversation_id=c.id AND other_m.user_id<>$1
+		LEFT JOIN users other_user ON other_user.id=other_m.user_id
+		WHERE other_user.id IS NOT NULL OR NOT EXISTS (
+			SELECT 1 FROM conversation_members x WHERE x.conversation_id=c.id AND x.user_id<>$1
+		)`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +503,44 @@ func (s *Store) AckMessage(ctx context.Context, user, message uuid.UUID) error {
 	return err
 }
 
+type MailFile struct {
+	ID           uuid.UUID
+	Conversation uuid.UUID
+	Envelope     []byte
+	Size         int64
+	Path         string
+}
+
+func (s *Store) InboxFiles(ctx context.Context, user uuid.UUID) ([]MailFile, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT file_id, conversation_id, envelope, size_bytes FROM mailbox_files WHERE recipient_user_id=$1 AND state='ready' AND expires_at > now() ORDER BY created_at LIMIT 50`, user)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MailFile
+	for rows.Next() {
+		var f MailFile
+		if err := rows.Scan(&f.ID, &f.Conversation, &f.Envelope, &f.Size); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) OpenFile(ctx context.Context, user, fileID uuid.UUID) (MailFile, error) {
+	var f MailFile
+	err := s.Pool.QueryRow(ctx, `SELECT file_id, conversation_id, envelope, size_bytes, storage_path FROM mailbox_files
+		WHERE file_id=$2 AND state='ready' AND expires_at > now() AND (recipient_user_id=$1 OR sender_user_id=$1)`, user, fileID).Scan(&f.ID, &f.Conversation, &f.Envelope, &f.Size, &f.Path)
+	return f, err
+}
+
+func (s *Store) AckFile(ctx context.Context, user, fileID uuid.UUID) (string, error) {
+	var path string
+	err := s.Pool.QueryRow(ctx, `DELETE FROM mailbox_files WHERE recipient_user_id=$1 AND file_id=$2 RETURNING storage_path`, user, fileID).Scan(&path)
+	return path, err
+}
+
 func (s *Store) UserUsage(ctx context.Context, user uuid.UUID) (int64, error) {
 	var n int64
 	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE recipient_user_id=$1 AND state IN ('uploading','ready')`, user).Scan(&n)
@@ -448,21 +559,93 @@ func (s *Store) PutFile(ctx context.Context, conv, sender, recipient, fileID uui
 	return err
 }
 
-func (s *Store) Cleanup(ctx context.Context) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM mailbox_messages WHERE expires_at < now() OR delivered_at IS NOT NULL`)
+type DroppedMail struct {
+	Sender   uuid.UUID
+	Messages []uuid.UUID
+	Files    []uuid.UUID
+	Paths    []string
+}
+
+func (s *Store) DropMailbox(ctx context.Context, minAge time.Duration) ([]DroppedMail, error) {
+	cutoff := time.Now().Add(-minAge)
+	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = s.Pool.Exec(ctx, `DELETE FROM mailbox_files WHERE expires_at < now() OR state IN ('delivered','expired')`)
-	if err != nil {
-		return err
+	defer tx.Rollback(ctx)
+	bySender := map[uuid.UUID]*DroppedMail{}
+	take := func(id uuid.UUID) *DroppedMail {
+		row := bySender[id]
+		if row == nil {
+			row = &DroppedMail{Sender: id}
+			bySender[id] = row
+		}
+		return row
 	}
-	_, err = s.Pool.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now() OR revoked_at IS NOT NULL`)
+	messages, err := tx.Query(ctx, `SELECT sender_user_id, message_id FROM mailbox_messages WHERE created_at < $1 OR expires_at < now()`, cutoff)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	for messages.Next() {
+		var sender, id uuid.UUID
+		if err = messages.Scan(&sender, &id); err != nil {
+			messages.Close()
+			return nil, err
+		}
+		row := take(sender)
+		row.Messages = append(row.Messages, id)
+	}
+	messages.Close()
+	if err = messages.Err(); err != nil {
+		return nil, err
+	}
+	files, err := tx.Query(ctx, `SELECT sender_user_id, file_id, storage_path FROM mailbox_files WHERE created_at < $1 OR expires_at < now() OR state IN ('delivered','expired')`, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	for files.Next() {
+		var sender, id uuid.UUID
+		var path string
+		if err = files.Scan(&sender, &id, &path); err != nil {
+			files.Close()
+			return nil, err
+		}
+		row := take(sender)
+		row.Files = append(row.Files, id)
+		if path != "" {
+			row.Paths = append(row.Paths, path)
+		}
+	}
+	files.Close()
+	if err = files.Err(); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM mailbox_messages WHERE created_at < $1 OR expires_at < now()`, cutoff); err != nil {
+		return nil, err
+	}
+	if _, err = tx.Exec(ctx, `DELETE FROM mailbox_files WHERE created_at < $1 OR expires_at < now() OR state IN ('delivered','expired')`, cutoff); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	out := make([]DroppedMail, 0, len(bySender))
+	for _, row := range bySender {
+		out = append(out, *row)
+	}
+	return out, nil
+}
+
+func (s *Store) Cleanup(ctx context.Context) ([]DroppedMail, error) {
+	dropped, err := s.DropMailbox(ctx, 24*time.Hour)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = s.Pool.Exec(ctx, `DELETE FROM sessions WHERE expires_at < now() OR revoked_at IS NOT NULL`); err != nil {
+		return dropped, err
 	}
 	_, err = s.Pool.Exec(ctx, `DELETE FROM security_events WHERE created_at < now() - interval '90 days'`)
-	return err
+	return dropped, err
 }
 
 func IsNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }

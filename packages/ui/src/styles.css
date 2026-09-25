@@ -63,19 +63,36 @@
   --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 16px 40px oklch(0 0 0 / 0.35);
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
   min-height: 100%;
+  max-width: 100%;
 }
 
 body {
   margin: 0;
+  overflow-x: clip;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-sans);
   font-feature-settings: 'cv11', 'ss01';
   text-rendering: optimizeLegibility;
+}
+
+img,
+video,
+svg,
+canvas {
+  max-width: 100%;
+}
+
+#root {
+  min-height: 100dvh;
 }
 
 ::selection {

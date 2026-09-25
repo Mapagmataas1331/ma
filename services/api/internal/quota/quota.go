@@ -22,6 +22,13 @@ func (l Limits) CheckMessage(size int64) error {
 	return nil
 }
 
+func EnoughFree(free, total uint64, min float64) bool {
+	if total == 0 {
+		return true
+	}
+	return float64(free)/float64(total) >= min
+}
+
 func (l Limits) CheckFile(size, userUsed, globalUsed int64, diskFree uint64) error {
 	if size > l.MaxFileBytes {
 		return ErrTooLarge

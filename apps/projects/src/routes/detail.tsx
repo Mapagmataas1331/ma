@@ -29,7 +29,7 @@ export function DetailPage() {
           ))}
         </p>
       )}
-      <div className="prose max-w-3xl text-sm leading-relaxed">
+      <div className="max-w-3xl overflow-x-auto text-sm leading-relaxed break-words">
         <Markdown>{body}</Markdown>
       </div>
     </article>

@@ -157,3 +157,93 @@ export async function loadHistory(): Promise<{ id: string; conversationId: strin
 export function touchVault() {
   if (secrets) armLock()
 }
+
+export function storageLimitBytes() {
+  const raw = localStorage.getItem('ma.chat.storageGb')
+  if (raw === null || raw === '') return 5 * 1024 * 1024 * 1024
+  const gb = Number(raw)
+  if (!Number.isFinite(gb) || gb < 0) return 5 * 1024 * 1024 * 1024
+  if (gb === 0) return Number.POSITIVE_INFINITY
+  return gb * 1024 * 1024 * 1024
+}
+
+export async function rememberBytes(id: string, bytes: Uint8Array) {
+  const rec = encryptRecord(getDek(), id, 'files', { data: b64(bytes) })
+  await db.files.put({ id, size: bytes.byteLength, savedAt: Date.now(), nonce: rec.nonce, ciphertext: rec.ciphertext })
+  return enforceStorageLimit()
+}
+
+export async function readBytes(id: string) {
+  const row = await db.files.get(id)
+  if (!row) return
+  try {
+    const opened = decryptRecord<{ data: string }>(getDek(), id, 'files', row.nonce, row.ciphertext)
+    return unb64(opened.data)
+  } catch {
+    return
+  }
+}
+
+export async function storageUsage() {
+  const [files, records] = await Promise.all([db.files.toArray(), db.records.toArray()])
+  const fileBytes = files.reduce((sum, row) => sum + row.size, 0)
+  const chatBytes = records.reduce((sum, row) => sum + row.ciphertext.length, 0)
+  return {
+    fileBytes,
+    chatBytes,
+    total: fileBytes + chatBytes,
+    files: files.length,
+    messages: records.filter((row) => row.id !== 'identity').length,
+  }
+}
+
+export async function enforceStorageLimit() {
+  const limit = storageLimitBytes()
+  const removed: string[] = []
+  if (!Number.isFinite(limit)) return removed
+  let used = (await storageUsage()).total
+  const files = await db.files.orderBy('savedAt').toArray()
+  for (const file of files) {
+    if (used <= limit) break
+    await db.files.delete(file.id)
+    used -= file.size
+  }
+  if (used <= limit) return removed
+  const opened: { id: string; at: string; bytes: number; fileIds: string[] }[] = []
+  for (const row of await db.records.toArray()) {
+    if (row.id === 'identity') continue
+    try {
+      const message = decryptRecord<{ at?: string; files?: { id: string }[] }>(getDek(), row.id, 'messages', row.nonce, row.ciphertext)
+      opened.push({ id: row.id, at: message.at || '', bytes: row.ciphertext.length, fileIds: message.files?.map((file) => file.id) ?? [] })
+    } catch {
+      continue
+    }
+  }
+  opened.sort((a, b) => a.at.localeCompare(b.at))
+  const drop = opened.slice(0, Math.max(0, opened.length - 30))
+  for (const message of drop) {
+    if (used <= limit) break
+    await db.records.delete(message.id)
+    used -= message.bytes
+    removed.push(message.id)
+    for (const fileId of message.fileIds) {
+      const file = await db.files.get(fileId)
+      if (!file) continue
+      await db.files.delete(fileId)
+      used -= file.size
+    }
+  }
+  return removed
+}
+
+export async function cleanOldFiles(days = 7) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+  const old = await db.files.where('savedAt').below(cutoff).toArray()
+  await db.files.bulkDelete(old.map((row) => row.id))
+  const messageIds = await enforceStorageLimit()
+  return {
+    fileCount: old.length,
+    bytes: old.reduce((sum, row) => sum + row.size, 0),
+    messageIds,
+  }
+}

@@ -1,4 +1,4 @@
-import { authApi } from '@ma/api-client'
+import { ApiError, authApi } from '@ma/api-client'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +13,7 @@ type Account = {
   invited: number
   badges: string[]
   invitees: { username: string; display_name: string }[]
+  open_invites?: { id: string; expires_at: string; created_at: string }[]
 }
 
 export const AppSettingsSlot = createContext<{ slot: HTMLElement | null; setSlot: (node: HTMLElement | null) => void }>({
@@ -74,13 +75,19 @@ export function AccountSettings() {
       window.dispatchEvent(new Event('ma-auth'))
       await load()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'error')
+      setError(err instanceof ApiError && err.code === 'server_overloaded' ? t('registerOverloaded') : err instanceof Error ? err.message : 'error')
     }
   }
 
   async function createInvite() {
     const created = await authApi.createInvite()
     setCode(created.code)
+    await load()
+  }
+
+  async function revokeInvite(id: string) {
+    await authApi.revokeInvite(id)
+    if (code) setCode('')
     await load()
   }
 
@@ -107,7 +114,7 @@ export function AccountSettings() {
   }
 
   return (
-    <>
+    <div className="flex min-h-full flex-1 flex-col">
       <SettingsSection title={t('account')} description={account.display_name}>
         <div className="flex items-center gap-3 px-4 py-3">
           <ProfileButton username={account.username} displayName={account.display_name}>
@@ -130,6 +137,18 @@ export function AccountSettings() {
           </Button>
         </SettingsRow>
         {code ? <p className="px-4 py-2 font-mono text-sm">{code}<span className="mt-1 block font-sans text-xs text-muted">{t('inviteOnce')}</span></p> : null}
+        <SettingsRow label={t('openInvites')}>
+          <span className="flex flex-col items-end gap-2 text-sm">
+            {account.open_invites?.length
+              ? account.open_invites.map((item) => (
+                  <span key={item.id} className="inline-flex items-center gap-2">
+                    <span className="text-xs text-muted">{new Date(item.expires_at).toLocaleDateString()}</span>
+                    <Button variant="ghost" onClick={() => void revokeInvite(item.id)}>{t('revokeInvite')}</Button>
+                  </span>
+                ))
+              : t('noOpenInvites')}
+          </span>
+        </SettingsRow>
         <SettingsRow label={t('peopleInvited')}>
           <span className="flex flex-col items-end gap-1 text-sm">
             {account.invitees.length
@@ -159,6 +178,26 @@ export function AccountSettings() {
         </SettingsRow>
       </SettingsSection>
       <div ref={setSlot} />
-    </>
+      <p className="px-1 pb-8 text-sm leading-relaxed text-muted">
+        {t('feedbackBefore')}
+        <button
+          type="button"
+          className="cursor-pointer text-fg underline decoration-line underline-offset-2"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            const here = location.port === '5176' || location.hostname.startsWith('chat.')
+            if (!here) {
+              location.assign(location.port ? `${location.protocol}//${location.hostname}:5176/` : 'https://chat.ma.cyou/')
+              return
+            }
+            window.dispatchEvent(new CustomEvent('ma-write', { detail: 'ma' }))
+          }}
+        >
+          @ma
+        </button>
+        {t('feedbackAfter')}
+      </p>
+    </div>
   )
 }
