@@ -1,0 +1,142 @@
+{
+  "profile": {
+    "name": "Тимофей",
+    "location": "Новосибирск",
+    "eyebrow": "Веб-системы · базы данных · Linux-инфраструктура",
+    "lead": "Создаю прикладные веб-системы для работы с данными: проектирую API, подключаю PostgreSQL и Redis, разрабатываю интерфейсы и самостоятельно разворачиваю сервисы на Linux. Около трёх лет применяю этот подход в проектах Института ядерной физики.",
+    "photo": "/Photo.jpg",
+    "chips": ["FastAPI · React · TypeScript", "PostgreSQL · Redis · TimescaleDB", "Linux · Nginx · systemd"],
+    "stats": [
+      { "value": "~3 года", "label": "практической разработки" },
+      { "value": "Полный цикл", "label": "от API и БД до продакшена" },
+      { "value": "Рабочие данные", "label": "интерфейсы и временные ряды" }
+    ],
+    "facts": [
+      { "label": "Локация", "value": "Новосибирск" },
+      { "label": "Опыт", "value": "~3 года · ИЯФ" },
+      { "label": "Основной стек", "value": "Python · React · PostgreSQL" },
+      { "label": "Инфраструктура", "value": "Linux · Nginx · systemd" }
+    ]
+  },
+  "aboutTitle": "Разработка, которая доходит до продакшена",
+  "about": [
+    "Около трёх лет работаю с внутренними сервисами Института ядерной физики. Разрабатываю веб-интерфейсы для научных и служебных данных, связываю их с API и базами, настраиваю авторизацию и сопровождаю Linux-серверы.",
+    "Сильная сторона — целостное понимание системы: структура данных, backend, понятный интерфейс, PostgreSQL или Redis, затем Nginx, systemd, HTTPS, мониторинг и документация."
+  ],
+  "highlights": [
+    { "title": "Практичность", "body": "Интерфейс решает конкретную рабочую задачу без лишней сложности." },
+    { "title": "Надёжность", "body": "Валидация, контроль доступа, health-check’и, логи и восстановление." },
+    { "title": "Сопровождаемость", "body": "Конфигурация через окружение, модульный код и понятный деплой." }
+  ],
+  "experienceTitle": "Опыт работы",
+  "experience": [
+    {
+      "org": "Институт ядерной физики",
+      "period": "~2023 — настоящее время · ~3 года",
+      "bullets": [
+        "Внутренние веб-приложения для просмотра, редактирования и визуализации научных и служебных данных.",
+        "REST API на FastAPI и Flask, PostgreSQL, Redis и несколько источников данных в одном приложении.",
+        "Linux: окружения Python, сборки frontend, Nginx, systemd, HTTPS и секреты вне репозитория.",
+        "Доступ через Keycloak/OIDC, проверка JWT и роли для защищённых операций.",
+        "Сопровождение после запуска: журналы, ресурсы, Grafana, health-check’и и резервные копии.",
+        "Документация запуска и восстановления."
+      ]
+    }
+  ],
+  "educationTitle": "Образование",
+  "education": [
+    {
+      "org": "Новосибирский городской открытый колледж",
+      "meta": "09.02.07 «Информационные системы и программирование»",
+      "badge": "Красный диплом",
+      "note": "Диплом с отличием. База по программированию, проектированию информационных систем и базам данных, развитая в рабочих веб-проектах и администрировании Linux."
+    }
+  ],
+  "projectsTitle": "Проекты",
+  "projectsLead": "Рабочие и личные проекты. В каждом я отвечал за интеграцию, конфигурацию и запуск.",
+  "projects": [
+    {
+      "slug": "db-configs",
+      "title": "db-configs — единый интерфейс к нескольким БД",
+      "tags": ["PostgreSQL", "FastAPI", "React", "Nginx"],
+      "summary": "Пользователь выбирает источник PostgreSQL, просматривает таблицы и вносит разрешённые изменения без прямого подключения к БД.",
+      "bullets": [
+        "Маршрутизация запросов к нескольким PostgreSQL-базам по конфигурации.",
+        "Серверные сессии и откат последних изменений в рамках сессии.",
+        "OIDC через Keycloak, проверка JWT и доступ по ролям.",
+        "React SPA и FastAPI, Uvicorn, systemd и Nginx."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/db-configs-list.png", "alt": "Просмотр таблиц", "caption": "Просмотр данных из PostgreSQL" },
+        { "src": "/screenshots/db-configs-edit.png", "alt": "Редактирование", "caption": "Редактирование и сессия" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "db-plots",
+      "title": "db-plots — визуализация данных из БД",
+      "tags": ["PostgreSQL", "React", "Plotly", "TypeScript"],
+      "summary": "Интерфейс для временных рядов из PostgreSQL: каналы, интервал и интерактивные графики Plotly.",
+      "bullets": [
+        "React, TypeScript, Redux Toolkit и типизированный слой API.",
+        "Даты, часовые пояса и выбранные диапазоны.",
+        "Адаптивный интерфейс, локализация и сборка под Nginx/subpath."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/db-plots.png", "alt": "Графики db-plots", "caption": "Графики по каналам" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "redis-grafana",
+      "title": "redis-grafana — сбор, хранение и мониторинг",
+      "tags": ["Redis TimeSeries", "Grafana", "Flask", "React"],
+      "summary": "Телеметрия от TCP-источника до дашбордов: бинарные сообщения сохраняются в Redis TimeSeries и показываются в Grafana.",
+      "bullets": [
+        "Асинхронный pipeline с очередями, backpressure и повторным подключением.",
+        "Правила агрегации Redis TimeSeries.",
+        "Flask и React контроллер каналов, конфигурации, статуса и логов."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/redis-grafana-ui.png", "alt": "Контроллер", "caption": "Настройка каналов" },
+        { "src": "/screenshots/redis-grafana-dash.png", "alt": "Дашборд Grafana", "caption": "Дашборд в Grafana" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "keycloak",
+      "title": "Keycloak — доступ",
+      "tags": ["IAM", "Keycloak"],
+      "summary": "Realms, клиенты и роли. OIDC в приложениях: keycloak-js на фронтенде и проверка JWT с ролями на API.",
+      "bullets": [],
+      "screenshots": [
+        { "src": "/screenshots/keycloak.png", "alt": "Админка Keycloak", "caption": "Админка" }
+      ],
+      "featured": false
+    }
+  ],
+  "opsTitle": "Инфраструктура и эксплуатация",
+  "opsLead": "Готовлю Linux-серверы и сопровождаю приложения после запуска.",
+  "ops": [
+    { "title": "База Linux", "bullets": ["Debian/Ubuntu: пакеты и каталоги", "Пользователи, sudo, права и SSH-ключи", "Диски, журналы и ротация", "Cron и systemd timers"] },
+    { "title": "Сеть и безопасность", "bullets": ["Минимальный набор открытых портов", "Nginx и Caddy", "TLS-сертификаты", "Секреты в окружении и отдельные пользователи сервисов"] },
+    { "title": "Сервисы и данные", "bullets": ["systemd и journalctl", "PostgreSQL, Redis и TimescaleDB", "Python venv, Uvicorn и Hypercorn", "Сборка frontend через Vite/pnpm"] },
+    { "title": "Эксплуатация", "bullets": ["Health-check’и, логи, память и диск", "Резервные копии", "Grafana и временные ряды", "Инструкции по запуску и сбоям"] }
+  ],
+  "skillsTitle": "Навыки",
+  "skillsLead": "Технологии сгруппированы по задачам, в которых я их применял.",
+  "skills": {
+    "Backend": ["Python", "Go", "Node.js", "FastAPI", "Flask", "Express", "REST", "JWT"],
+    "Базы данных": ["PostgreSQL", "Redis", "Redis TimeSeries", "TimescaleDB", "SQL", "pgx"],
+    "Frontend": ["React", "TypeScript", "Vite", "Tailwind", "SvelteKit", "Plotly"],
+    "Linux": ["Nginx", "Caddy", "systemd", "SSH", "OCI", "Docker Compose", "Keycloak", "Grafana"],
+    "Встроенные системы": ["ESP32", "C++", "LVGL", "PlatformIO"],
+    "C++ и desktop": ["C++20", "CMake", "Vulkan", "Asio", "FFmpeg"]
+  },
+  "contactsTitle": "Контакты",
+  "contactsLead": "Для быстрого сообщения — Telegram, для подробного описания — email.",
+  "contacts": [
+    { "label": "Telegram", "value": "@mapagmataas", "href": "https://t.me/mapagmataas", "hint": "Ответ обычно быстрее" },
+    { "label": "Email", "value": "me@ma.cyou", "href": "mailto:me@ma.cyou", "hint": "Для подробных описаний" }
+  ]
+}

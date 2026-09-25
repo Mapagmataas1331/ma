@@ -1,0 +1,35 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - services/api/**
+      - .github/workflows/api-deploy.yml
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - working-directory: services/api
+        run: GOOS=linux GOARCH=arm64 go build -o api ./cmd/api
+      - uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ma
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          source: services/api/api
+          target: /tmp
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ma
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            sudo install -m 755 /tmp/services/api/api /opt/macyou/bin/api
+            sudo systemctl restart macyou-api
+            curl -fsS http://127.0.0.1:8080/healthz || true

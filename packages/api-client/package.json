@@ -1,0 +1,22 @@
+{
+  "name": "@ma/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ma/protocol": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.80.6",
+    "@types/react": "^19.1.6",
+    "react": "^19.1.0",
+    "typescript": "^5.8.3"
+  }
+}

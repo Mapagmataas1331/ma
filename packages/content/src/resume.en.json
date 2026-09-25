@@ -1,0 +1,142 @@
+{
+  "profile": {
+    "name": "Timofey",
+    "location": "Novosibirsk",
+    "eyebrow": "Web systems · databases · Linux infrastructure",
+    "lead": "I build applied web systems for working with data: APIs, PostgreSQL and Redis, interfaces, and the Linux servers they run on. I have used this approach for about three years at the Budker Institute of Nuclear Physics.",
+    "photo": "/Photo.jpg",
+    "chips": ["FastAPI · React · TypeScript", "PostgreSQL · Redis · TimescaleDB", "Linux · Nginx · systemd"],
+    "stats": [
+      { "value": "~3 years", "label": "of practical development" },
+      { "value": "Full cycle", "label": "from API and database to production" },
+      { "value": "Working data", "label": "interfaces and time series" }
+    ],
+    "facts": [
+      { "label": "Location", "value": "Novosibirsk" },
+      { "label": "Experience", "value": "~3 years · BINP" },
+      { "label": "Main stack", "value": "Python · React · PostgreSQL" },
+      { "label": "Infrastructure", "value": "Linux · Nginx · systemd" }
+    ]
+  },
+  "aboutTitle": "Software that reaches production",
+  "about": [
+    "For about three years I have worked on internal services at the Budker Institute of Nuclear Physics. I build web interfaces for scientific and operational data, connect them to APIs and databases, configure authorization, and look after the Linux servers that run the applications.",
+    "The useful part is seeing the whole system: data shape, backend, a clear interface, PostgreSQL or Redis, then Nginx, systemd, HTTPS, monitoring, and notes for the next person who has to run it."
+  ],
+  "highlights": [
+    { "title": "Practical", "body": "The interface solves a concrete job without extra machinery." },
+    { "title": "Reliable", "body": "Validation, access control, health checks, logs, and recovery." },
+    { "title": "Maintainable", "body": "Environment configuration, modular code, and a deployment that can be repeated." }
+  ],
+  "experienceTitle": "Experience",
+  "experience": [
+    {
+      "org": "Budker Institute of Nuclear Physics",
+      "period": "~2023 — present · ~3 years",
+      "bullets": [
+        "Internal web applications for viewing, editing, and visualizing scientific and operational data.",
+        "REST APIs on FastAPI and Flask, with PostgreSQL, Redis, and several data sources in one application.",
+        "Linux deployment: Python environments, frontend builds, Nginx, systemd, HTTPS, and configuration kept out of the repo.",
+        "Access through Keycloak/OIDC, JWT checks, and roles for protected operations.",
+        "After launch: logs, resource checks, Grafana, health checks, and backups.",
+        "Runbooks so a service can be updated and restored without reading the project from scratch."
+      ]
+    }
+  ],
+  "educationTitle": "Education",
+  "education": [
+    {
+      "org": "Novosibirsk City Open College",
+      "meta": "09.02.07 Information systems and programming",
+      "badge": "Honours diploma",
+      "note": "A diploma with distinction. The course covered programming, information-system design, and databases; the working projects and Linux administration came after."
+    }
+  ],
+  "projectsTitle": "Projects",
+  "projectsLead": "Work and personal projects. In each one I owned the integration, configuration, and the environment they run in.",
+  "projects": [
+    {
+      "slug": "db-configs",
+      "title": "db-configs — one interface for several databases",
+      "tags": ["PostgreSQL", "FastAPI", "React", "Nginx"],
+      "summary": "A workspace where a user picks a PostgreSQL source, browses tables, and makes allowed edits without a direct database connection.",
+      "bullets": [
+        "Requests are routed to several PostgreSQL databases from configuration.",
+        "Server sessions and rollback of the latest changes in that session.",
+        "OIDC via Keycloak, JWT checks, and role-based access.",
+        "React SPA and FastAPI, started with Uvicorn, systemd, and Nginx."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/db-configs-list.png", "alt": "db-configs table view", "caption": "Browsing PostgreSQL data" },
+        { "src": "/screenshots/db-configs-edit.png", "alt": "db-configs edit mode", "caption": "Editing and session" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "db-plots",
+      "title": "db-plots — charts from the database",
+      "tags": ["PostgreSQL", "React", "Plotly", "TypeScript"],
+      "summary": "An interface for time series in PostgreSQL: pick channels and a range, compare them on Plotly charts.",
+      "bullets": [
+        "React, TypeScript, Redux Toolkit, and a typed API layer.",
+        "Dates, time zones, and selected ranges.",
+        "Responsive UI, localization, and a build for an Nginx subpath."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/db-plots.png", "alt": "db-plots charts", "caption": "Charts by channel" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "redis-grafana",
+      "title": "redis-grafana — collect, store, watch",
+      "tags": ["Redis TimeSeries", "Grafana", "Flask", "React"],
+      "summary": "Telemetry from a TCP source to dashboards: binary messages are decoded, stored in Redis TimeSeries, and shown in Grafana.",
+      "bullets": [
+        "Async pipeline with queues, backpressure, and reconnects.",
+        "Redis TimeSeries aggregation rules for several retention windows.",
+        "Flask and React controller for channels, configuration, status, and logs."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/redis-grafana-ui.png", "alt": "redis-grafana controller", "caption": "Channel setup" },
+        { "src": "/screenshots/redis-grafana-dash.png", "alt": "Grafana dashboard", "caption": "Grafana dashboard" }
+      ],
+      "featured": true
+    },
+    {
+      "slug": "keycloak",
+      "title": "Keycloak — access deployment",
+      "tags": ["IAM", "Keycloak"],
+      "summary": "Realms, clients, and roles, then OIDC in the apps: keycloak-js on the frontend and JWT role checks on the API.",
+      "bullets": [],
+      "screenshots": [
+        { "src": "/screenshots/keycloak.png", "alt": "Keycloak admin", "caption": "Admin console" }
+      ],
+      "featured": false
+    }
+  ],
+  "opsTitle": "Infrastructure",
+  "opsLead": "I prepare Linux servers and keep applications running after launch.",
+  "ops": [
+    { "title": "Linux base", "bullets": ["Debian and Ubuntu packages and layout", "Users, sudo, permissions, SSH keys", "Disks, logs, and rotation", "Cron and systemd timers"] },
+    { "title": "Network and security", "bullets": ["Only the ports that are needed", "Nginx and Caddy for SPAs and APIs", "TLS certificates", "Secrets in the environment, dedicated service users"] },
+    { "title": "Services and data", "bullets": ["systemd restart policy and journalctl", "PostgreSQL, Redis, TimescaleDB", "Python venv, Uvicorn, Hypercorn", "Vite and pnpm frontend builds"] },
+    { "title": "Operations", "bullets": ["Health checks, logs, memory, and disk", "Backups of data and configuration", "Grafana and time series", "Notes for start, update, and failure"] }
+  ],
+  "skillsTitle": "Skills",
+  "skillsLead": "Grouped by the jobs I have actually used them for.",
+  "skills": {
+    "Backend": ["Python", "Go", "Node.js", "FastAPI", "Flask", "Express", "REST", "JWT"],
+    "Databases": ["PostgreSQL", "Redis", "Redis TimeSeries", "TimescaleDB", "SQL", "pgx"],
+    "Frontend": ["React", "TypeScript", "Vite", "Tailwind", "SvelteKit", "Plotly"],
+    "Linux": ["Nginx", "Caddy", "systemd", "SSH", "OCI", "Docker Compose", "Keycloak", "Grafana"],
+    "Embedded": ["ESP32", "C++", "LVGL", "PlatformIO"],
+    "C++ and desktop": ["C++20", "CMake", "Vulkan", "Asio", "FFmpeg"]
+  },
+  "contactsTitle": "Contact",
+  "contactsLead": "Telegram is faster. Email is better when the description is long.",
+  "contacts": [
+    { "label": "Telegram", "value": "@mapagmataas", "href": "https://t.me/mapagmataas", "hint": "Usually the faster reply" },
+    { "label": "Email", "value": "me@ma.cyou", "href": "mailto:me@ma.cyou", "hint": "For a longer description" }
+  ]
+}

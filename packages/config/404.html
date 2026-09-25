@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>404 — ma.cyou</title>
+    <meta name="robots" content="noindex" />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(0.985 0.004 262);
+        --fg: oklch(0.22 0.02 262);
+        --muted: oklch(0.48 0.02 262);
+        --line: oklch(0.22 0.02 262 / 0.1);
+        --accent: oklch(0.52 0.16 262);
+        --accent-fg: oklch(0.99 0.005 262);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --bg: oklch(0.16 0.018 262);
+          --fg: oklch(0.96 0.008 262);
+          --muted: oklch(0.74 0.02 262);
+          --line: oklch(0.96 0.01 262 / 0.1);
+          --accent: oklch(0.72 0.14 262);
+          --accent-fg: oklch(0.18 0.03 262);
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 32px 20px;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      }
+      main { width: min(36rem, 100%); }
+      p.kicker {
+        margin: 0 0 12px;
+        font-family: ui-monospace, "JetBrains Mono", monospace;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      h1 { margin: 0; font-size: clamp(2.5rem, 6vw, 4rem); letter-spacing: -0.03em; }
+      p.lead { margin: 16px 0 0; max-width: 36rem; color: var(--muted); line-height: 1.6; }
+      p.ru { margin: 8px 0 0; color: var(--muted); line-height: 1.6; }
+      nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+      a {
+        display: inline-block;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        color: var(--fg);
+        text-decoration: none;
+      }
+      a.primary { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">404</p>
+      <h1>Page not found</h1>
+      <p class="lead">This address is not on this site.</p>
+      <p class="ru">Такой страницы здесь нет.</p>
+      <nav>
+        <a class="primary" href="/">This site</a>
+        <a href="https://ma.cyou">ma.cyou</a>
+      </nav>
+    </main>
+  </body>
+</html>

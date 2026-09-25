@@ -1,0 +1,17 @@
+[Unit]
+Description=ma.cyou API
+After=network.target postgresql.service
+
+[Service]
+User=macyou
+Group=macyou
+EnvironmentFile=/etc/macyou/api.env
+ExecStart=/opt/macyou/bin/api
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/macyou
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

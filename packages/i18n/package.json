@@ -1,0 +1,23 @@
+{
+  "name": "@ma/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "i18next": "^25.2.1",
+    "i18next-icu": "^2.3.0",
+    "intl-messageformat": "^10.7.16",
+    "react-i18next": "^15.5.2"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.6",
+    "react": "^19.1.0",
+    "typescript": "^5.8.3"
+  }
+}

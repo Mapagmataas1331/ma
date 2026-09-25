@@ -1,0 +1,12 @@
+@import '@ma/ui/styles.css';
+
+@media print {
+  header,
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white;
+    color: black;
+  }
+}

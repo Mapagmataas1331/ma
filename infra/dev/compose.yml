@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: macyou
+      POSTGRES_PASSWORD: macyou
+      POSTGRES_DB: macyou
+    ports:
+      - "5432:5432"
+  coturn:
+    image: coturn/coturn:latest
+    network_mode: host
+    command: ["-c", "/etc/turnserver.conf"]
+    volumes:
+      - ../oracle/coturn/turnserver.conf:/etc/turnserver.conf:ro
