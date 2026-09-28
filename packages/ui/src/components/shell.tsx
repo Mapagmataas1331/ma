@@ -56,7 +56,7 @@ export function AppShell({
             <a href={brand.href} className="min-w-0 truncate font-semibold tracking-tight">
               {brand.label}
             </a>
-            <nav className="hidden min-w-0 items-center gap-1 lg:flex" aria-label="Primary">
+            <nav className="hidden min-w-0 flex-1 items-center gap-1 overflow-x-auto lg:flex" aria-label="Primary">
               {nav.map((item) => (
                 <a key={item.href + item.label} href={item.href} className="rounded-sm px-3 py-1.5 text-sm text-muted hover:bg-surface-2 hover:text-fg" {...(item.external ? { target: '_blank', rel: 'noreferrer' } : {})}>
                   {item.label}
@@ -78,7 +78,7 @@ export function AppShell({
         <Sheet open={open} onOpenChange={setOpen} title={t('menu')}>
           <nav className="flex flex-col gap-1" aria-label="Mobile">
             {nav.map((item) => (
-              <a key={item.href + item.label} href={item.href} className="rounded-sm px-2 py-2 text-sm hover:bg-surface-2" onClick={() => setOpen(false)}>
+              <a key={item.href + item.label} href={item.href} className="rounded-sm px-2 py-2 text-sm hover:bg-surface-2" onClick={() => setOpen(false)} {...(item.external ? { target: '_blank', rel: 'noreferrer' } : {})}>
                 {item.label}
               </a>
             ))}

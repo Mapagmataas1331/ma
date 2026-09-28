@@ -204,6 +204,7 @@ export function ChatApp() {
   const [viewer, setViewer] = useState<{ src: string; name: string; kind: 'image' | 'video'; messageId: string; fileId: string; mine: boolean; via?: ChatFile['via'] } | null>(null)
   const [statusFor, setStatusFor] = useState<LocalMessage | null>(null)
   const wantView = useRef('')
+  const wantSave = useRef('')
   const transferPassword = useRef('')
   const syncSnapshot = useRef<SyncMessage[]>([])
   const syncReady = useRef<Promise<void>>(Promise.resolve())
@@ -938,7 +939,6 @@ export function ChatApp() {
         }
         const entry: ChatFile = { id: fileId, name, mime, size: file.size, via: 'peer', url }
         files.push(entry)
-        announceNewcomers(id, startedOnline)
         const staged = await stageCipher(fileId, file, session.user?.id || '')
         if (staged.removed.length) dropMessages(staged.removed)
         if (staged.stored) {
@@ -1014,21 +1014,28 @@ export function ChatApp() {
     } catch (err) {
       if (transferLock.current === activeFile) transferLock.current = null
       setTransfer((cur) => (cur?.fileId === activeFile ? null : cur))
-      if (err instanceof DOMException && err.name === 'AbortError') return
-      if (err instanceof Error && err.message === 'stage') {
+      const posted = messagesRef.current.some((message) => message.id === id)
+      if (!posted) {
         setDraft(text)
         setPending(picked)
+        liveShares.current.delete(id)
+        for (const file of files) {
+          outgoing.current.delete(file.id)
+          sessionFiles.current.delete(file.id)
+          if (file.key) void api(`/v1/mailbox/cloud/${file.id}`, { method: 'DELETE' }).catch(() => undefined)
+        }
+      }
+      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (err instanceof Error && err.message === 'stage') {
         toast(t('cloudStageFailed'))
         return
       }
       const usage = err instanceof ApiError && err.code === 'quota_user' ? cloudUsage(err.details) : null
       if (usage) {
-        setDraft(text)
-        setPending(picked)
         setCloudPrompt({ usage, need: picked.reduce((sum, file) => sum + ciphertextSize(file.size), 0), canDirect: allowDirect })
         return
       }
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'failed' } : m)))
+      if (posted) setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'failed' } : m)))
       toast(explain(err))
     }
   }
@@ -1230,16 +1237,20 @@ export function ChatApp() {
     toast(explain(err))
   }
 
+  function saveUrl(url: string, name: string) {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = name || 'file'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+  }
+
   async function saveFile(message: LocalMessage, file: ChatFile) {
     try {
       const url = await fetchMailbox(message, file, true)
-      if (!url) return
-      const link = document.createElement('a')
-      link.href = url
-      link.download = file.name || 'file'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
+      if (url) saveUrl(url, file.name)
+      else wantSave.current = file.id
     } catch (err) {
       setDownloading(null)
       setTransfer(null)
@@ -1565,6 +1576,10 @@ export function ChatApp() {
       void refreshUsage()
     }).catch(() => undefined)
     setFileUrl(fileId, url)
+    if (wantSave.current === fileId) {
+      wantSave.current = ''
+      saveUrl(url, slot.name)
+    }
     if (wantView.current === fileId && (slot.mime.startsWith('image/') || slot.mime.startsWith('video/'))) {
       wantView.current = ''
       const owner = messagesRef.current.find((message) => message.files?.some((item) => item.id === fileId))
@@ -1586,6 +1601,8 @@ export function ChatApp() {
     await slot.queue.catch(() => undefined)
     await slot.sink?.abort()
     if (transferLock.current === slot.fileId) transferLock.current = null
+    if (wantSave.current === slot.fileId) wantSave.current = ''
+    if (wantView.current === slot.fileId) wantView.current = ''
     setDownloading((cur) => (cur === slot.fileId ? null : cur))
     setTransfer((cur) => (cur?.fileId === slot.fileId ? null : cur))
     if (remote) toast(t('transferCancelledBySender'))
@@ -1740,8 +1757,10 @@ export function ChatApp() {
 
   function availability(message: LocalMessage, file: ChatFile): FileAvailability {
     void swarmTick
-    const local = file.url || stored.has(file.id) || sessionFiles.current.has(file.id) || outgoing.current.has(file.id)
-    if (local) return message.mine && file.via === 'peer' ? 'sharing' : 'ready'
+    const onDisk = stored.has(file.id)
+    const local = onDisk || !!file.url || sessionFiles.current.has(file.id) || outgoing.current.has(file.id)
+    if (local && message.mine && file.via === 'peer') return onDisk ? 'sharing' : 'sessionOnly'
+    if (local) return 'ready'
     if (file.gone) return 'gone'
     if (file.via !== 'peer') return message.status === 'expired' ? 'gone' : 'server'
     const peers = onlinePeers(message.conversationId, message.senderId)

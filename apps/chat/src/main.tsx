@@ -12,7 +12,13 @@ const queryClient = new QueryClient()
 
 function Shell() {
   return (
-    <AppShell fill brand={{ href: '/', label: 'chat.ma.cyou' }} nav={[{ href: home, label: 'ma.cyou', external: true }]} actions={<LanguageSwitch />}>
+    <AppShell
+      fill
+      brand={{ href: '/', label: 'chat.ma.cyou' }}
+      nav={[{ href: home, label: 'ma.cyou', external: true }]}
+      actions={<LanguageSwitch />}
+      commandItems={[{ id: 'home', label: 'ma.cyou', onSelect: () => window.location.assign(home) }]}
+    >
       <ChatApp />
     </AppShell>
   )

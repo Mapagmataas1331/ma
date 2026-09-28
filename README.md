@@ -19,7 +19,7 @@ The home page is [ma.cyou](https://ma.cyou). It introduces the other sites and l
 
 **[ma.cyou](https://ma.cyou)** is the front door. It points to the résumé, the project list, and the chat, and lists public contact links.
 
-**[me.ma.cyou](https://me.ma.cyou)** is the résumé. It covers work on web systems for data: APIs, PostgreSQL and Redis, interfaces, and the Linux servers they run on, including about three years at the Budker Institute of Nuclear Physics in Novosibirsk. The same page is available in Russian.
+**[me.ma.cyou](https://me.ma.cyou)** is the résumé. It covers work on web systems for data: APIs, PostgreSQL and Redis, interfaces, and the Linux servers they run on, including about three years at the Budker Institute of Nuclear Physics in Novosibirsk. The same page is available in Russian. Entries that have a write-up on [projects.ma.cyou](https://projects.ma.cyou) link to that page.
 
 **[projects.ma.cyou](https://projects.ma.cyou)** is a list of work and personal projects, with a page for each one. Examples include database workspaces, time-series charts, monitoring, PocketCam, and [chat.ma.cyou](https://chat.ma.cyou).
 

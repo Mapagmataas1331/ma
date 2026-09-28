@@ -25,7 +25,7 @@ export function DetailPage() {
       {project.links.length > 0 && (
         <p className="mb-6 flex flex-wrap gap-3 text-sm">
           {project.links.map((link) => (
-            <a key={link.href} href={link.href} className="text-accent underline-offset-2 hover:underline">{link.label}</a>
+            <a key={link.href} href={link.href} className="text-accent underline-offset-2 hover:underline" {...(link.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{link.label}</a>
           ))}
         </p>
       )}

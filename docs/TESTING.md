@@ -6,18 +6,18 @@ Mark each line when it behaves as written. English and Russian both count: switc
 
 ## Every site
 
-- [ ] Header brand link returns to that site's home.
-- [ ] Desktop nav links work. External links open in a new tab.
+- [ ] The site name in the header stays on that site (home, résumé, projects, or chat).
+- [ ] Desktop nav links work. External links, including the ones in the phone menu, open in a new tab.
 - [ ] Below the `lg` width, the menu button opens the same links and closes after a choice.
 - [ ] Light and dark theme toggle, and the choice survives a reload.
 - [ ] Language switch EN/RU updates the visible copy and survives a reload.
-- [ ] Ctrl+K or Cmd+K opens the command list. Choosing an item navigates. Escape closes it.
+- [ ] Ctrl+K or Cmd+K opens a command list with real destinations on every site. Choosing an item navigates. Escape closes it.
 - [ ] Settings opens from the header. On chat, chat settings appear under the account section. Closing settings returns to the page.
 - [ ] Pages do not scroll sideways on a narrow phone. The header clears the safe area.
 
 ## ma.cyou
 
-- [ ] Lead, intro, and the three cards (résumé, projects, chat) render in both languages, each with its blurb.
+- [ ] Lead, intro, and the three cards (résumé, projects, chat) render in both languages, each with its blurb. The chat card does not say that every file is stored without a limit.
 - [ ] Each card opens the right site.
 - [ ] Social badges open email, GitHub, Telegram, and YouTube.
 - [ ] `/dev/gallery` renders the component gallery without throwing.
@@ -26,13 +26,14 @@ Mark each line when it behaves as written. English and Russian both count: switc
 
 - [ ] Name, photo, lead, chips, stats, and facts match the selected language.
 - [ ] Clicking the photo opens a lightbox. Closing it returns to the page.
-- [ ] About, highlights, experience, education, and projects sections render, including the last item in each list.
-- [ ] A project link on the résumé opens the matching projects page.
+- [ ] About, highlights, experience, education, projects, infrastructure, skills, and contact all render, including the last item in each list. The header and the command list can jump to each of those sections.
+- [ ] A résumé project that has a page on projects.ma.cyou opens that page. A project without one stays on the résumé.
 
 ## projects.ma.cyou
 
 - [ ] The list shows every project, with tags, year, and a summary in the selected language.
-- [ ] "All" and each tag filter the list. A tag with one project shows only that project. Clearing the tag shows all of them again.
+- [ ] "All" and each tag filter the list, and the selected tag is visibly marked. A tag with one project shows only that project. Choosing "All" shows every project again.
+- [ ] The command list can open each project by name.
 - [ ] Opening a project shows its title, summary, tags, external links, and markdown body in the selected language.
 - [ ] An unknown `/p/...` slug shows the not-found line and a way back to the list.
 - [ ] The back link on a project returns to the list.
@@ -118,6 +119,10 @@ Mark each line when it behaves as written. English and Russian both count: switc
 - [ ] The same oversized file with nobody else online is not sent, and the draft is restored.
 - [ ] A file of 5 GB or less that does not fit the remaining cloud space opens the quota dialog. It names what is using the space. Remove frees that file. Send to online users delivers only to people online right now, and says offline members will not get it.
 - [ ] If nobody else is online, that dialog has no "send to online users" action.
+- [ ] That choice says a member who is still offline when the transfer finishes will not get the file. A member who comes online before it finishes still can.
+- [ ] Download saves the file when a direct transfer finishes, without a second click. Cancelling the transfer does not save it.
+- [ ] A file this device can share only until reload is labeled as such. After it is stored on the device, the label changes to shared from this device.
+- [ ] Cancelling a cloud upload puts the text and files back in the composer.
 - [ ] Settings → cloud storage shows the same used space and can remove a waiting file.
 
 ## Files, group hand-off

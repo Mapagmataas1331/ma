@@ -1,4 +1,4 @@
-import { loadResume } from '@ma/content'
+import { loadProjects, loadResume } from '@ma/content'
 import { Lightbox } from '@ma/ui'
 import { useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -7,6 +7,8 @@ export function ResumePage() {
   const { i18n } = useTranslation()
   const lang = i18n.language.startsWith('ru') ? 'ru' : 'en'
   const data = loadResume(lang)
+  const projectsOrigin = import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou'
+  const projectPages = new Set(loadProjects().map((project) => project.slug))
   const [shot, setShot] = useState<{ src: string; alt: string; caption: string } | null>(null)
   return (
     <article className="mx-auto max-w-3xl">
@@ -88,7 +90,11 @@ export function ResumePage() {
         {data.projects.map((project) => (
           <article key={project.slug} className="border-b border-line py-6 last:border-b-0">
             <p className="text-xs tracking-wide text-muted uppercase">{project.tags.join(' · ')}</p>
-            <h3 className="mt-1 text-lg font-medium">{project.title}</h3>
+            {projectPages.has(project.slug) ? (
+              <a href={`${projectsOrigin}/p/${project.slug}`} className="mt-1 block text-lg font-medium underline-offset-2 hover:underline">{project.title}</a>
+            ) : (
+              <h3 className="mt-1 text-lg font-medium">{project.title}</h3>
+            )}
             <p className="mt-2 text-sm leading-relaxed text-muted">{project.summary}</p>
             {project.bullets.length ? (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-relaxed text-muted">
@@ -144,7 +150,7 @@ export function ResumePage() {
         <ul className="divide-y divide-line">
           {data.contacts.map((c) => (
             <li key={c.href}>
-              <a href={c.href} className="block py-3">
+              <a href={c.href} className="block py-3" {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>
                 <span className="text-sm text-muted">{c.label}</span>
                 <span className="mt-0.5 block font-medium break-all">{c.value}</span>
                 <span className="block text-sm text-muted">{c.hint}</span>

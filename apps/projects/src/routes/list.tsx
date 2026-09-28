@@ -22,9 +22,9 @@ export function ListPage() {
     <div>
       <PageHeader eyebrow="projects.ma.cyou" title={t('projects')} lead={t('projectsLead')} />
       <div className="mb-6 flex flex-wrap gap-2">
-        <button type="button" onClick={() => setTag(null)} className="rounded-full bg-surface-2 px-3 py-1 text-xs">{t('all')}</button>
+        <button type="button" aria-pressed={tag === null} onClick={() => setTag(null)} className={`rounded-full px-3 py-1 text-xs ${tag === null ? 'bg-fg text-bg' : 'bg-surface-2'}`}>{t('all')}</button>
         {tags.map((item) => (
-          <button key={item} type="button" onClick={() => setTag(item)} className="rounded-full bg-surface-2 px-3 py-1 text-xs">
+          <button key={item} type="button" aria-pressed={tag === item} onClick={() => setTag(item)} className={`rounded-full px-3 py-1 text-xs ${tag === item ? 'bg-fg text-bg' : 'bg-surface-2'}`}>
             {item}
           </button>
         ))}
@@ -39,6 +39,7 @@ export function ListPage() {
                 ))}
               </div>
               <h2 className="text-lg font-medium break-words">{localized(project, ru).title}</h2>
+              <p className="mt-1 text-xs text-muted">{project.year}</p>
               <p className="mt-2 text-sm text-muted break-words">{localized(project, ru).summary}</p>
             </Card>
           </Link>

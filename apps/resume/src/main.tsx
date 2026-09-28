@@ -12,17 +12,29 @@ const projects = import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.m
 
 function Shell() {
   const { t } = useTranslation('common')
+  const sections = [
+    { id: 'about', label: t('about') },
+    { id: 'experience', label: t('experience') },
+    { id: 'education', label: t('education') },
+    { id: 'projects', label: t('projects') },
+    { id: 'ops', label: t('infrastructure') },
+    { id: 'skills', label: t('skills') },
+    { id: 'contact', label: t('contact') },
+  ]
   return (
     <AppShell
-      brand={{ href: home, label: 'me.ma.cyou' }}
+      brand={{ href: '/', label: 'me.ma.cyou' }}
       nav={[
-        { href: '#about', label: t('about') },
-        { href: '#experience', label: t('experience') },
-        { href: '#projects', label: t('projects') },
-        { href: '#contact', label: t('contact') },
+        { href: home, label: 'ma.cyou', external: true },
+        ...sections.map((section) => ({ href: `#${section.id}`, label: section.label })),
         { href: projects, label: t('allProjects'), external: true },
       ]}
       actions={<LanguageSwitch />}
+      commandItems={[
+        ...sections.map((section) => ({ id: section.id, label: section.label, onSelect: () => { window.location.hash = section.id } })),
+        { id: 'home', label: 'ma.cyou', onSelect: () => window.location.assign(home) },
+        { id: 'all-projects', label: t('allProjects'), onSelect: () => window.location.assign(projects) },
+      ]}
     >
       <ResumePage />
     </AppShell>
