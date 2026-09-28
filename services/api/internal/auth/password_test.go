@@ -20,3 +20,22 @@ func TestHashAndVerify(t *testing.T) {
 		t.Fatal("expected mismatch")
 	}
 }
+
+func TestAccountNames(t *testing.T) {
+	if _, err := CanonicalUsername("Ab_c"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CanonicalUsername("_ab"); err == nil {
+		t.Fatal("expected leading underscore to fail")
+	}
+	name, err := CanonicalDisplayName("  Cafe\u0301 ")
+	if err != nil || name == "" {
+		t.Fatal(err)
+	}
+	if err := ValidateDisplayName("bad\nname"); err == nil {
+		t.Fatal("expected line break to fail")
+	}
+	if err := ValidateGroupName(""); err == nil {
+		t.Fatal("expected empty group name to fail")
+	}
+}

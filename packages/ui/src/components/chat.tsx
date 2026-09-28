@@ -93,6 +93,9 @@ export type ChatFile = {
   size: number
   url?: string
   via?: 'mailbox' | 'peer'
+  key?: string
+  header?: string
+  lengths?: number[]
 }
 
 export function MessageAttachments({

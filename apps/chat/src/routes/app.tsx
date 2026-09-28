@@ -1,6 +1,6 @@
 import { ApiError, api, apiBlobProgress, apiUpload, authApi } from '@ma/api-client'
-import { b64, boxKeyPair, pairingConfirm, ready, signKeyPair, unb64 } from '@ma/crypto'
-import { MAILBOX_MAX_FILE_BYTES, newFrame } from '@ma/protocol'
+import { b64, pairingConfirm, ready, unb64 } from '@ma/crypto'
+import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError } from '@ma/protocol'
 import {
   AppSettings,
   Button,
@@ -17,7 +17,6 @@ import {
   type ChatFile,
   PresenceDot,
   TypingIndicator,
-  PageHeader,
   SettingsRow,
   SettingsSection,
   Switch,
@@ -28,14 +27,27 @@ import {
 import QRCode from 'qrcode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { db } from '../lib/db'
-import { useSession, loadDevicePublicKeys, saveDevicePublicKeys } from '../lib/session'
+import { activeDatabase, hasLegacyVault, openAccount } from '../lib/db'
+import { ensureDeviceSecrets, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
+import { decryptFile, encryptFile } from '../lib/files'
+import { copyLegacyVault } from '../lib/legacy'
+import { replayOutbox } from '../lib/outbox'
+import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
+import { resetChatRuntime } from '../lib/runtime'
+import { chunkMessages, exportHistory, storeHistory, type SyncMessage } from '../lib/sync'
+import { useSession } from '../lib/session'
 import { transport } from '../lib/transport'
-import { addRecoverySlot, changeVaultPassword, cleanOldFiles, createVault, enforceStorageLimit, hasVault, isUnlocked, loadHistory, lockVault, readBytes, rememberBytes, sealRow, storageUsage, unlockVault } from '../lib/vault'
+import { AuthScreens } from '../features/auth/AuthScreens'
+import { CreateGroup } from '../features/conversations/CreateGroup'
+import { DeviceList } from '../features/devices/DeviceList'
+import { formatBytes } from '../features/messages/format'
+import { TransferPrompt } from '../features/transfers/TransferPrompt'
+import { UnlockScreen } from '../features/vault/UnlockScreen'
+import { addRecoverySlot, changeVaultPassword, cleanOldFiles, createVault, enforceStorageLimit, getIdentity, hasVault, importTransferredIdentity, isUnlocked, loadHistory, lockVault, readBytes, rememberBytes, sealRow, storageUsage, unlockVault, vaultOwner } from '../lib/vault'
 
 type Me = { id: string; username: string; display_name: string; totp_enabled?: boolean }
 type Contact = { id: string; username: string; display_name: string; state: string }
-type Conversation = { id: string; peer_id: string; peer_name: string; peer_username?: string }
+type Conversation = { id: string; kind?: string; title?: string; peer_id: string; peer_name: string; peer_username?: string; members?: { id: string; username: string; display_name: string; role: string }[] }
 type LocalMessage = {
   id: string
   conversationId: string
@@ -51,23 +63,11 @@ type LocalMessage = {
 
 type ChatPref = { pinned?: boolean; muted?: boolean }
 
-function deviceKeys() {
-  const existing = loadDevicePublicKeys()
-  if (existing) return existing
-  return null
-}
-
 export function ChatApp() {
   const { t } = useTranslation('common')
   const session = useSession()
   const [mode, setMode] = useState<'login' | 'register' | '2fa' | 'app'>('login')
   const [challenge, setChallenge] = useState('')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [display, setDisplay] = useState('')
-  const [invite, setInvite] = useState('')
-  const [code, setCode] = useState('')
-  const [vaultPassword, setVaultPassword] = useState('')
   const [unlocked, setUnlocked] = useState(isUnlocked())
   const [contacts, setContacts] = useState<Contact[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -83,11 +83,18 @@ export function ChatApp() {
   const [showNames, setShowNames] = useState(() => localStorage.getItem('ma.chat.showSenderNames') === '1')
   const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string } | null>(null)
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, total: 0 })
-  const [limitGb, setLimitGb] = useState(readLimitGb)
+  const [limitGb, setLimitGb] = useState(() => loadStorageGb(''))
   const [pairId, setPairId] = useState('')
   const [pairCode, setPairCode] = useState('')
   const [pairQr, setPairQr] = useState('')
+  const [pairFingerprint, setPairFingerprint] = useState('')
   const [pendingSync, setPendingSync] = useState(false)
+  const [askTransfer, setAskTransfer] = useState(false)
+  const [allowFresh, setAllowFresh] = useState(false)
+  const [legacyAvailable, setLegacyAvailable] = useState(false)
+  const [vaultDialog, setVaultDialog] = useState(false)
+  const [currentVaultPassword, setCurrentVaultPassword] = useState('')
+  const [nextVaultPassword, setNextVaultPassword] = useState('')
   const [online, setOnline] = useState<Set<string>>(new Set())
   const [typing, setTyping] = useState<{ conversationId: string; name: string } | null>(null)
   const typedAt = useRef(0)
@@ -106,10 +113,19 @@ export function ChatApp() {
     missing: (_fileId: string) => {},
   })
   const [hourCycle, setHourCycle] = useState<'24' | '12'>(() => (localStorage.getItem('ma.time') === '12' ? '12' : '24'))
-  const [prefs, setPrefs] = useState<Record<string, ChatPref>>(() => loadPrefs())
+  const [prefs, setPrefs] = useState<Record<string, ChatPref>>({})
+  const tRef = useRef(t)
+  tRef.current = t
   const [viewer, setViewer] = useState<{ src: string; name: string; kind: 'image' | 'video'; messageId: string; fileId: string; mine: boolean; via?: ChatFile['via'] } | null>(null)
   const [statusFor, setStatusFor] = useState<LocalMessage | null>(null)
   const wantView = useRef('')
+  const transferPassword = useRef('')
+  const syncSnapshot = useRef<SyncMessage[]>([])
+  const syncReady = useRef<Promise<void>>(Promise.resolve())
+  const syncRef = useRef<() => void>(() => {})
+  const deviceSyncRef = useRef<() => void>(() => {})
+  const publishSyncRef = useRef<(messages: SyncMessage[]) => void>(() => {})
+  const filePull = useRef(new Map<string, { key: string; header: string; lengths: number[]; chunks: Uint8Array[]; name: string; mime: string }>())
   const meRef = useRef(session.user?.id)
   meRef.current = session.user?.id
   messagesRef.current = messages
@@ -134,10 +150,17 @@ export function ChatApp() {
 
   useEffect(() => {
     const refreshSession = () => {
-      void authApi.me().then((me) => {
-        session.setSession(me, session.deviceId, session.trust)
+      void authApi.me().then(async (me) => {
+        const current = useSession.getState()
+        if (current.user && current.user.id !== me.id) resetChatRuntime()
+        useSession.getState().setSession(me, me.device_id || null, me.trust_state || null)
+        if (me.id) await openAccount(me.id)
         setMode('app')
-      }).catch(() => setMode('login'))
+      }).catch(() => {
+        resetChatRuntime()
+        setUnlocked(false)
+        setMode('login')
+      })
     }
     refreshSession()
     window.addEventListener('ma-auth', refreshSession)
@@ -147,12 +170,11 @@ export function ChatApp() {
   useEffect(() => {
     if (mode !== 'app' || !unlocked) return
     transport.relayOnly = relay
+    transport.setLocalUser(session.user?.id || '')
     transport.connect()
-    const sync = () => {
-      void refresh()
-      void drainMailbox()
-    }
+    const sync = () => syncRef.current()
     const off = transport.on((frame) => {
+      if (frame.t === 'session.ready') deviceSyncRef.current()
       if (frame.t === 'session.ready' || frame.t === 'mailbox.new' || frame.t === 'contacts.updated' || frame.t === 'conversations.updated') sync()
       if (frame.t === 'presence.snapshot') {
         const users = Array.isArray(frame.p.users) ? frame.p.users.map(String) : []
@@ -201,6 +223,94 @@ export function ChatApp() {
           return next
         }))
       }
+      if (frame.t === 'p2p.message') {
+        try {
+          const parsed = JSON.parse(String(frame.p.data ?? '')) as {
+            t?: string
+            dek?: string
+            signPk?: string
+            signSk?: string
+            boxPk?: string
+            boxSk?: string
+            file_id?: string
+            key?: string
+            header?: string
+            lengths?: number[]
+            name?: string
+            mime?: string
+            messages?: SyncMessage[]
+            ids?: string[]
+            source?: boolean
+            final?: boolean
+          }
+          if ((parsed.t === 'sync.hello' || parsed.t === 'transfer.batch') && parsed.dek && parsed.signPk && parsed.signSk && parsed.boxPk && parsed.boxSk) {
+            syncReady.current = (async () => {
+              const local = isUnlocked() ? await exportHistory() : []
+              syncSnapshot.current = local
+              const same = isUnlocked() && getIdentity().identityBox.publicKey === parsed.boxPk
+              if (same) return
+              if ((await hasVault()) && !isUnlocked()) {
+                toast(tRef.current('unlockBeforeSync'))
+                syncSnapshot.current = []
+                return
+              }
+              if (!transferPassword.current) return
+              await importTransferredIdentity(transferPassword.current, { dek: parsed.dek || '', signPk: parsed.signPk || '', signSk: parsed.signSk || '', boxPk: parsed.boxPk || '', boxSk: parsed.boxSk || '' })
+              if (local.length) await storeHistory(local)
+              setUnlocked(true)
+            })()
+          }
+          if (parsed.t === 'sync.records' && Array.isArray(parsed.messages)) {
+            const inbound = parsed.messages
+            const fromSource = parsed.source
+            const done = parsed.final
+            const peer = frame.from
+            void syncReady.current.then(() => storeHistory(inbound)).then(async (merged) => {
+              setMessages(await attachCachedFiles(merged as LocalMessage[]))
+              setUsage(await storageUsage())
+              if (fromSource && done && peer?.device) {
+                transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages: syncSnapshot.current, source: false, final: true }))
+              }
+            })
+          }
+          if (parsed.t === 'sync.manifest' && Array.isArray(parsed.ids) && frame.from?.device) {
+            void exportHistory().then((history) => {
+              const known = new Set(parsed.ids)
+              const missing = history.filter((message) => !known.has(message.id))
+              transport.sendToPeer(frame.from?.user || '', frame.from?.device || '', JSON.stringify({ t: 'sync.records', messages: missing, source: false, final: true }))
+            })
+          }
+          if (parsed.t === 'file.start' && parsed.file_id && parsed.key && parsed.header && parsed.lengths) {
+            filePull.current.set(parsed.file_id, { key: parsed.key, header: parsed.header, lengths: parsed.lengths, chunks: [], name: parsed.name || 'file', mime: parsed.mime || 'application/octet-stream' })
+          }
+          if (parsed.t === 'file.end' && parsed.file_id) {
+            const slot = filePull.current.get(parsed.file_id)
+            if (slot) {
+              const total = slot.chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+              const body = new Uint8Array(total)
+              let cursor = 0
+              for (const chunk of slot.chunks) {
+                body.set(chunk, cursor)
+                cursor += chunk.length
+              }
+              void decryptFile(body, slot.key, slot.header, slot.lengths).then((plain) => {
+                const url = URL.createObjectURL(new Blob([plain], { type: slot.mime }))
+                setMessages((prev) => prev.map((message) => ({ ...message, files: message.files?.map((item) => (item.id === parsed.file_id ? { ...item, url } : item)) })))
+              })
+              filePull.current.delete(parsed.file_id)
+            }
+          }
+        } catch {
+          // text envelopes are handled by mailbox and outbox paths
+        }
+      }
+      if (frame.t === 'p2p.binary') {
+        const bytes = frame.p.bytes
+        if (bytes instanceof Uint8Array) {
+          const slot = [...filePull.current.values()].at(-1)
+          slot?.chunks.push(bytes)
+        }
+      }
       if (frame.t === 'chat.file.request') fileApi.current.request(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
       if (frame.t === 'chat.file.chunk') fileApi.current.chunk(frame.p, frame.from?.user)
       if (frame.t === 'chat.file.done') fileApi.current.done(String(frame.p.file_id ?? ''))
@@ -219,7 +329,7 @@ export function ChatApp() {
           setDownloading(null)
           setTransfer(null)
         }
-        if (frame.t === 'chat.file.busy') toast(t('transferBusy'))
+        if (frame.t === 'chat.file.busy') toast(tRef.current('transferBusy'))
       }
     })
     sync()
@@ -233,7 +343,7 @@ export function ChatApp() {
       document.removeEventListener('visibilitychange', onVisible)
       window.clearInterval(timer)
     }
-  }, [mode, unlocked, relay])
+  }, [mode, unlocked, relay, session.user?.id])
 
   async function refresh() {
     const [c, conv] = await Promise.all([
@@ -246,39 +356,52 @@ export function ChatApp() {
     setPendingSync(devices.some((d) => d.trust_state === 'trusted' && !d.current))
   }
 
-  async function ensureDevice() {
+  async function ensureDevice(userId: string) {
     await ready()
-    let keys = deviceKeys()
-    if (!keys) {
-      const sign = signKeyPair()
-      const box = boxKeyPair()
-      keys = { ed25519: b64(sign.publicKey), x25519: b64(box.publicKey) }
-      saveDevicePublicKeys(keys)
-    }
-    return keys
+    return ensureDeviceSecrets(userId)
   }
 
-  async function onLogin(e: React.FormEvent) {
-    e.preventDefault()
-    const keys = await ensureDevice()
-    const res = await authApi.login({
-      username,
-      password,
-      device: { name: navigator.userAgent.slice(0, 64), platform: navigator.platform, pk_ed25519: keys.ed25519, pk_x25519: keys.x25519 },
-    })
-    if (res.status === '2fa_required' && res.challenge_id) {
-      setChallenge(res.challenge_id)
-      setMode('2fa')
+  async function onLogin(values: { username: string; password: string }) {
+    try {
+      const tempId = `pending:${values.username.trim().toLowerCase()}`
+      const keys = await ensureDevice(tempId)
+      const res = await authApi.login({
+        username: values.username,
+        password: values.password,
+        device: { name: navigator.userAgent.slice(0, 64) || 'browser', platform: navigator.platform, pk_ed25519: keys.ed25519, pk_x25519: keys.x25519 },
+      })
+      if (res.status === '2fa_required' && res.challenge_id) {
+        setChallenge(res.challenge_id)
+        setMode('2fa')
+        return
+      }
+      if (res.user) {
+        if (session.user && session.user.id !== res.user.id) resetChatRuntime()
+        const secret = takeDeviceSecrets(tempId)
+        if (secret) rememberDeviceSecrets(res.user.id, secret)
+        session.setSession(res.user, res.device?.id ?? null, res.device?.trust_state ?? null)
+        await openAccount(res.user.id)
+        setPrefs(loadPrefs(res.user.id))
+        setLimitGb(loadStorageGb(res.user.id))
+        setLegacyAvailable(await hasLegacyVault())
+        if (res.device?.trust_state === 'pending' && !transferDismissed(res.user.id)) setAskTransfer(true)
+      }
+      setMode('app')
+    } catch (err) {
+      toast(err instanceof Error ? err.message : t('couldNotRegister'))
+    }
+  }
+
+  async function onRegister(values: { username: string; password: string; display: string; invite: string }) {
+    const nameError = usernameError(values.username)
+    const displayError = values.display ? displayNameError(values.display) : ''
+    const passError = passwordError(values.password)
+    if (nameError || displayError || passError) {
+      toast(nameError || displayError || passError)
       return
     }
-    if (res.user) session.setSession(res.user, res.device?.id ?? null, res.device?.trust_state ?? null)
-    setMode('app')
-  }
-
-  async function onRegister(e: React.FormEvent) {
-    e.preventDefault()
     try {
-      await authApi.register({ invite_code: invite, username, password, display_name: display || username })
+      await authApi.register({ invite_code: values.invite, username: values.username, password: values.password, display_name: canonicalDisplayName(values.display || values.username) })
       toast(t('accountCreated'))
       setMode('login')
     } catch (err) {
@@ -286,70 +409,121 @@ export function ChatApp() {
     }
   }
 
-  async function on2fa(e: React.FormEvent) {
-    e.preventDefault()
-    const res = await authApi.login2fa({ challenge_id: challenge, code }) as { user: Me; device: { id: string; trust_state: string } }
+  async function on2fa(nextCode: string) {
+    const res = await authApi.login2fa({ challenge_id: challenge, code: nextCode }) as { user: Me; device: { id: string; trust_state: string } }
     session.setSession(res.user, res.device.id, res.device.trust_state)
+    if (res.user.id) {
+      await openAccount(res.user.id)
+      if (res.device.trust_state === 'pending' && !transferDismissed(res.user.id)) setAskTransfer(true)
+    }
     setMode('app')
   }
 
-  async function onUnlock(e: React.FormEvent) {
-    e.preventDefault()
+  async function publishIdentityIfEmpty() {
+    const pubs = { ed25519: getIdentity().identitySign.publicKey, x25519: getIdentity().identityBox.publicKey }
+    if (!session.user?.id) return
+    const existing = await api<{ x25519: string }>(`/v1/contacts/${session.user.id}/keys`).catch(() => null)
+    if (existing?.x25519 && existing.x25519 !== pubs.x25519) {
+      toast(t('identityMismatch'))
+      return
+    }
+    if (!existing?.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
+  }
+
+  async function onUnlock(password: string) {
+    const passError = passwordError(password)
+    if (passError) {
+      toast(passError)
+      return
+    }
     try {
+      if (session.user?.id) await openAccount(session.user.id)
+      setLegacyAvailable(await hasLegacyVault())
       if (!(await hasVault())) {
-        const pubs = await createVault(vaultPassword)
-        await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify({ ed25519: pubs.ed25519, x25519: pubs.x25519 }) })
+        if (session.trust === 'pending' && !allowFresh) {
+          setAskTransfer(true)
+          return
+        }
+        await createVault(password)
+        if (session.trust !== 'pending') await publishIdentityIfEmpty()
       } else {
+        const owner = await vaultOwner()
+        if (owner && session.user?.id && owner !== session.user.id) {
+          toast(t('wrongVaultAccount'))
+          return
+        }
         try {
-          await unlockVault(vaultPassword)
+          await unlockVault(password)
         } catch {
           toast(t('wrongVaultPassword'))
           return
         }
+        await publishIdentityIfEmpty()
       }
       setUnlocked(true)
-      setVaultPassword('')
     } catch (err) {
       toast(explain(err))
     }
   }
 
+  async function onImportLegacy(password: string) {
+    if (!session.user?.id) return
+    await openAccount(session.user.id)
+    const server = await api<{ x25519: string }>(`/v1/contacts/${session.user.id}/keys`).catch(() => ({ x25519: '' }))
+    const copied = await copyLegacyVault(password, session.user.id, server.x25519 || '')
+    if (!copied) {
+      toast(t('legacyMismatch'))
+      return
+    }
+    await unlockVault(password)
+    setUnlocked(true)
+  }
+
   async function drainMailbox() {
     const items = await api<{ id: string; envelope: string }[]>('/v1/mailbox/messages')
     for (const item of items) {
-      const raw = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(item.envelope), (c) => c.charCodeAt(0))))
-      const decoded = transport.decryptEnvelope(raw)
-      let body = decoded
-      let conversationId = ''
-      let at = new Date().toISOString()
-      let senderId: string | undefined
-      let files: ChatFile[] | undefined
       try {
-        const parsed = JSON.parse(decoded) as { body?: string; conversation_id?: string; sent_at?: string; sender_id?: string; files?: ChatFile[] }
-        if (typeof parsed.body === 'string') body = parsed.body
-        if (parsed.conversation_id) conversationId = parsed.conversation_id
-        if (parsed.sent_at) at = parsed.sent_at
-        senderId = parsed.sender_id
-        files = parsed.files?.map((file) => ({ ...file, via: file.via || 'mailbox' }))
+        const raw = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(item.envelope), (c) => c.charCodeAt(0))))
+        const decoded = transport.decryptEnvelope(raw)
+        const parsed = plaintextMessageSchema.safeParse(JSON.parse(decoded))
+        if (!parsed.success) continue
+        const senderId = parsed.data.sender_id
+        const files: ChatFile[] = parsed.data.attachments.map((file) => ({
+          id: file.file_id,
+          name: file.name,
+          mime: file.mime,
+          size: file.size,
+          key: file.key,
+          header: file.header,
+          lengths: file.lengths,
+          via: 'mailbox',
+        }))
+        const message: LocalMessage = {
+          id: parsed.data.message_id || item.id,
+          conversationId: parsed.data.conversation_id,
+          body: parsed.data.body,
+          mine: !!senderId && senderId === meRef.current,
+          at: parsed.data.sent_at,
+          status: 'delivered',
+          deliveredAt: parsed.data.sent_at,
+          senderId,
+          files,
+        }
+        setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
+        await sealRow('records', message.id, 'messages', withoutUrls(message))
+        await api(`/v1/mailbox/messages/${item.id}/ack`, { method: 'POST' })
+        if (senderId) transport.sendFrame(newFrame('chat.delivered', { message_ids: [message.id] }, { user: senderId }))
       } catch {
-        conversationId = ''
+        continue
       }
-      const message: LocalMessage = {
-        id: item.id,
-        conversationId,
-        body,
-        mine: !!senderId && senderId === meRef.current,
-        at,
-        status: 'delivered',
-        deliveredAt: at,
-        senderId,
-        files,
-      }
-      setMessages((prev) => (prev.some((m) => m.id === item.id) ? prev : [...prev, message]))
-      await sealRow('records', item.id, 'messages', withoutUrls(message))
-      await api(`/v1/mailbox/messages/${item.id}/ack`, { method: 'POST' })
-      if (senderId) transport.sendFrame(newFrame('chat.delivered', { message_ids: [item.id] }, { user: senderId }))
     }
+  }
+
+  syncRef.current = () => {
+    if (useSession.getState().trust === 'pending') return
+    void refresh()
+    void drainMailbox()
+    void replayOutbox()
   }
 
   function notifyTyping(peerId: string, conversationId: string) {
@@ -390,39 +564,52 @@ export function ChatApp() {
           files.push({ id: fileId, name, mime, size: file.size, via: 'peer', url })
           continue
         }
-        const form = new FormData()
-        form.set('file', file, name)
-        form.set('conversation_id', conv.id)
-        form.set('recipient_user_id', conv.peer_id)
-        form.set('file_id', fileId)
-        form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ name, mime, size: file.size }))))
+        const encrypted = await encryptFile(file)
+        const recipients = conv.kind === 'group' ? (conv.members || []).map((member) => member.id).filter((id) => id && id !== session.user?.id) : [conv.peer_id]
         transferLock.current = fileId
         activeFile = fileId
         const upload = new AbortController()
         transferAbort.current = upload
         abortFile.current = fileId
-        await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
-          if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
-          bumpTransfer('send', loaded, total, fileId, conv.peer_id)
-        }, upload.signal)
-        files.push({ id: fileId, name, mime, size: file.size, via: 'mailbox', url })
+        for (const recipientId of recipients) {
+          const form = new FormData()
+          form.set('file', new File([encrypted.bytes], `${fileId}.bin`, { type: 'application/octet-stream' }))
+          form.set('conversation_id', conv.id)
+          form.set('recipient_user_id', recipientId)
+          form.set('file_id', fileId)
+          form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, key: encrypted.key, header: encrypted.header, lengths: encrypted.lengths }))))
+          await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
+            if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
+            bumpTransfer('send', loaded, total, fileId, recipientId)
+          }, upload.signal)
+        }
+        files.push({ id: fileId, name, mime, size: file.size, via: 'mailbox', url, key: encrypted.key, header: encrypted.header, lengths: encrypted.lengths })
       }
       const message: LocalMessage = { id, conversationId: conv.id, body: text, mine: true, at, status: 'sending', senderId: session.user?.id, files }
       setMessages((prev) => [...prev, message])
       const payload = JSON.stringify({
+        message_id: id,
         conversation_id: conv.id,
-        body: text,
         sent_at: at,
+        kind: files.length ? 'file_offer' : 'text',
+        body: text,
         sender_id: session.user?.id,
-        files: files.map(({ url: _url, ...file }) => file),
+        attachments: files.map((file) => ({ file_id: file.id, name: file.name, mime: file.mime, size: file.size, key: file.key, header: file.header, lengths: file.lengths })),
       })
       const keys = await api<{ x25519: string }>(`/v1/contacts/${conv.peer_id}/keys`)
-      await transport.deliverText({ id, conversationId: conv.id, recipientUserId: conv.peer_id, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, keys.x25519)
+      const devices = conv.kind === 'group' ? [] : await api<{ id: string; x25519: string }[]>(`/v1/contacts/${conv.peer_id}/devices`).catch(() => [])
+      const recipients = conv.kind === 'group' ? (conv.members || []).filter((member) => member.id !== session.user?.id) : [{ id: conv.peer_id, username: '', display_name: '', role: 'member' }]
+      for (const recipient of recipients) {
+        const recipientKeys = recipient.id === conv.peer_id ? keys : await api<{ x25519: string }>(`/v1/contacts/${recipient.id}/keys`)
+        const deviceId = devices[0]?.id || ''
+        await transport.deliverText({ id, conversationId: conv.id, recipientUserId: recipient.id, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, recipientKeys.x25519, deviceId)
+      }
       setMessages((prev) => prev.map((m) => {
         if (m.id !== id) return m
         if (m.status !== 'sending' && m.status !== 'failed') return m
         const sent = { ...m, status: 'sent' }
         void sealRow('records', id, 'messages', withoutUrls(sent))
+        publishSyncRef.current([withoutUrls(sent)])
         return sent
       }))
       const finished = activeFile
@@ -536,8 +723,11 @@ export function ChatApp() {
           bumpTransfer('receive', loaded, total || file.size, file.id, message.senderId || '')
         }, download.signal)
         if (cancelledFiles.current.has(file.id)) return
-        url = URL.createObjectURL(blob)
-        void keepBytes(file.id, blob)
+        let plain = new Uint8Array(await blob.arrayBuffer())
+        if (file.key && file.header && file.lengths?.length) plain = await decryptFile(plain, file.key, file.header, file.lengths)
+        const decoded = new Blob([plain], { type: file.mime || 'application/octet-stream' })
+        url = URL.createObjectURL(decoded)
+        void keepBytes(file.id, decoded)
         setTransfer((cur) => (cancelledFiles.current.has(file.id) || cur?.fileId !== file.id ? cur : { ...cur, title: t('received'), loaded: cur.total || blob.size }))
         window.setTimeout(() => {
           setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
@@ -691,46 +881,27 @@ export function ChatApp() {
   }
 
   async function sendFileChunks(file: File, fileId: string, userId: string) {
-    if (transferLock.current === fileId) return
     if (transferLock.current && transferLock.current !== fileId) {
       if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
       return
     }
-    const run = ++transferEpoch.current
     transferLock.current = fileId
-    await ready()
-    const size = 16 * 1024
-    const total = Math.max(1, Math.ceil(file.size / size))
-    let sent = 0
-    for (let index = 0; index < total; index++) {
-      if (run !== transferEpoch.current || cancelledFiles.current.has(fileId)) {
-        if (transferLock.current === fileId) transferLock.current = null
-        return
-      }
-      const slice = file.slice(index * size, Math.min(file.size, (index + 1) * size))
-      const bytes = new Uint8Array(await slice.arrayBuffer())
-      if (run !== transferEpoch.current || cancelledFiles.current.has(fileId)) {
-        if (transferLock.current === fileId) transferLock.current = null
-        return
-      }
-      while (transport.buffered() > 64 * 1024) {
-        if (run !== transferEpoch.current || cancelledFiles.current.has(fileId)) {
-          if (transferLock.current === fileId) transferLock.current = null
-          return
-        }
-        await new Promise((resolve) => window.setTimeout(resolve, 20))
-      }
-      sent += bytes.byteLength
-      transport.sendFrame(newFrame('chat.file.chunk', { file_id: fileId, i: index, n: total, size: file.size, data: bytes.length ? b64(bytes) : b64(new Uint8Array()) }, { user: userId }))
-      bumpTransfer('send', sent, file.size, fileId, userId)
-      if (index % 4 === 3) await new Promise((resolve) => window.setTimeout(resolve, 20))
-    }
-    if (run !== transferEpoch.current || cancelledFiles.current.has(fileId)) {
+    const devices = await api<{ id: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
+    const deviceId = devices[0]?.id || ''
+    const channel = deviceId ? await transport.ensurePeer(userId, deviceId) : null
+    if (!channel || channel.readyState !== 'open') {
+      toast(t('waitingPeer'))
       if (transferLock.current === fileId) transferLock.current = null
       return
     }
-    transport.sendFrame(newFrame('chat.file.done', { file_id: fileId }, { user: userId }))
-    setTransfer((cur) => (cur?.fileId === fileId ? { ...cur, title: transferTitle('send', userId), loaded: file.size, total: file.size } : cur))
+    const encrypted = await encryptFile(file)
+    channel.send(JSON.stringify({ t: 'file.start', file_id: fileId, name: file.name, mime: file.type, size: file.size, key: encrypted.key, header: encrypted.header, lengths: encrypted.lengths }))
+    const size = 64 * 1024
+    for (let offset = 0; offset < encrypted.bytes.length; offset += size) {
+      channel.send(encrypted.bytes.subarray(offset, Math.min(encrypted.bytes.length, offset + size)))
+      bumpTransfer('send', offset, file.size, fileId, userId)
+    }
+    channel.send(JSON.stringify({ t: 'file.end', file_id: fileId }))
     window.setTimeout(() => {
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
       if (transferLock.current === fileId) transferLock.current = null
@@ -784,25 +955,85 @@ export function ChatApp() {
   }
 
   async function startPair() {
-    await ensureDevice()
+    if (!session.user) return
+    const keys = ensureDeviceSecrets(session.user.id)
     const res = await api<{ pairing_id: string; code: string }>('/v1/devices/pairing', { method: 'POST' })
     setPairId(res.pairing_id)
     setPairCode(res.code)
-    const keys = loadDevicePublicKeys()
-    setPairQr(await QRCode.toDataURL(JSON.stringify({ pairing_id: res.pairing_id, pk: keys?.x25519, code: res.code })))
+    setPairQr(await QRCode.toDataURL(JSON.stringify({ pairing_id: res.pairing_id, pk: keys.x25519, code: res.code })))
   }
 
-  async function claimPair(pairingId: string, codeValue: string, pkB: string) {
-    const local = loadDevicePublicKeys()
-    if (!pairingId || !local?.x25519 || !pkB) return
+  async function approvePair() {
+    if (!pairId || !session.user) return
+    const local = publicDeviceKeys(session.user.id)
+    const status = await api<{ state: string; fingerprint?: string; target_device_id?: string; target_x25519?: string }>(`/v1/devices/pairing/${pairId}`)
+    if (status.state !== 'claimed' || !status.target_device_id || !status.target_x25519 || !local) {
+      toast(t('waitingPeer'))
+      return
+    }
+    setPairFingerprint(status.fingerprint || '')
+    const tag = pairingConfirm(pairCode, unb64(local.x25519), unb64(status.target_x25519), pairId)
+    await api(`/v1/devices/pairing/${pairId}/confirm`, { method: 'POST', body: JSON.stringify({ tag }) })
+    const channel = await transport.ensurePeer(session.user.id, status.target_device_id)
+    if (channel && channel.readyState === 'open' && isUnlocked()) {
+      const identity = getIdentity()
+      const history = await exportHistory()
+      channel.send(JSON.stringify({
+        t: 'sync.hello',
+        dek: b64(identity.dek),
+        signPk: identity.identitySign.publicKey,
+        signSk: b64(identity.identitySign.privateKey),
+        boxPk: identity.identityBox.publicKey,
+        boxSk: b64(identity.identityBox.privateKey),
+      }))
+      const batches = chunkMessages(history)
+      if (!batches.length) channel.send(JSON.stringify({ t: 'sync.records', messages: [], source: true, final: true }))
+      batches.forEach((messages, index) => {
+        channel.send(JSON.stringify({ t: 'sync.records', messages, source: true, final: index === batches.length - 1 }))
+      })
+    }
+    await api(`/v1/devices/pairing/${pairId}/complete`, { method: 'POST' })
+    toast(t('transferDone'))
+  }
+
+  async function claimPair(pairingId: string, codeValue: string) {
+    const local = session.user ? publicDeviceKeys(session.user.id) : null
+    if (!pairingId || !local?.x25519 || !codeValue) return
     try {
-      await api(`/v1/devices/pairing/${pairingId}/claim`, { method: 'POST' })
-      const tag = pairingConfirm(codeValue, unhex(local.x25519), unhex(pkB), pairingId)
-      transport.sendFrame(newFrame('pair.confirm', { tag, pairing_id: pairingId }))
+      const claimed = await api<{ device_id: string; fingerprint: string }>(`/v1/devices/pairing/${pairingId}/claim`, { method: 'POST', body: JSON.stringify({ code: codeValue }) })
+      setPairFingerprint(claimed.fingerprint)
+      if (session.user?.id) transport.setLocalUser(session.user.id)
+      transport.connect()
       toast(t('confirmPairing'))
     } catch (err) {
       toast(explain(err))
     }
+  }
+
+  deviceSyncRef.current = () => {
+    const user = session.user
+    if (!user || session.trust === 'pending' || !isUnlocked()) return
+    void (async () => {
+      const devices = await api<{ id: string; trust_state: string; current?: boolean }[]>('/v1/devices').catch(() => [])
+      const ids = (await exportHistory()).map((message) => message.id)
+      for (const device of devices) {
+        if (device.current || device.trust_state !== 'trusted') continue
+        const channel = await transport.ensurePeer(user.id, device.id).catch(() => null)
+        if (channel?.readyState === 'open') channel.send(JSON.stringify({ t: 'sync.manifest', ids }))
+      }
+    })()
+  }
+  publishSyncRef.current = (messages) => {
+    const user = session.user
+    if (!user || session.trust === 'pending' || !messages.length) return
+    void (async () => {
+      const devices = await api<{ id: string; trust_state: string; current?: boolean }[]>('/v1/devices').catch(() => [])
+      for (const device of devices) {
+        if (device.current || device.trust_state !== 'trusted') continue
+        const channel = await transport.ensurePeer(user.id, device.id).catch(() => null)
+        if (channel?.readyState === 'open') channel.send(JSON.stringify({ t: 'sync.records', messages, source: false, final: true }))
+      }
+    })()
   }
 
   const thread = useMemo(() => messages.filter((m) => m.conversationId === active), [messages, active])
@@ -826,7 +1057,7 @@ export function ChatApp() {
 
   function savePrefs(next: Record<string, ChatPref>) {
     setPrefs(next)
-    localStorage.setItem('ma.chat.prefs', JSON.stringify(next))
+    if (session.user?.id) savePrefsStore(session.user.id, next)
   }
 
   function togglePref(conversationId: string, key: 'pinned' | 'muted') {
@@ -838,7 +1069,7 @@ export function ChatApp() {
     if (!window.confirm(t('clearHistoryConfirm'))) return
     const ids = messages.filter((m) => m.conversationId === conversationId).map((m) => m.id)
     setMessages((prev) => prev.filter((m) => m.conversationId !== conversationId))
-    await Promise.all(ids.map((id) => db.records.delete(id)))
+    await Promise.all(ids.map((id) => activeDatabase().records.delete(id)))
   }
 
   async function setBlocked(userId: string, blocked: boolean) {
@@ -852,6 +1083,7 @@ export function ChatApp() {
   }
 
   function convTitle(c: Conversation) {
+    if (c.kind === 'group') return c.title || t('newGroup')
     if (me && c.peer_id === me) return t('savedMessages')
     return c.peer_name || c.peer_username || ''
   }
@@ -863,7 +1095,9 @@ export function ChatApp() {
       { id: 'pin', label: pref.pinned ? t('unpin') : t('pin'), onSelect: () => togglePref(c.id, 'pinned') },
       { id: 'clear', label: t('clearHistory'), onSelect: () => void clearHistory(c.id) },
     ]
-    if (!self) {
+    if (c.kind === 'group') {
+      items.push({ id: 'leave', label: t('leaveGroup'), onSelect: () => void api(`/v1/conversations/${c.id}/leave`, { method: 'POST' }).then(() => refresh()) })
+    } else if (!self) {
       items.push({ id: 'mute', label: pref.muted ? t('unmute') : t('mute'), onSelect: () => togglePref(c.id, 'muted') })
       items.push({ id: 'block', label: blocked(c.peer_id) ? t('unblock') : t('block'), onSelect: () => void setBlocked(c.peer_id, !blocked(c.peer_id)) })
     }
@@ -946,6 +1180,7 @@ export function ChatApp() {
             onCheckedChange={(on) => {
               setShowNames(on)
               localStorage.setItem('ma.chat.showSenderNames', on ? '1' : '0')
+              void navigator.serviceWorker?.controller?.postMessage({ type: 'notify-pref', show: on })
             }}
             label={t('showNames')}
           />
@@ -967,7 +1202,7 @@ export function ChatApp() {
                 const text = e.target.value.replace(/[^\d]/g, '')
                 const next = text === '' ? 0 : Math.min(100, Number(text))
                 setLimitGb(next)
-                localStorage.setItem('ma.chat.storageGb', String(next))
+                if (session.user?.id) saveStorageGb(session.user.id, next)
                 if (next === 0) return
                 void enforceStorageLimit().then(async (removed) => {
                   if (removed.length) setMessages((prev) => prev.filter((message) => !removed.includes(message.id)))
@@ -994,7 +1229,7 @@ export function ChatApp() {
       </SettingsSection>
       <SettingsSection title={t('security')}>
         <SettingsRow label={t('vaultPassword')}>
-          <Button variant="outline" onClick={() => void changeVaultPassword(window.prompt(t('currentPassword')) || '', window.prompt(t('newPassword')) || '').catch(() => toast(t('wrongVaultPassword')))}>{t('change')}</Button>
+          <Button variant="outline" onClick={() => setVaultDialog(true)}>{t('change')}</Button>
         </SettingsRow>
         <SettingsRow label={t('recoveryKey')} hint={t('recoveryKeyHint')}>
           <Button variant="outline" onClick={() => void addRecoverySlot().then((k) => toast(k))}>{t('create')}</Button>
@@ -1006,41 +1241,44 @@ export function ChatApp() {
           <>
             {pairCode ? <p className="px-4 py-2 font-mono text-sm">{pairCode}</p> : null}
             {pairQr ? <img alt={t('pairingQr')} src={pairQr} className="m-4 size-40" /> : null}
+            {pairFingerprint ? <p className="px-4 py-2 text-xs text-muted">{pairFingerprint}</p> : null}
             <SettingsRow label={t('confirmPairing')}>
-              <Button variant="outline" onClick={() => void claimPair(pairId, pairCode, loadDevicePublicKeys()?.x25519 ?? '')}>{t('confirm')}</Button>
+              <Button variant="outline" onClick={() => void approvePair()}>{t('confirm')}</Button>
             </SettingsRow>
+            <DeviceList enabled={mode === 'app'} userId={session.user?.id || ''} />
           </>
         ) : null}
         <SettingsRow label={t('twoFactor')}>
-          <Button variant="outline" onClick={() => void api('/v1/auth/2fa/totp/setup', { method: 'POST' }).then((r) => toast(JSON.stringify(r)))}>{t('setupTotp')}</Button>
+          <Button variant="outline" onClick={() => void api<{ otpauth_url?: string; secret?: string; recovery_codes?: string[] }>('/v1/auth/2fa/totp/setup', { method: 'POST' }).then((r) => toast(r.recovery_codes?.length ? t('recoveryCodesReady') : t('setupTotp')))}>{t('setupTotp')}</Button>
         </SettingsRow>
       </SettingsSection>
     </AppSettings>
   ) : null
 
   if (mode !== 'app') {
-    return (
-      <form className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-3 overflow-y-auto px-4 py-6" onSubmit={mode === 'register' ? onRegister : mode === '2fa' ? on2fa : onLogin}>
-        <PageHeader title={mode === 'register' ? t('createAccount') : mode === '2fa' ? t('twoFactorCode') : t('signIn')} lead={t('signInLead')} />
-        {mode === 'register' ? <Input placeholder={t('inviteCode')} value={invite} onChange={(e) => setInvite(e.target.value)} required /> : null}
-        {mode !== '2fa' ? <Input placeholder={t('username')} value={username} onChange={(e) => setUsername(e.target.value)} required /> : null}
-        {mode === 'register' ? <Input placeholder={t('displayName')} value={display} onChange={(e) => setDisplay(e.target.value)} /> : null}
-        {mode !== '2fa' ? <Input type="password" placeholder={t('accountPassword')} value={password} onChange={(e) => setPassword(e.target.value)} required /> : null}
-        {mode === '2fa' ? <Input placeholder={t('code')} value={code} onChange={(e) => setCode(e.target.value)} required /> : null}
-        <Button type="submit">{mode === 'register' ? t('register') : t('continue')}</Button>
-        {mode === 'login' ? <button type="button" className="block text-sm text-muted" onClick={() => setMode('register')}>{t('haveInvite')}</button> : null}
-      </form>
-    )
+    return <AuthScreens mode={mode} onMode={setMode} onLogin={onLogin} onRegister={onRegister} on2fa={on2fa} />
   }
 
   if (!unlocked) {
     return (
       <>
-        <form className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-3 overflow-y-auto px-4 py-6" onSubmit={onUnlock}>
-          <PageHeader title={t('unlockChat')} lead={t('unlockLead')} />
-          <Input type="password" placeholder={t('vaultPassword')} value={vaultPassword} onChange={(e) => setVaultPassword(e.target.value)} required />
-          <Button type="submit">{t('unlock')}</Button>
-        </form>
+        <UnlockScreen onUnlock={onUnlock} onImport={onImportLegacy} showImport={legacyAvailable} />
+        <TransferPrompt
+          open={askTransfer}
+          onLater={() => {
+            if (session.user?.id) dismissTransfer(session.user.id)
+            setAskTransfer(false)
+          }}
+          onFresh={() => {
+            setAllowFresh(true)
+            setAskTransfer(false)
+          }}
+          onTransfer={async (pairingId, code, nextPassword) => {
+            transferPassword.current = nextPassword
+            await claimPair(pairingId, code)
+            setAskTransfer(false)
+          }}
+        />
       </>
     )
   }
@@ -1048,12 +1286,56 @@ export function ChatApp() {
   return (
     <>
     {chatSettings}
+    <Dialog open={vaultDialog} onOpenChange={setVaultDialog} title={t('vaultPassword')} description={t('vaultPasswordSeparate')}>
+      <form className="flex flex-col gap-3" onSubmit={(e) => {
+        e.preventDefault()
+        if (passwordError(nextVaultPassword)) {
+          toast(passwordError(nextVaultPassword))
+          return
+        }
+        void changeVaultPassword(currentVaultPassword, nextVaultPassword).then(() => {
+          setVaultDialog(false)
+          setCurrentVaultPassword('')
+          setNextVaultPassword('')
+        }).catch(() => toast(t('wrongVaultPassword')))
+      }}>
+        <Input type="password" placeholder={t('currentPassword')} aria-label={t('currentPassword')} value={currentVaultPassword} onChange={(e) => setCurrentVaultPassword(e.target.value)} />
+        <Input type="password" placeholder={t('newPassword')} aria-label={t('newPassword')} value={nextVaultPassword} onChange={(e) => setNextVaultPassword(e.target.value)} />
+        <Button type="submit">{t('change')}</Button>
+      </form>
+    </Dialog>
+    <TransferPrompt
+      open={askTransfer && !!unlocked}
+      onLater={() => {
+        if (session.user?.id) dismissTransfer(session.user.id)
+        setAskTransfer(false)
+      }}
+      onFresh={() => {
+        if (session.user?.id) dismissTransfer(session.user.id)
+        setAskTransfer(false)
+      }}
+      onTransfer={async (pairingId, code, nextPassword) => {
+        transferPassword.current = nextPassword
+        await claimPair(pairingId, code)
+        setAskTransfer(false)
+      }}
+    />
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 md:grid-cols-[18rem_minmax(0,1fr)]">
       <aside className={`${active ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col border-line md:flex md:border-r`}>
         <form onSubmit={addContact} className="flex shrink-0 gap-2 border-b border-line p-3">
-          <Input placeholder={t('friendUsername')} value={lookup} onChange={(e) => setLookup(e.target.value)} />
+          <Input placeholder={t('friendUsername')} aria-label={t('friendUsername')} value={lookup} onChange={(e) => setLookup(e.target.value)} />
           <Button type="submit" variant="outline" className="shrink-0">{t('add')}</Button>
+          <CreateGroup contacts={contacts} onCreate={async (title, memberIds) => {
+            if (groupNameError(title)) {
+              toast(groupNameError(title))
+              return
+            }
+            const conv = await api<Conversation>('/v1/conversations', { method: 'POST', body: JSON.stringify({ kind: 'group', title, member_ids: memberIds }) })
+            setConversations((prev) => (prev.some((c) => c.id === conv.id) ? prev : [...prev, conv]))
+            setActive(conv.id)
+          }} />
         </form>
+        {session.user && transferDismissed(session.user.id) ? <Button type="button" variant="ghost" className="mx-3 mt-2" onClick={() => setAskTransfer(true)}>{t('transferChats')}</Button> : null}
         {pendingSync ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('syncHint')}</p> : null}
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {me && !conversations.some((c) => c.peer_id === me) ? (
@@ -1205,14 +1487,6 @@ export function ChatApp() {
   )
 }
 
-function readLimitGb() {
-  const raw = localStorage.getItem('ma.chat.storageGb')
-  if (raw === null || raw === '') return 5
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n < 0) return 5
-  return Math.min(100, Math.floor(n))
-}
-
 function shouldKeep(mime: string, size: number) {
   if (size > 80 * 1024 * 1024) return false
   if (mime.startsWith('image/') || mime.startsWith('text/') || mime.startsWith('audio/')) return true
@@ -1235,22 +1509,6 @@ async function attachCachedFiles(rows: LocalMessage[]) {
     next.push({ ...row, files })
   }
   return next
-}
-
-function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(0)} KB`
-  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`
-  return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
-function loadPrefs(): Record<string, ChatPref> {
-  try {
-    const parsed = JSON.parse(localStorage.getItem('ma.chat.prefs') || '{}') as Record<string, ChatPref>
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
 }
 
 function stamp(iso: string, cycle: '24' | '12') {
@@ -1280,12 +1538,14 @@ function withoutUrls(message: LocalMessage): LocalMessage {
 }
 
 function statusLabel(translate: (key: string) => string, status: string) {
-  if (status === 'sending') return translate('statusSending')
-  if (status === 'sent') return translate('statusSent')
+  if (status === 'sending' || status === 'queued' || status === 'connecting') return translate('statusSending')
+  if (status === 'sent' || status === 'stored' || status === 'mailboxing' || status === 'sending_p2p') return translate('statusSent')
+  if (status === 'waiting_peer') return translate('waitingPeer')
   if (status === 'delivered') return translate('statusDelivered')
   if (status === 'read') return translate('statusRead')
   if (status === 'failed') return translate('statusFailed')
   if (status === 'expired') return translate('statusExpired')
+  if (status === 'cancelled') return translate('cancelled')
   return status
 }
 
@@ -1328,7 +1588,3 @@ function BackIcon() {
   )
 }
 
-function unhex(value: string) {
-  const bin = atob(value.replace(/-/g, '+').replace(/_/g, '/'))
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0))
-}

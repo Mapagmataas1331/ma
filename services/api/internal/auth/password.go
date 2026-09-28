@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/argon2"
 )
@@ -23,8 +24,12 @@ var common = map[string]struct{}{
 }
 
 func ValidatePassword(pw string) error {
-	if len(pw) < 10 {
+	count := utf8.RuneCountInString(pw)
+	if count < PasswordMin {
 		return errors.New("password_too_short")
+	}
+	if count > PasswordMax || len(pw) > PasswordBytes {
+		return errors.New("password_too_long")
 	}
 	if _, ok := common[strings.ToLower(pw)]; ok {
 		return errors.New("password_common")

@@ -18,6 +18,10 @@ Offline files are encrypted before upload. The per-file key is inside the client
 
 A script in this origin can read the in-memory DEK and local history. CSP, no third-party scripts, and auto-lock reduce the window. Encryption at rest does not help after unlock.
 
+## Shared browser profile
+
+Vaults, preferences, outboxes, and device secret keys are partitioned by user id. Logging out locks the vault, zeroes key material, closes sockets, and closes that account's database. A legacy vault whose identity key does not match the signed-in account is not claimed or deleted.
+
 ## Stolen device
 
 Locked vault: the DEK is wrapped with Argon2id. Strength depends on the vault password. Unlocked and unattended: auto-lock is the control.

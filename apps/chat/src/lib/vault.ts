@@ -14,7 +14,7 @@ import {
   zero,
   type WrappedSlot,
 } from '@ma/crypto'
-import { db } from './db'
+import { accountKey, activeDatabase, activeUserId } from './db'
 
 type Secrets = {
   dek: Uint8Array
@@ -55,12 +55,12 @@ function armLock(minutes = 15) {
 }
 
 async function readSlots() {
-  const row = await db.vault.get('main')
+  const row = await activeDatabase().vault.get('main')
   return (row?.slots ?? []) as WrappedSlot[]
 }
 
 export async function hasVault() {
-  return Boolean(await db.vault.get('main'))
+  return Boolean(await activeDatabase().vault.get('main'))
 }
 
 export async function createVault(password: string) {
@@ -77,8 +77,8 @@ export async function createVault(password: string) {
     boxSk: b64(box.privateKey),
   }
   const rec = encryptRecord(dek, 'identity', 'keys', keys)
-  await db.vault.put({ id: 'main', version: 1, slots: [slot], createdAt: new Date().toISOString() })
-  await db.records.put({ id: 'identity', nonce: rec.nonce, ciphertext: rec.ciphertext })
+  await activeDatabase().vault.put({ id: 'main', version: 1, ownerUserId: activeUserId(), slots: [slot], createdAt: new Date().toISOString() })
+  await activeDatabase().records.put({ id: 'identity', nonce: rec.nonce, ciphertext: rec.ciphertext })
   secrets = {
     dek,
     identitySign: { publicKey: keys.signPk, privateKey: sign.privateKey },
@@ -88,13 +88,37 @@ export async function createVault(password: string) {
   return { ed25519: keys.signPk, x25519: keys.boxPk }
 }
 
+export async function importTransferredIdentity(password: string, payload: { dek: string; signPk: string; signSk: string; boxPk: string; boxSk: string }) {
+  await ready()
+  const dek = unb64(payload.dek)
+  const kdf = interactiveKdf()
+  const slot = wrapDek(deriveKek(password, kdf), dek, 'password', kdf)
+  const keys = { signPk: payload.signPk, signSk: payload.signSk, boxPk: payload.boxPk, boxSk: payload.boxSk }
+  const rec = encryptRecord(dek, 'identity', 'keys', keys)
+  await activeDatabase().vault.put({ id: 'main', version: 1, ownerUserId: activeUserId(), slots: [slot], createdAt: new Date().toISOString() })
+  await activeDatabase().records.put({ id: 'identity', nonce: rec.nonce, ciphertext: rec.ciphertext })
+  secrets = {
+    dek,
+    identitySign: { publicKey: payload.signPk, privateKey: unb64(payload.signSk) },
+    identityBox: { publicKey: payload.boxPk, privateKey: unb64(payload.boxSk) },
+  }
+  armLock()
+}
+
+export async function vaultOwner() {
+  const row = await activeDatabase().vault.get('main')
+  return row?.ownerUserId || ''
+}
+
 export async function unlockVault(password: string) {
   await ready()
   const slots = await readSlots()
   const slot = slots.find((s) => s.kind === 'password')
   if (!slot) throw new Error('no vault')
   const dek = unwrapDek(deriveKek(password, slot.kdf), slot)
-  const row = await db.records.get('identity')
+  const owner = await vaultOwner()
+  if (owner && owner !== activeUserId()) throw new Error('vault_owner')
+  const row = await activeDatabase().records.get('identity')
   if (!row) throw new Error('missing identity')
   const keys = decryptRecord<{ signPk: string; signSk: string; boxPk: string; boxSk: string }>(dek, 'identity', 'keys', row.nonce, row.ciphertext)
   secrets = {
@@ -114,7 +138,7 @@ export async function changeVaultPassword(current: string, next: string) {
   const kdf = interactiveKdf()
   const wrapped = wrapDek(deriveKek(next, kdf), dek, 'password', kdf)
   const others = slots.filter((s) => s.kind !== 'password')
-  await db.vault.update('main', { slots: [wrapped, ...others] })
+  await activeDatabase().vault.update('main', { slots: [wrapped, ...others] })
   zero(dek)
 }
 
@@ -125,23 +149,23 @@ export async function addRecoverySlot() {
   const kdf = interactiveKdf()
   const slot = wrapDek(deriveKek(recovery, kdf), secrets.dek, 'recovery', kdf)
   const slots = await readSlots()
-  await db.vault.update('main', { slots: [...slots.filter((s) => s.kind !== 'recovery'), slot] })
+  await activeDatabase().vault.update('main', { slots: [...slots.filter((s) => s.kind !== 'recovery'), slot] })
   return recovery
 }
 
 export async function sealRow(table: 'records' | 'outbox', id: string, kind: string, value: unknown) {
   const rec = encryptRecord(getDek(), id, kind, value)
-  await db[table].put({ id, nonce: rec.nonce, ciphertext: rec.ciphertext })
+  await activeDatabase()[table].put({ id, nonce: rec.nonce, ciphertext: rec.ciphertext })
 }
 
 export async function openRow<T>(table: 'records' | 'outbox', id: string, kind: string): Promise<T | undefined> {
-  const row = await db[table].get(id)
+  const row = await activeDatabase()[table].get(id)
   if (!row) return undefined
   return decryptRecord<T>(getDek(), id, kind, row.nonce, row.ciphertext)
 }
 
 export async function loadHistory(): Promise<{ id: string; conversationId: string; body: string; mine: boolean; at: string; status: string }[]> {
-  const rows = await db.records.toArray()
+  const rows = await activeDatabase().records.toArray()
   const out: { id: string; conversationId: string; body: string; mine: boolean; at: string; status: string }[] = []
   for (const row of rows) {
     if (row.id === 'identity') continue
@@ -159,7 +183,7 @@ export function touchVault() {
 }
 
 export function storageLimitBytes() {
-  const raw = localStorage.getItem('ma.chat.storageGb')
+  const raw = localStorage.getItem(accountKey(activeUserId(), 'storageGb'))
   if (raw === null || raw === '') return 5 * 1024 * 1024 * 1024
   const gb = Number(raw)
   if (!Number.isFinite(gb) || gb < 0) return 5 * 1024 * 1024 * 1024
@@ -169,12 +193,12 @@ export function storageLimitBytes() {
 
 export async function rememberBytes(id: string, bytes: Uint8Array) {
   const rec = encryptRecord(getDek(), id, 'files', { data: b64(bytes) })
-  await db.files.put({ id, size: bytes.byteLength, savedAt: Date.now(), nonce: rec.nonce, ciphertext: rec.ciphertext })
+  await activeDatabase().files.put({ id, size: bytes.byteLength, savedAt: Date.now(), nonce: rec.nonce, ciphertext: rec.ciphertext })
   return enforceStorageLimit()
 }
 
 export async function readBytes(id: string) {
-  const row = await db.files.get(id)
+  const row = await activeDatabase().files.get(id)
   if (!row) return
   try {
     const opened = decryptRecord<{ data: string }>(getDek(), id, 'files', row.nonce, row.ciphertext)
@@ -185,7 +209,7 @@ export async function readBytes(id: string) {
 }
 
 export async function storageUsage() {
-  const [files, records] = await Promise.all([db.files.toArray(), db.records.toArray()])
+  const [files, records] = await Promise.all([activeDatabase().files.toArray(), activeDatabase().records.toArray()])
   const fileBytes = files.reduce((sum, row) => sum + row.size, 0)
   const chatBytes = records.reduce((sum, row) => sum + row.ciphertext.length, 0)
   return {
@@ -202,15 +226,15 @@ export async function enforceStorageLimit() {
   const removed: string[] = []
   if (!Number.isFinite(limit)) return removed
   let used = (await storageUsage()).total
-  const files = await db.files.orderBy('savedAt').toArray()
+  const files = await activeDatabase().files.orderBy('savedAt').toArray()
   for (const file of files) {
     if (used <= limit) break
-    await db.files.delete(file.id)
+    await activeDatabase().files.delete(file.id)
     used -= file.size
   }
   if (used <= limit) return removed
   const opened: { id: string; at: string; bytes: number; fileIds: string[] }[] = []
-  for (const row of await db.records.toArray()) {
+  for (const row of await activeDatabase().records.toArray()) {
     if (row.id === 'identity') continue
     try {
       const message = decryptRecord<{ at?: string; files?: { id: string }[] }>(getDek(), row.id, 'messages', row.nonce, row.ciphertext)
@@ -223,13 +247,13 @@ export async function enforceStorageLimit() {
   const drop = opened.slice(0, Math.max(0, opened.length - 30))
   for (const message of drop) {
     if (used <= limit) break
-    await db.records.delete(message.id)
+    await activeDatabase().records.delete(message.id)
     used -= message.bytes
     removed.push(message.id)
     for (const fileId of message.fileIds) {
-      const file = await db.files.get(fileId)
+      const file = await activeDatabase().files.get(fileId)
       if (!file) continue
-      await db.files.delete(fileId)
+      await activeDatabase().files.delete(fileId)
       used -= file.size
     }
   }
@@ -238,8 +262,8 @@ export async function enforceStorageLimit() {
 
 export async function cleanOldFiles(days = 7) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
-  const old = await db.files.where('savedAt').below(cutoff).toArray()
-  await db.files.bulkDelete(old.map((row) => row.id))
+  const old = await activeDatabase().files.where('savedAt').below(cutoff).toArray()
+  await activeDatabase().files.bulkDelete(old.map((row) => row.id))
   const messageIds = await enforceStorageLimit()
   return {
     fileCount: old.length,

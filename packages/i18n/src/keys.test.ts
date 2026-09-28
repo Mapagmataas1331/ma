@@ -11,4 +11,8 @@ describe('common locale parity', () => {
   it('has the same keys in English and Russian', () => {
     expect(keys(ru).sort()).toEqual(keys(en).sort())
   })
+
+  it('asks the new device with the agreed transfer prompt', () => {
+    expect(en.transferAsk).toBe('Do you want to transfer your chats from another device?')
+  })
 })

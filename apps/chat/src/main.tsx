@@ -7,10 +7,6 @@ import { createBrowserRouter, RouterProvider } from 'react-router'
 import { ChatApp } from './routes/app'
 import './styles.css'
 
-if ('serviceWorker' in navigator) {
-  void navigator.serviceWorker.register('/sw-push.js')
-}
-
 const home = import.meta.env.VITE_APP_ORIGIN_HOME || 'https://ma.cyou'
 const queryClient = new QueryClient()
 

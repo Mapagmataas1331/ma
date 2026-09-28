@@ -51,7 +51,10 @@ func main() {
 			pw := make([]byte, 12)
 			_, _ = rand.Read(pw)
 			plain := base64.RawURLEncoding.EncodeToString(pw)
-			hash, err := auth.HashPassword(plain + "Aa1")
+			if err := auth.ValidatePassword(plain); err != nil {
+				panic(err)
+			}
+			hash, err := auth.HashPassword(plain)
 			if err != nil {
 				panic(err)
 			}
@@ -62,7 +65,7 @@ func main() {
 			if err := db.SetPassword(ctx, u.ID, hash); err != nil {
 				panic(err)
 			}
-			fmt.Println(plain + "Aa1")
+			fmt.Println(plain)
 		case "disable":
 			if err := db.DisableUser(ctx, os.Args[3]); err != nil {
 				panic(err)

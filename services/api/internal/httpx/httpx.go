@@ -78,10 +78,10 @@ func SecurityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-func CORS(origins []string, next http.Handler) http.Handler {
+func CORS(origins []string, dev bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && OriginAllowed(origin, origins) {
+		if origin != "" && OriginAllowed(origin, origins, dev) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Requested-With")
@@ -96,7 +96,7 @@ func CORS(origins []string, next http.Handler) http.Handler {
 	})
 }
 
-func CSRF(origins []string, next http.Handler) http.Handler {
+func CSRF(origins []string, dev bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
@@ -107,7 +107,7 @@ func CSRF(origins []string, next http.Handler) http.Handler {
 			return
 		}
 		origin := r.Header.Get("Origin")
-		if origin != "" && !OriginAllowed(origin, origins) {
+		if origin != "" && !OriginAllowed(origin, origins, dev) {
 			WriteError(w, http.StatusForbidden, "csrf", "origin not allowed")
 			return
 		}
@@ -182,11 +182,14 @@ func SessionCookie(r *http.Request, dev bool) string {
 	return c.Value
 }
 
-func OriginAllowed(origin string, origins []string) bool {
+func OriginAllowed(origin string, origins []string, dev bool) bool {
 	for _, o := range origins {
 		if strings.EqualFold(o, origin) {
 			return true
 		}
+	}
+	if !dev {
+		return false
 	}
 	u, err := url.Parse(origin)
 	if err != nil {

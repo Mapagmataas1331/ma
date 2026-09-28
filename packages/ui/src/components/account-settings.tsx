@@ -1,4 +1,5 @@
 import { ApiError, authApi } from '@ma/api-client'
+import { canonicalDisplayName, displayNameError, passwordError, usernameError } from '@ma/protocol'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -60,9 +61,16 @@ export function AccountSettings() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    const nameError = usernameError(username)
+    const passError = passwordError(password)
+    const shown = mode === 'up' ? displayNameError(display || username) : ''
+    if (nameError || passError || shown) {
+      setError(nameError || shown || passError)
+      return
+    }
     try {
       if (mode === 'up') {
-        await authApi.register({ invite_code: invite, username, password, display_name: display || username })
+        await authApi.register({ invite_code: invite, username, password, display_name: canonicalDisplayName(display || username) })
         setMode('in')
         setInvite('')
         return

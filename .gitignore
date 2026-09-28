@@ -10,6 +10,9 @@ test-results
 .vite
 blob-report
 services/api/bin
+services/api/mailbox/
+services/api/.acme/
+.wrangler/
 services/api/api
 services/api/admin
 *.exe

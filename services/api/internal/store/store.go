@@ -285,7 +285,7 @@ func (s *Store) TrustedDeviceCount(ctx context.Context, userID uuid.UUID) (int, 
 }
 
 func (s *Store) Devices(ctx context.Context, userID uuid.UUID) ([]Device, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id, user_id, name, platform, trust_state, last_seen_at FROM devices WHERE user_id=$1 AND revoked_at IS NULL ORDER BY created_at`, userID)
+	rows, err := s.Pool.Query(ctx, `SELECT id, user_id, name, platform, trust_state, last_seen_at, device_pk_x25519 FROM devices WHERE user_id=$1 AND revoked_at IS NULL ORDER BY created_at`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -293,17 +293,12 @@ func (s *Store) Devices(ctx context.Context, userID uuid.UUID) ([]Device, error)
 	var out []Device
 	for rows.Next() {
 		var d Device
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Platform, &d.Trust, &d.LastSeen); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.Platform, &d.Trust, &d.LastSeen, &d.X); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
-}
-
-func (s *Store) RevokeDevice(ctx context.Context, id uuid.UUID) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE devices SET trust_state='revoked', revoked_at=now() WHERE id=$1`, id)
-	return err
 }
 
 func (s *Store) TrustDevice(ctx context.Context, id, by uuid.UUID) error {
@@ -320,13 +315,15 @@ type Session struct {
 	ID       uuid.UUID
 	UserID   uuid.UUID
 	DeviceID *uuid.UUID
+	Created  time.Time
+	LastSeen time.Time
 	Expires  time.Time
 	Revoked  *time.Time
 }
 
 func (s *Store) SessionByHash(ctx context.Context, hash []byte) (Session, error) {
 	var sess Session
-	err := s.Pool.QueryRow(ctx, `SELECT id, user_id, device_id, expires_at, revoked_at FROM sessions WHERE token_hash=$1`, hash).Scan(&sess.ID, &sess.UserID, &sess.DeviceID, &sess.Expires, &sess.Revoked)
+	err := s.Pool.QueryRow(ctx, `SELECT id, user_id, device_id, created_at, last_seen_at, expires_at, revoked_at FROM sessions WHERE token_hash=$1`, hash).Scan(&sess.ID, &sess.UserID, &sess.DeviceID, &sess.Created, &sess.LastSeen, &sess.Expires, &sess.Revoked)
 	return sess, err
 }
 
@@ -396,6 +393,9 @@ func (s *Store) IsBlocked(ctx context.Context, owner, contact uuid.UUID) (bool, 
 
 type Conversation struct {
 	ID       uuid.UUID
+	Kind     string
+	Title    string
+	Version  int
 	PeerID   uuid.UUID
 	Peer     string
 	Username string
@@ -439,22 +439,23 @@ func (s *Store) DirectConversation(ctx context.Context, a, b uuid.UUID) (Convers
 	}
 	name, username := "", ""
 	_ = s.Pool.QueryRow(ctx, `SELECT display_name, username FROM users WHERE id=$1`, b).Scan(&name, &username)
-	return Conversation{ID: id, PeerID: b, Peer: name, Username: username}, nil
+	return Conversation{ID: id, Kind: "direct", PeerID: b, Peer: name, Username: username, Version: 1}, nil
 }
 
 func (s *Store) Conversations(ctx context.Context, user uuid.UUID) ([]Conversation, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT c.id,
+	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (c.id) c.id, c.kind, COALESCE(c.title, ''), c.membership_version,
 		COALESCE(other_user.id, self.id),
 		COALESCE(other_user.display_name, self.display_name),
 		COALESCE(other_user.username, self.username)
 		FROM conversations c
-		JOIN conversation_members me ON me.conversation_id=c.id AND me.user_id=$1
+		JOIN conversation_members me ON me.conversation_id=c.id AND me.user_id=$1 AND me.left_at IS NULL
 		JOIN users self ON self.id=$1
-		LEFT JOIN conversation_members other_m ON other_m.conversation_id=c.id AND other_m.user_id<>$1
+		LEFT JOIN conversation_members other_m ON other_m.conversation_id=c.id AND other_m.user_id<>$1 AND other_m.left_at IS NULL
 		LEFT JOIN users other_user ON other_user.id=other_m.user_id
-		WHERE other_user.id IS NOT NULL OR NOT EXISTS (
-			SELECT 1 FROM conversation_members x WHERE x.conversation_id=c.id AND x.user_id<>$1
-		)`, user)
+		WHERE c.kind='group' OR other_user.id IS NOT NULL OR NOT EXISTS (
+			SELECT 1 FROM conversation_members x WHERE x.conversation_id=c.id AND x.user_id<>$1 AND x.left_at IS NULL
+		)
+		ORDER BY c.id, other_user.username`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +463,7 @@ func (s *Store) Conversations(ctx context.Context, user uuid.UUID) ([]Conversati
 	var out []Conversation
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.PeerID, &c.Peer, &c.Username); err != nil {
+		if err := rows.Scan(&c.ID, &c.Kind, &c.Title, &c.Version, &c.PeerID, &c.Peer, &c.Username); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -553,10 +554,37 @@ func (s *Store) GlobalUsage(ctx context.Context) (int64, error) {
 	return n, err
 }
 
-func (s *Store) PutFile(ctx context.Context, conv, sender, recipient, fileID uuid.UUID, envelope []byte, size int64, sha []byte, path string, expires time.Time) error {
-	_, err := s.Pool.Exec(ctx, `INSERT INTO mailbox_files (conversation_id, sender_user_id, recipient_user_id, file_id, envelope, size_bytes, sha256, storage_path, state, expires_at)
+func (s *Store) PutFile(ctx context.Context, conv, sender, recipient, fileID uuid.UUID, envelope []byte, size int64, sha []byte, path string, expires time.Time, userQuota, globalQuota int64) (bool, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, recipient.String()); err != nil {
+		return false, err
+	}
+	var userUsed, globalUsed int64
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE recipient_user_id=$1 AND state IN ('uploading','ready')`, recipient).Scan(&userUsed); err != nil {
+		return false, err
+	}
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE state IN ('uploading','ready')`).Scan(&globalUsed); err != nil {
+		return false, err
+	}
+	if userUsed+size > userQuota || globalUsed+size > globalQuota {
+		return false, ErrForbidden
+	}
+	tag, err := tx.Exec(ctx, `INSERT INTO mailbox_files (conversation_id, sender_user_id, recipient_user_id, file_id, envelope, size_bytes, sha256, storage_path, state, expires_at)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ready',$9) ON CONFLICT (recipient_user_id, file_id) DO NOTHING`, conv, sender, recipient, fileID, envelope, size, sha, path, expires)
-	return err
+	if err != nil {
+		return false, err
+	}
+	if tag.RowsAffected() != 1 {
+		return false, nil
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 type DroppedMail struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
 	"github.com/mapagmataas1331/ma/services/api/internal/auth"
+	"github.com/mapagmataas1331/ma/services/api/internal/authz"
 	"github.com/mapagmataas1331/ma/services/api/internal/config"
 	"github.com/mapagmataas1331/ma/services/api/internal/httpx"
 	"github.com/mapagmataas1331/ma/services/api/internal/quota"
@@ -27,16 +29,18 @@ import (
 	"github.com/mapagmataas1331/ma/services/api/internal/turn"
 	"github.com/pquerna/otp/totp"
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/time/rate"
 )
 
 type App struct {
-	Cfg   config.Config
-	DB    *store.Store
-	Hub   *signaling.Hub
-	kek   []byte
-	mu    sync.Mutex
-	chals map[string]challenge
-	pairs map[string]pairSession
+	Cfg    config.Config
+	DB     *store.Store
+	Hub    *signaling.Hub
+	kek    []byte
+	mu     sync.Mutex
+	chals  map[string]challenge
+	pairs  map[string]pairSession
+	limits map[string]*rate.Limiter
 }
 
 type challenge struct {
@@ -46,18 +50,23 @@ type challenge struct {
 }
 
 type pairSession struct {
-	UserID   uuid.UUID
-	DeviceID uuid.UUID
-	Code     string
-	Expires  time.Time
+	UserID       uuid.UUID
+	SourceDevice uuid.UUID
+	TargetDevice uuid.UUID
+	Code         string
+	State        string
+	Expires      time.Time
 }
 
 func New(cfg config.Config, db *store.Store) *App {
-	kek, _ := base64.StdEncoding.DecodeString(cfg.ServerKEK)
-	if len(kek) != chacha20poly1305.KeySize {
+	kek, err := base64.StdEncoding.DecodeString(cfg.ServerKEK)
+	if err != nil || len(kek) != chacha20poly1305.KeySize {
 		kek = make([]byte, chacha20poly1305.KeySize)
+		if _, err = rand.Read(kek); err != nil {
+			panic(err)
+		}
 	}
-	return &App{Cfg: cfg, DB: db, Hub: signaling.New(), kek: kek, chals: map[string]challenge{}, pairs: map[string]pairSession{}}
+	return &App{Cfg: cfg, DB: db, Hub: signaling.New(), kek: kek, chals: map[string]challenge{}, pairs: map[string]pairSession{}, limits: map[string]*rate.Limiter{}}
 }
 
 func (a *App) Handler() http.Handler {
@@ -66,11 +75,13 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /version", func(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, 200, map[string]string{"version": "0.1.0"})
 	})
+	mux.HandleFunc("GET /v1/capabilities", a.capabilities)
 	mux.HandleFunc("POST /v1/auth/register", a.register)
 	mux.HandleFunc("POST /v1/auth/login", a.login)
 	mux.HandleFunc("POST /v1/auth/login/2fa", a.login2fa)
 	mux.HandleFunc("POST /v1/auth/logout", a.logout)
 	mux.HandleFunc("GET /v1/users/me", a.me)
+	mux.HandleFunc("PATCH /v1/users/me", a.patchMe)
 	mux.HandleFunc("GET /v1/users/{username}", a.profile)
 	mux.HandleFunc("GET /v1/account", a.account)
 	mux.HandleFunc("POST /v1/invites", a.createInvite)
@@ -80,15 +91,27 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/devices/{id}/revoke", a.revokeDevice)
 	mux.HandleFunc("POST /v1/devices/{id}/trust", a.trustDevice)
 	mux.HandleFunc("POST /v1/devices/pairing", a.pairStart)
+	mux.HandleFunc("GET /v1/devices/pairing/{id}", a.pairStatus)
 	mux.HandleFunc("POST /v1/devices/pairing/{id}/claim", a.pairClaim)
+	mux.HandleFunc("POST /v1/devices/pairing/{id}/confirm", a.pairConfirm)
+	mux.HandleFunc("POST /v1/devices/pairing/{id}/complete", a.pairComplete)
+	mux.HandleFunc("POST /v1/devices/pairing/{id}/cancel", a.pairCancel)
 	mux.HandleFunc("GET /v1/contacts", a.contacts)
 	mux.HandleFunc("POST /v1/contacts", a.addContact)
 	mux.HandleFunc("POST /v1/contacts/{id}/accept", a.acceptContact)
 	mux.HandleFunc("POST /v1/contacts/{id}/block", a.blockContact)
 	mux.HandleFunc("DELETE /v1/contacts/{id}/block", a.unblockContact)
 	mux.HandleFunc("GET /v1/contacts/{id}/keys", a.contactKeys)
+	mux.HandleFunc("GET /v1/contacts/{id}/devices", a.contactDevices)
 	mux.HandleFunc("GET /v1/conversations", a.conversations)
 	mux.HandleFunc("POST /v1/conversations", a.createConversation)
+	mux.HandleFunc("GET /v1/conversations/{id}", a.conversation)
+	mux.HandleFunc("PATCH /v1/conversations/{id}", a.renameConversation)
+	mux.HandleFunc("DELETE /v1/conversations/{id}", a.deleteConversation)
+	mux.HandleFunc("POST /v1/conversations/{id}/members", a.addMember)
+	mux.HandleFunc("DELETE /v1/conversations/{id}/members/{userId}", a.removeMember)
+	mux.HandleFunc("POST /v1/conversations/{id}/leave", a.leaveConversation)
+	mux.HandleFunc("POST /v1/conversations/{id}/transfer", a.transferOwnership)
 	mux.HandleFunc("POST /v1/mailbox/messages", a.postMessage)
 	mux.HandleFunc("GET /v1/mailbox/messages", a.getMessages)
 	mux.HandleFunc("POST /v1/mailbox/messages/{id}/ack", a.ackMessage)
@@ -103,19 +126,40 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/push/subscriptions", a.pushSub)
 	mux.HandleFunc("GET /v1/ws", a.ws)
 	limits := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, MaxMessageBytes: a.Cfg.MaxMessageBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
-	_ = limits
-	return httpx.Chain(mux, httpx.Recover, httpx.AccessLog, httpx.SecurityHeaders, func(h http.Handler) http.Handler { return httpx.CORS(a.Cfg.CORSOrigins, h) }, func(h http.Handler) http.Handler { return httpx.CSRF(a.Cfg.CORSOrigins, h) }, func(h http.Handler) http.Handler { return httpx.RateLimit(120, h) })
+	_ = limits.CheckMessage(0)
+	return httpx.Chain(mux, httpx.Recover, httpx.AccessLog, httpx.SecurityHeaders, func(h http.Handler) http.Handler { return httpx.CORS(a.Cfg.CORSOrigins, a.Cfg.DevInsecureHTTP, h) }, func(h http.Handler) http.Handler { return httpx.CSRF(a.Cfg.CORSOrigins, a.Cfg.DevInsecureHTTP, h) }, func(h http.Handler) http.Handler { return httpx.RateLimit(120, h) })
 }
 
 func (a *App) health(w http.ResponseWriter, r *http.Request) {
 	err := a.DB.Pool.Ping(r.Context())
 	ok := err == nil
-	httpx.WriteJSON(w, 200, map[string]any{"ok": ok, "db": ok})
+	status := 200
+	if !ok {
+		status = http.StatusServiceUnavailable
+	}
+	httpx.WriteJSON(w, status, map[string]any{"ok": ok, "db": ok})
+}
+
+func (a *App) capabilities(w http.ResponseWriter, r *http.Request) {
+	httpx.WriteJSON(w, 200, map[string]any{
+		"max_file_bytes":      a.Cfg.MaxFileBytes,
+		"max_message_bytes":   a.Cfg.MaxMessageBytes,
+		"user_quota_bytes":    a.Cfg.UserQuotaBytes,
+		"global_quota_bytes":  a.Cfg.GlobalQuotaBytes,
+		"min_free_bytes":      a.Cfg.MinFreeBytes,
+		"file_ttl_seconds":    int(a.Cfg.FileTTL.Seconds()),
+		"message_ttl_seconds": int(a.Cfg.MessageTTL.Seconds()),
+		"attachments":         "ciphertext",
+		"max_group_members":   store.MaxGroupMembers,
+	})
 }
 
 type principal struct {
-	User   store.User
-	Device *uuid.UUID
+	User      store.User
+	Device    *uuid.UUID
+	Trust     string
+	SessionID uuid.UUID
+	Created   time.Time
 }
 
 func (a *App) auth(w http.ResponseWriter, r *http.Request) (principal, bool) {
@@ -130,7 +174,7 @@ func (a *App) auth(w http.ResponseWriter, r *http.Request) (principal, bool) {
 		return principal{}, false
 	}
 	sess, err := a.DB.SessionByHash(r.Context(), hash)
-	if err != nil || sess.Revoked != nil || time.Now().After(sess.Expires) {
+	if err != nil || sess.Revoked != nil || time.Now().After(sess.Expires) || time.Now().After(sess.Created.Add(a.Cfg.SessionAbsolute)) {
 		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
@@ -139,7 +183,47 @@ func (a *App) auth(w http.ResponseWriter, r *http.Request) (principal, bool) {
 		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
-	return principal{User: user, Device: sess.DeviceID}, true
+	trust := ""
+	if sess.DeviceID != nil {
+		dev, err := a.DB.DeviceOwned(r.Context(), user.ID, *sess.DeviceID)
+		if err != nil {
+			httpx.WriteError(w, 401, "unauthorized", "sign in")
+			return principal{}, false
+		}
+		trust = dev.Trust
+	}
+	if time.Since(sess.LastSeen) > 5*time.Minute {
+		next := time.Now().Add(a.Cfg.SessionIdle)
+		absolute := sess.Created.Add(a.Cfg.SessionAbsolute)
+		if next.After(absolute) {
+			next = absolute
+		}
+		_ = a.DB.TouchSession(r.Context(), sess.ID, next)
+	}
+	return principal{User: user, Device: sess.DeviceID, Trust: trust, SessionID: sess.ID, Created: sess.Created}, true
+}
+
+func (a *App) requireChat(w http.ResponseWriter, r *http.Request) (principal, bool) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return p, false
+	}
+	if err := authz.AllowChat(authz.DeviceAccess{HasDevice: p.Device != nil, Trust: p.Trust}); err != nil {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+		return p, false
+	}
+	return p, true
+}
+
+func (a *App) allowKeyed(key string, perMinute int) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	lim := a.limits[key]
+	if lim == nil {
+		lim = rate.NewLimiter(rate.Every(time.Minute/time.Duration(perMinute)), perMinute)
+		a.limits[key] = lim
+	}
+	return lim.Allow()
 }
 
 func (a *App) register(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +235,24 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := httpx.ReadJSON(r, &body); err != nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
+		return
+	}
+	if !a.allowKeyed("register:"+httpx.ClientIP(r), 3) {
+		httpx.WriteError(w, 429, "rate_limited", "too many requests")
+		return
+	}
+	username, err := auth.CanonicalUsername(body.Username)
+	if err != nil {
+		httpx.WriteError(w, 400, "username_invalid", "username must be 3-12 letters, numbers, or underscores")
+		return
+	}
+	display := strings.TrimSpace(body.DisplayName)
+	if display == "" {
+		display = username
+	}
+	display, err = auth.CanonicalDisplayName(display)
+	if err != nil {
+		httpx.WriteError(w, 400, "display_name_invalid", "display name must be 1-32 characters")
 		return
 	}
 	if err := auth.ValidatePassword(body.Password); err != nil {
@@ -167,11 +269,7 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 500, "internal", "could not hash password")
 		return
 	}
-	display := body.DisplayName
-	if display == "" {
-		display = body.Username
-	}
-	if err := a.DB.RegisterWithInvite(r.Context(), sum[:], body.Username, display, hash); err != nil {
+	if err := a.DB.RegisterWithInvite(r.Context(), sum[:], username, display, hash); err != nil {
 		if err.Error() == "invite_invalid" {
 			httpx.WriteError(w, 400, "invite_invalid", "invite is not valid")
 			return
@@ -197,9 +295,14 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
 		return
 	}
+	if !a.allowKeyed("login:"+httpx.ClientIP(r)+":"+strings.ToLower(body.Username), 5) {
+		httpx.WriteError(w, 429, "rate_limited", "too many requests")
+		return
+	}
 	user, err := a.DB.UserByName(r.Context(), body.Username)
 	if err != nil || !auth.VerifyPassword(user.Password, body.Password) || user.Disabled != nil {
 		httpx.WriteError(w, 401, "invalid_credentials", "username or password is wrong")
+		a.event(r, nil, "login_failed")
 		return
 	}
 	if body.Device.Ed == "" || body.Device.X == "" {
@@ -214,12 +317,27 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		a.issue(w, r, user, store.Device{})
 		return
 	}
-	ed, _ := base64.RawURLEncoding.DecodeString(body.Device.Ed)
-	x, _ := base64.RawURLEncoding.DecodeString(body.Device.X)
+	if err := auth.ValidateDeviceName(body.Device.Name); err != nil {
+		body.Device.Name = "browser"
+	}
+	ed, err := decodePublicKey(body.Device.Ed)
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "device key")
+		return
+	}
+	x, err := decodePublicKey(body.Device.X)
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "device key")
+		return
+	}
 	count, _ := a.DB.TrustedDeviceCount(r.Context(), user.ID)
 	dev, err := a.DB.UpsertDevice(r.Context(), user.ID, body.Device.Name, body.Device.Platform, ed, x, count == 0)
 	if err != nil {
 		httpx.WriteError(w, 500, "internal", "device")
+		return
+	}
+	if dev.Trust == "revoked" {
+		httpx.WriteError(w, 403, "device_revoked", "this device was revoked")
 		return
 	}
 	if user.TOTP {
@@ -230,6 +348,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, 200, map[string]string{"status": "2fa_required", "challenge_id": id})
 		return
 	}
+	a.event(r, &user.ID, "login")
 	a.issue(w, r, user, dev)
 }
 
@@ -300,7 +419,11 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName, "email": p.User.Email, "totp_enabled": p.User.TOTP})
+	deviceID := ""
+	if p.Device != nil {
+		deviceID = p.Device.String()
+	}
+	httpx.WriteJSON(w, 200, map[string]any{"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName, "email": p.User.Email, "totp_enabled": p.User.TOTP, "device_id": deviceID, "trust_state": p.Trust})
 }
 
 func (a *App) profile(w http.ResponseWriter, r *http.Request) {
@@ -391,7 +514,7 @@ func (a *App) revokeInvite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) identity(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -403,8 +526,19 @@ func (a *App) identity(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
 		return
 	}
-	ed, _ := base64.RawURLEncoding.DecodeString(body.Ed)
-	x, _ := base64.RawURLEncoding.DecodeString(body.X)
+	ed, err := decodePublicKey(body.Ed)
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "key")
+		return
+	}
+	x, err := decodePublicKey(body.X)
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "key")
+		return
+	}
+	if len(p.User.Ed25519) > 0 && !bytesEqual(p.User.Ed25519, ed) {
+		a.event(r, &p.User.ID, "identity_changed")
+	}
 	if err := a.DB.SetIdentity(r.Context(), p.User.ID, ed, x); err != nil {
 		httpx.WriteError(w, 500, "internal", "keys")
 		return
@@ -425,7 +559,7 @@ func (a *App) devices(w http.ResponseWriter, r *http.Request) {
 	out := []map[string]any{}
 	for _, d := range list {
 		current := p.Device != nil && *p.Device == d.ID
-		out = append(out, map[string]any{"id": d.ID, "name": d.Name, "platform": d.Platform, "trust_state": d.Trust, "last_seen_at": d.LastSeen, "current": current})
+		out = append(out, map[string]any{"id": d.ID, "name": d.Name, "platform": d.Platform, "trust_state": d.Trust, "last_seen_at": d.LastSeen, "current": current, "x25519": base64.RawURLEncoding.EncodeToString(d.X)})
 	}
 	httpx.WriteJSON(w, 200, out)
 }
@@ -435,12 +569,29 @@ func (a *App) revokeDevice(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if p.Trust != "trusted" || p.Device == nil {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+		return
+	}
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
 		httpx.WriteError(w, 400, "bad_request", "id")
 		return
 	}
-	_ = a.DB.RevokeDevice(r.Context(), id)
+	var body struct {
+		ConfirmLast bool `json:"confirm_last"`
+	}
+	_ = httpx.ReadJSON(r, &body)
+	if err := a.DB.RevokeOwnedDevice(r.Context(), p.User.ID, id, body.ConfirmLast); err != nil {
+		if errors.Is(err, store.ErrLastTrusted) {
+			httpx.WriteError(w, 409, "last_trusted_device", "confirm revoking the only trusted device")
+			return
+		}
+		httpx.WriteError(w, 404, "not_found", "device")
+		return
+	}
+	a.Hub.Close(p.User.ID, id)
+	a.event(r, &p.User.ID, "device_revoked")
 	a.Hub.Notify(r.Context(), p.User.ID, signaling.Frame{V: 1, T: "device.revoked", ID: uuid.NewString(), P: map[string]any{"id": id.String()}})
 	w.WriteHeader(204)
 }
@@ -451,12 +602,35 @@ func (a *App) trustDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil || p.Device == nil {
-		httpx.WriteError(w, 400, "bad_request", "id")
+	if err != nil || p.Device == nil || p.Trust != "trusted" {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
 		return
 	}
-	_ = a.DB.TrustDevice(r.Context(), id, *p.Device)
+	if err := a.DB.TrustOwnedDevice(r.Context(), p.User.ID, id, *p.Device); err != nil {
+		httpx.WriteError(w, 404, "not_found", "device")
+		return
+	}
+	a.event(r, &p.User.ID, "device_trusted")
+	a.Hub.Notify(r.Context(), p.User.ID, signaling.Frame{V: 1, T: "device.trusted", ID: uuid.NewString(), P: map[string]any{"id": id.String()}})
 	w.WriteHeader(204)
+}
+
+func pairingCode() (string, error) {
+	const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	buf := make([]byte, 8)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	out := make([]byte, len(buf))
+	for i, b := range buf {
+		out[i] = alphabet[int(b)%len(alphabet)]
+	}
+	return string(out), nil
+}
+
+func pairFingerprint(id string, source, target uuid.UUID) string {
+	sum := sha256.Sum256([]byte(id + "|" + source.String() + "|" + target.String()))
+	return hex.EncodeToString(sum[:4])
 }
 
 func (a *App) pairStart(w http.ResponseWriter, r *http.Request) {
@@ -464,16 +638,53 @@ func (a *App) pairStart(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	code := randomCode()
-	id := uuid.NewString()
-	dev := uuid.Nil
-	if p.Device != nil {
-		dev = *p.Device
+	if p.Device == nil || p.Trust != "trusted" {
+		httpx.WriteError(w, 403, "device_untrusted", "a trusted device must start transfer")
+		return
 	}
+	code, err := pairingCode()
+	if err != nil {
+		httpx.WriteError(w, 500, "internal", "pairing")
+		return
+	}
+	id := uuid.NewString()
 	a.mu.Lock()
-	a.pairs[id] = pairSession{UserID: p.User.ID, DeviceID: dev, Code: code, Expires: time.Now().Add(2 * time.Minute)}
+	a.pairs[id] = pairSession{UserID: p.User.ID, SourceDevice: *p.Device, Code: code, State: "created", Expires: time.Now().Add(10 * time.Minute)}
 	a.mu.Unlock()
-	httpx.WriteJSON(w, 201, map[string]string{"pairing_id": id, "code": code})
+	httpx.WriteJSON(w, 201, map[string]string{"pairing_id": id, "code": code, "state": "created"})
+}
+
+func (a *App) loadPair(id string, user uuid.UUID) (pairSession, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	sess, ok := a.pairs[id]
+	if !ok || sess.UserID != user || time.Now().After(sess.Expires) || sess.State == "cancelled" || sess.State == "expired" {
+		return pairSession{}, false
+	}
+	return sess, true
+}
+
+func (a *App) pairStatus(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	sess, ok := a.loadPair(r.PathValue("id"), p.User.ID)
+	if !ok || p.Device == nil || (*p.Device != sess.SourceDevice && *p.Device != sess.TargetDevice) {
+		httpx.WriteError(w, 404, "not_found", "pairing expired")
+		return
+	}
+	out := map[string]string{"state": sess.State, "source_device_id": sess.SourceDevice.String()}
+	if sess.TargetDevice != uuid.Nil {
+		out["target_device_id"] = sess.TargetDevice.String()
+		out["fingerprint"] = pairFingerprint(r.PathValue("id"), sess.SourceDevice, sess.TargetDevice)
+		var x []byte
+		_ = a.DB.Pool.QueryRow(r.Context(), `SELECT device_pk_x25519 FROM devices WHERE id=$1 AND user_id=$2`, sess.TargetDevice, p.User.ID).Scan(&x)
+		if len(x) == 32 {
+			out["target_x25519"] = base64.RawURLEncoding.EncodeToString(x)
+		}
+	}
+	httpx.WriteJSON(w, 200, out)
 }
 
 func (a *App) pairClaim(w http.ResponseWriter, r *http.Request) {
@@ -481,19 +692,92 @@ func (a *App) pairClaim(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := httpx.ReadJSON(r, &body); err != nil {
+		httpx.WriteError(w, 400, "bad_request", "invalid json")
+		return
+	}
 	id := r.PathValue("id")
 	a.mu.Lock()
 	sess, exists := a.pairs[id]
-	a.mu.Unlock()
-	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) {
+	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) || sess.State != "created" || p.Device == nil || p.Trust != "pending" || *p.Device == sess.SourceDevice || subtle.ConstantTimeCompare([]byte(sess.Code), []byte(body.Code)) != 1 {
+		a.mu.Unlock()
 		httpx.WriteError(w, 404, "not_found", "pairing expired")
 		return
 	}
-	httpx.WriteJSON(w, 200, map[string]string{"status": "claimed"})
+	sess.State = "claimed"
+	sess.TargetDevice = *p.Device
+	a.pairs[id] = sess
+	a.mu.Unlock()
+	httpx.WriteJSON(w, 200, map[string]string{
+		"status": "claimed", "state": "claimed", "device_id": sess.SourceDevice.String(),
+		"fingerprint": pairFingerprint(id, sess.SourceDevice, sess.TargetDevice),
+	})
+}
+
+func (a *App) pairConfirm(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	a.mu.Lock()
+	sess, exists := a.pairs[id]
+	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) || sess.State != "claimed" || p.Device == nil || p.Trust != "trusted" || *p.Device != sess.SourceDevice {
+		a.mu.Unlock()
+		httpx.WriteError(w, 404, "not_found", "pairing expired")
+		return
+	}
+	sess.State = "confirmed"
+	a.pairs[id] = sess
+	a.mu.Unlock()
+	w.WriteHeader(204)
+}
+
+func (a *App) pairComplete(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	a.mu.Lock()
+	sess, exists := a.pairs[id]
+	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) || (sess.State != "confirmed" && sess.State != "transferring") || p.Device == nil || p.Trust != "trusted" || *p.Device != sess.SourceDevice || sess.TargetDevice == uuid.Nil {
+		a.mu.Unlock()
+		httpx.WriteError(w, 404, "not_found", "pairing expired")
+		return
+	}
+	sess.State = "trusted"
+	delete(a.pairs, id)
+	a.mu.Unlock()
+	if err := a.DB.TrustOwnedDevice(r.Context(), p.User.ID, sess.TargetDevice, sess.SourceDevice); err != nil {
+		httpx.WriteError(w, 404, "not_found", "device")
+		return
+	}
+	a.event(r, &p.User.ID, "device_trusted")
+	w.WriteHeader(204)
+}
+
+func (a *App) pairCancel(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	id := r.PathValue("id")
+	a.mu.Lock()
+	sess, exists := a.pairs[id]
+	if exists && sess.UserID == p.User.ID && p.Device != nil && (*p.Device == sess.SourceDevice || *p.Device == sess.TargetDevice) {
+		sess.State = "cancelled"
+		a.pairs[id] = sess
+	}
+	a.mu.Unlock()
+	w.WriteHeader(204)
 }
 
 func (a *App) contacts(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -510,7 +794,7 @@ func (a *App) contacts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) addContact(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -535,7 +819,7 @@ func (a *App) addContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) acceptContact(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -549,7 +833,7 @@ func (a *App) acceptContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) blockContact(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -566,7 +850,7 @@ func (a *App) blockContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) unblockContact(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -583,7 +867,7 @@ func (a *App) unblockContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
-	_, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -592,8 +876,13 @@ func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "id")
 		return
 	}
+	allowed, err := a.DB.CanReadIdentity(r.Context(), p.User.ID, id)
+	if err != nil || !allowed {
+		httpx.WriteError(w, 404, "not_found", "keys")
+		return
+	}
 	user, err := a.DB.UserByID(r.Context(), id)
-	if err != nil || len(user.X25519) == 0 {
+	if err != nil || len(user.X25519) != 32 {
 		httpx.WriteError(w, 404, "not_found", "keys")
 		return
 	}
@@ -604,7 +893,7 @@ func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -615,22 +904,41 @@ func (a *App) conversations(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []map[string]any{}
 	for _, c := range list {
-		out = append(out, map[string]any{"id": c.ID, "peer_id": c.PeerID, "peer_name": c.Peer, "peer_username": c.Username})
+		members, _ := a.DB.Members(r.Context(), c.ID, p.User.ID)
+		out = append(out, conversationJSON(c, members))
 	}
 	httpx.WriteJSON(w, 200, out)
 }
 
 func (a *App) createConversation(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
 	var body struct {
-		Kind string    `json:"kind"`
-		User uuid.UUID `json:"user_id"`
+		Kind    string      `json:"kind"`
+		User    uuid.UUID   `json:"user_id"`
+		Title   string      `json:"title"`
+		Members []uuid.UUID `json:"member_ids"`
 	}
 	if err := httpx.ReadJSON(r, &body); err != nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
+		return
+	}
+	if body.Kind == "group" {
+		if err := auth.ValidateGroupName(body.Title); err != nil {
+			httpx.WriteError(w, 400, "group_name_invalid", "group name must be 1-64 characters")
+			return
+		}
+		conv, err := a.DB.CreateGroup(r.Context(), p.User.ID, strings.TrimSpace(body.Title), body.Members)
+		if err != nil {
+			httpx.WriteError(w, 403, "forbidden", "group")
+			return
+		}
+		for _, member := range body.Members {
+			a.touch(r.Context(), member, "conversations.updated")
+		}
+		httpx.WriteJSON(w, 201, conversationJSON(conv, nil))
 		return
 	}
 	conv, err := a.DB.DirectConversation(r.Context(), p.User.ID, body.User)
@@ -639,11 +947,11 @@ func (a *App) createConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.touch(r.Context(), body.User, "conversations.updated")
-	httpx.WriteJSON(w, 201, map[string]any{"id": conv.ID, "peer_id": conv.PeerID, "peer_name": conv.Peer})
+	httpx.WriteJSON(w, 201, conversationJSON(conv, nil))
 }
 
 func (a *App) postMessage(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -661,12 +969,13 @@ func (a *App) postMessage(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 		return
 	}
-	if blocked, _ := a.DB.IsBlocked(r.Context(), body.Recipient, p.User.ID); blocked {
-		httpx.WriteError(w, 403, "blocked", "blocked")
+	access, err := a.DB.AuthorizeDelivery(r.Context(), body.Conversation, p.User.ID, body.Recipient)
+	if err != nil || authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
+		httpx.WriteError(w, 403, "forbidden", "conversation")
 		return
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(body.Envelope)
-	if err != nil || int64(len(raw)) > a.Cfg.MaxMessageBytes {
+	if err != nil || (quota.Limits{MaxMessageBytes: a.Cfg.MaxMessageBytes}).CheckMessage(int64(len(raw))) != nil {
 		httpx.WriteError(w, 400, "too_large", "message is too large")
 		return
 	}
@@ -675,11 +984,14 @@ func (a *App) postMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Hub.Notify(r.Context(), body.Recipient, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
+	if !a.Hub.Online(body.Recipient) {
+		a.pushMailbox(r.Context(), body.Recipient, 1)
+	}
 	httpx.WriteJSON(w, 201, map[string]string{"status": "stored"})
 }
 
 func (a *App) getMessages(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -696,7 +1008,7 @@ func (a *App) getMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) ackMessage(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -710,7 +1022,7 @@ func (a *App) ackMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -751,17 +1063,19 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	}
 	conv, _ := uuid.Parse(r.FormValue("conversation_id"))
 	rec, _ := uuid.Parse(r.FormValue("recipient_user_id"))
-	if blocked, _ := a.DB.IsBlocked(r.Context(), rec, p.User.ID); blocked {
-		httpx.WriteError(w, 403, "blocked", "blocked")
+	access, err := a.DB.AuthorizeDelivery(r.Context(), conv, p.User.ID, rec)
+	if err != nil || authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
+		httpx.WriteError(w, 403, "forbidden", "conversation")
 		return
 	}
 	env, err := base64.RawURLEncoding.DecodeString(r.FormValue("envelope"))
-	if err != nil || len(env) == 0 {
-		env = []byte(`{}`)
+	if err != nil || !strings.Contains(string(env), `"alg":"secretstream"`) {
+		httpx.WriteError(w, 400, "plaintext_rejected", "files must be encrypted")
+		return
 	}
 	dir := filepath.Join(a.Cfg.MailboxDir, time.Now().Format("2006"), time.Now().Format("01"))
 	_ = os.MkdirAll(dir, 0o750)
-	path := filepath.Join(dir, fileID.String())
+	path := filepath.Join(dir, rec.String()+"-"+fileID.String())
 	out, err := os.Create(path)
 	if err != nil {
 		httpx.WriteError(w, 500, "internal", "disk")
@@ -780,17 +1094,25 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 500, "internal", "disk")
 		return
 	}
-	if err := a.DB.PutFile(r.Context(), conv, p.User.ID, rec, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL)); err != nil {
+	inserted, err := a.DB.PutFile(r.Context(), conv, p.User.ID, rec, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL), a.Cfg.UserQuotaBytes, a.Cfg.GlobalQuotaBytes)
+	if err != nil || !inserted {
 		_ = os.Remove(path)
-		httpx.WriteError(w, 500, "internal", "mailbox")
+		if err != nil {
+			httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
+			return
+		}
+		httpx.WriteJSON(w, 200, map[string]string{"status": "duplicate"})
 		return
 	}
 	a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
+	if !a.Hub.Online(rec) {
+		a.pushMailbox(r.Context(), rec, 1)
+	}
 	httpx.WriteJSON(w, 201, map[string]string{"status": "stored", "sha256": hex.EncodeToString(h.Sum(nil))})
 }
 
 func (a *App) getFiles(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -808,7 +1130,7 @@ func (a *App) getFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) downloadFile(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -836,7 +1158,7 @@ func (a *App) downloadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) ackFile(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -877,7 +1199,7 @@ func fileMeta(envelope []byte) (string, string) {
 }
 
 func (a *App) turnCreds(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.auth(w, r)
+	p, ok := a.requireChat(w, r)
 	if !ok {
 		return
 	}
@@ -953,7 +1275,8 @@ func (a *App) pushSub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := a.DB.Pool.Exec(r.Context(), `INSERT INTO push_subscriptions (user_id, device_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4,$5)
-		ON CONFLICT (endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth`, p.User.ID, p.Device, body.Endpoint, body.P256dh, body.Auth)
+		ON CONFLICT (endpoint) DO UPDATE SET p256dh=EXCLUDED.p256dh, auth=EXCLUDED.auth, device_id=EXCLUDED.device_id
+		WHERE push_subscriptions.user_id=EXCLUDED.user_id`, p.User.ID, p.Device, body.Endpoint, body.P256dh, body.Auth)
 	if err != nil {
 		httpx.WriteError(w, 500, "internal", "push")
 		return
@@ -963,7 +1286,7 @@ func (a *App) pushSub(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
-	if origin != "" && !httpx.OriginAllowed(origin, a.Cfg.CORSOrigins) {
+	if (origin == "" && !a.Cfg.DevInsecureHTTP) || (origin != "" && !httpx.OriginAllowed(origin, a.Cfg.CORSOrigins, a.Cfg.DevInsecureHTTP)) {
 		httpx.WriteError(w, 403, "csrf", "origin")
 		return
 	}
@@ -971,7 +1294,15 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"*"}})
+	if p.Device == nil || (p.Trust != "trusted" && p.Trust != "pending") {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+		return
+	}
+	patterns := []string{"*"}
+	if !a.Cfg.DevInsecureHTTP {
+		patterns = originHosts(a.Cfg.CORSOrigins)
+	}
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: patterns})
 	if err != nil {
 		return
 	}
@@ -980,24 +1311,27 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 		dev = *p.Device
 	}
 	c := &signaling.Conn{User: p.User.ID, Device: dev, WS: conn}
-	conn.SetReadLimit(1 << 20)
+	conn.SetReadLimit(64 << 10)
 	a.Hub.Add(c)
 	defer func() {
 		a.Hub.Remove(p.User.ID, dev)
 		if !a.Hub.Online(p.User.ID) {
-			a.Hub.Broadcast(context.Background(), signaling.Frame{V: 1, T: "presence.update", ID: uuid.NewString(), P: map[string]any{"user": p.User.ID.String(), "online": false}}, uuid.Nil)
+			a.publishPresence(context.Background(), p.User.ID, false)
 		}
 		_ = conn.Close(websocket.StatusNormalClosure, "bye")
 	}()
-	others := []string{}
-	for _, id := range a.Hub.UserIDs() {
-		if id != p.User.ID.String() {
-			others = append(others, id)
+	if p.Trust == "trusted" {
+		peers, _ := a.DB.PresencePeerIDs(r.Context(), p.User.ID)
+		online := []string{}
+		for _, id := range peers {
+			if a.Hub.Online(id) {
+				online = append(online, id.String())
+			}
 		}
+		snap, _ := json.Marshal(signaling.Frame{V: 1, T: "presence.snapshot", ID: uuid.NewString(), P: map[string]any{"users": online}})
+		_ = conn.Write(r.Context(), websocket.MessageText, snap)
+		a.publishPresence(r.Context(), p.User.ID, true)
 	}
-	snap, _ := json.Marshal(signaling.Frame{V: 1, T: "presence.snapshot", ID: uuid.NewString(), P: map[string]any{"users": others}})
-	_ = conn.Write(r.Context(), websocket.MessageText, snap)
-	a.Hub.Broadcast(r.Context(), signaling.Frame{V: 1, T: "presence.update", ID: uuid.NewString(), P: map[string]any{"user": p.User.ID.String(), "online": true}}, p.User.ID)
 	for {
 		_, data, err := conn.Read(r.Context())
 		if err != nil {
@@ -1005,6 +1339,18 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 		}
 		var frame signaling.Frame
 		if err := jsonUnmarshal(data, &frame); err != nil {
+			continue
+		}
+		if p.Trust != "trusted" && !strings.HasPrefix(frame.T, "rtc.") && !strings.HasPrefix(frame.T, "pair.") {
+			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"error","id":"`+frame.ID+`","p":{"code":"device_untrusted"}}`))
+			continue
+		}
+		if err := a.authorizeSignal(r.Context(), p, frame); err != nil {
+			code := "forbidden"
+			if errors.Is(err, authz.ErrPlaintext) {
+				code = "plaintext_rejected"
+			}
+			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"error","id":"`+frame.ID+`","p":{"code":"`+code+`"}}`))
 			continue
 		}
 		if err := a.Hub.Relay(r.Context(), p.User.ID, dev, frame); err != nil && signaling.IsOffline(err) {

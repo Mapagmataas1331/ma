@@ -135,7 +135,7 @@ export const authApi = {
     api<{ status: string; challenge_id?: string; user?: { id: string; username: string; display_name: string }; device?: { id: string; trust_state: string } }>('/v1/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   login2fa: (body: { challenge_id: string; code: string }) => api('/v1/auth/login/2fa', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => api('/v1/auth/logout', { method: 'POST' }),
-  me: () => api<{ id: string; username: string; display_name: string; email?: string | null; totp_enabled?: boolean }>('/v1/users/me'),
+  me: () => api<{ id: string; username: string; display_name: string; email?: string | null; totp_enabled?: boolean; device_id?: string; trust_state?: string }>('/v1/users/me'),
   account: () =>
     api<{
       id: string

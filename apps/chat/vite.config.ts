@@ -34,6 +34,7 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\//],
         runtimeCaching: [],
+        importScripts: ['sw-push.js'],
       },
     }),
   ],

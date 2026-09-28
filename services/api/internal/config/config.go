@@ -1,10 +1,14 @@
 package config
 
 import (
+	"encoding/base64"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 type Config struct {
@@ -52,17 +56,40 @@ func Load() Config {
 		VAPIDPrivate:     env("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:     env("VAPID_SUBJECT", "mailto:me@ma.cyou"),
 		MailboxDir:       env("MAILBOX_DIR", "mailbox"),
-		MaxFileBytes:     envInt("MAILBOX_MAX_FILE_BYTES", 5<<30),
+		MaxFileBytes:     envInt("MAILBOX_MAX_FILE_BYTES", 25<<20),
 		MaxMessageBytes:  envInt("MAILBOX_MAX_MESSAGE_BYTES", 65536),
-		UserQuotaBytes:   envInt("MAILBOX_USER_QUOTA_BYTES", 20<<30),
-		GlobalQuotaBytes: envInt("MAILBOX_GLOBAL_QUOTA_BYTES", 150<<30),
-		MinFreeBytes:     envInt("MAILBOX_MIN_FREE_BYTES", 1<<30),
-		FileTTL:          24 * time.Hour,
-		MessageTTL:       24 * time.Hour,
+		UserQuotaBytes:   envInt("MAILBOX_USER_QUOTA_BYTES", 500<<20),
+		GlobalQuotaBytes: envInt("MAILBOX_GLOBAL_QUOTA_BYTES", 60<<30),
+		MinFreeBytes:     envInt("MAILBOX_MIN_FREE_BYTES", 15<<30),
+		FileTTL:          7 * 24 * time.Hour,
+		MessageTTL:       30 * 24 * time.Hour,
 		SessionIdle:      30 * 24 * time.Hour,
 		SessionAbsolute:  180 * 24 * time.Hour,
 		LogLevel:         env("LOG_LEVEL", "info"),
 	}
+}
+
+func (c Config) Validate() error {
+	if c.DevInsecureHTTP {
+		return nil
+	}
+	kek, err := base64.StdEncoding.DecodeString(c.ServerKEK)
+	if err != nil || len(kek) != chacha20poly1305.KeySize {
+		return errors.New("SERVER_KEK must be 32 bytes of standard base64")
+	}
+	if c.TurnSecret == "" || c.TurnSecret == "dev-turn-secret" {
+		return errors.New("TURN_SECRET is required")
+	}
+	if len(c.CORSOrigins) == 0 {
+		return errors.New("CORS_ORIGINS is required")
+	}
+	if c.DatabaseURL == "" || strings.Contains(c.DatabaseURL, "macyou:macyou@localhost") {
+		return errors.New("DATABASE_URL is not set for production")
+	}
+	if (c.VAPIDPublic == "") != (c.VAPIDPrivate == "") {
+		return errors.New("VAPID keys must both be set or both be empty")
+	}
+	return nil
 }
 
 func env(key, fallback string) string {

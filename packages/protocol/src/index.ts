@@ -61,14 +61,18 @@ export const plaintextMessageSchema = z.object({
         size: z.number(),
         key: z.string().optional(),
         header: z.string().optional(),
+        lengths: z.array(z.number().int().positive()).optional(),
       }),
     )
     .default([]),
+  sender_id: z.string().optional(),
 })
 
 export type PlaintextMessage = z.infer<typeof plaintextMessageSchema>
 
-export const MAILBOX_MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
+export { canonicalDisplayName, canonicalUsername, deviceNameError, displayNameError, graphemeLength, groupNameError, passwordError, usernameError } from './limits'
+
+export const MAILBOX_MAX_FILE_BYTES = 26_214_400
 export const MAILBOX_DIRECT_FILE_BYTES = 26_214_400
 export const MAILBOX_MAX_MESSAGE_BYTES = 65_536
 

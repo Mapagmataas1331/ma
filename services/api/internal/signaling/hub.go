@@ -80,13 +80,15 @@ func (h *Hub) Relay(ctx context.Context, fromUser, fromDevice uuid.UUID, frame F
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	targets := h.conns[uid]
+	wrote := 0
 	for id, c := range targets {
 		if frame.To.Device != "" && id.String() != frame.To.Device {
 			continue
 		}
+		wrote++
 		_ = c.WS.Write(ctx, websocket.MessageText, raw)
 	}
-	if len(targets) == 0 {
+	if wrote == 0 {
 		return errOffline
 	}
 	return nil
@@ -128,6 +130,21 @@ func (h *Hub) Broadcast(ctx context.Context, frame Frame, skip uuid.UUID) {
 	h.mu.Unlock()
 	for _, c := range list {
 		_ = c.WS.Write(ctx, websocket.MessageText, raw)
+	}
+}
+
+func (h *Hub) Close(user, device uuid.UUID) {
+	h.mu.Lock()
+	conn := h.conns[user][device]
+	h.mu.Unlock()
+	if conn != nil && conn.WS != nil {
+		_ = conn.WS.Close(websocket.StatusPolicyViolation, "revoked")
+	}
+}
+
+func (h *Hub) NotifyMany(ctx context.Context, users []uuid.UUID, frame Frame) {
+	for _, user := range users {
+		h.Notify(ctx, user, frame)
 	}
 }
 
