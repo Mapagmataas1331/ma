@@ -70,3 +70,4 @@ Open the apps at `http://localhost`, not `http://127.0.0.1`. The Vite servers li
 - [PROTOCOL.md](PROTOCOL.md) — signaling frames and envelopes
 - [THREAT_MODEL.md](THREAT_MODEL.md) — what the server can and cannot see
 - [DEPLOY.md](DEPLOY.md) — Cloudflare Pages and the API host
+- [TESTING.md](TESTING.md) — manual checks for every site and chat function

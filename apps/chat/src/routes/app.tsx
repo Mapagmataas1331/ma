@@ -30,10 +30,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { activeDatabase, hasLegacyVault, openAccount } from '../lib/db'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
-import { blobParts, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
+import { blobParts, ciphertextSize, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { copyLegacyVault } from '../lib/legacy'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
+import { openNamed, openWriter, opfsAvailable, removeNamed } from '../lib/opfs'
 import { resetChatRuntime } from '../lib/runtime'
 import { chunkMessages, exportHistory, storeHistory, type SyncMessage } from '../lib/sync'
 import { useSession } from '../lib/session'
@@ -44,6 +45,7 @@ import { GroupInfo } from '../features/conversations/GroupInfo'
 import { DeviceList } from '../features/devices/DeviceList'
 import { formatBytes } from '../features/messages/format'
 import { RecoveryKeyDialog, TotpDialog } from '../features/security/SecurityDialogs'
+import { CloudQuotaDialog, cloudUsage, type CloudUsage } from '../features/storage/CloudQuota'
 import { WipeLocalData } from '../features/storage/WipeLocalData'
 import { TransferPrompt } from '../features/transfers/TransferPrompt'
 import { UnlockScreen, VaultExplainer } from '../features/vault/UnlockScreen'
@@ -110,6 +112,22 @@ type Pull = {
 }
 
 const PROBE_TTL = 30_000
+/** How long a group file stays offerable after the last byte moved, so someone who was offline can still join the send. */
+const SHARE_TAIL = 120_000
+
+type LiveShare = {
+  id: string
+  conversationId: string
+  at: string
+  body: string
+  senderId: string
+  files: ChatFile[]
+  offered: Set<string>
+  keyed: Set<string>
+  cloudReady: Set<string>
+  sending: Set<string>
+  until: number
+}
 const INLINE_PREVIEW_BYTES = 12 * 1024 * 1024
 
 export function ChatApp() {
@@ -149,13 +167,20 @@ export function ChatApp() {
   const [totpOpen, setTotpOpen] = useState(false)
   const [totpEnabled, setTotpEnabled] = useState(false)
   const [groupInfoFor, setGroupInfoFor] = useState<string | null>(null)
+  const [cloudPrompt, setCloudPrompt] = useState<{ usage: CloudUsage; need: number; canDirect: boolean } | null>(null)
   const [online, setOnline] = useState<Set<string>>(new Set())
   const [wsOnline, setWsOnline] = useState(false)
   const [typing, setTyping] = useState<{ conversationId: string; name: string } | null>(null)
   const [stored, setStored] = useState<Set<string>>(new Set())
-  const [fileState, setFileState] = useState<Record<string, 'have' | 'missing'>>({})
+  const [swarmTick, setSwarmTick] = useState(0)
   const typedAt = useRef(0)
   const outgoing = useRef(new Map<string, File>())
+  const sessionFiles = useRef(new Map<string, Blob>())
+  const holdersRef = useRef(new Map<string, Map<string, number>>())
+  const missingRef = useRef(new Map<string, Set<string>>())
+  const probeStamp = useRef(new Map<string, number>())
+  const holderWaits = useRef(new Map<string, { pending: Set<string>; found: Map<string, number>; finish: () => void }>())
+  const askOrder = useRef(new Map<string, string[]>())
   const messagesRef = useRef<LocalMessage[]>([])
   const transferAbort = useRef<AbortController | null>(null)
   const abortFile = useRef('')
@@ -168,7 +193,9 @@ export function ChatApp() {
   const fileApi = useRef({
     request: (_fileId: string, _userId: string) => {},
     probe: (_fileId: string, _userId: string) => {},
-    missing: (_fileId: string) => {},
+    missing: (_fileId: string, _userId: string) => {},
+    have: (_fileId: string, _userId: string) => {},
+    busy: (_fileId: string, _userId: string) => {},
   })
   const [hourCycle, setHourCycle] = useState<'24' | '12'>(() => (localStorage.getItem('ma.time') === '12' ? '12' : '24'))
   const [prefs, setPrefs] = useState<Record<string, ChatPref>>({})
@@ -188,6 +215,20 @@ export function ChatApp() {
   messagesRef.current = messages
   const onlineRef = useRef(online)
   onlineRef.current = online
+  const conversationsRef = useRef(conversations)
+  conversationsRef.current = conversations
+  const liveShares = useRef(new Map<string, LiveShare>())
+  const busyRetry = useRef(new Map<string, number>())
+  const offerLateRef = useRef<(userId: string) => void>(() => {})
+  offerLateRef.current = (userId: string) => {
+    for (const share of liveShares.current.values()) {
+      if (!shareStillCurrent(share)) {
+        liveShares.current.delete(share.id)
+        continue
+      }
+      void offerShare(share, userId)
+    }
+  }
 
   function markStored(ids: string[], gone: string[] = []) {
     if (!ids.length && !gone.length) return
@@ -274,18 +315,23 @@ export function ChatApp() {
       if (frame.t === 'session.ready' || frame.t === 'mailbox.new' || frame.t === 'contacts.updated' || frame.t === 'conversations.updated') sync()
       if (frame.t === 'presence.snapshot') {
         const users = Array.isArray(frame.p.users) ? frame.p.users.map(String) : []
-        setOnline(new Set(users))
+        const next = new Set(users)
+        onlineRef.current = next
+        setOnline(next)
         probed.current.clear()
+        for (const id of users) offerLateRef.current(id)
       }
       if (frame.t === 'presence.update') {
         const id = String(frame.p.user ?? '')
-        if (frame.p.online) probed.current.clear()
-        setOnline((prev) => {
-          const next = new Set(prev)
-          if (frame.p.online) next.add(id)
-          else next.delete(id)
-          return next
-        })
+        const next = new Set(onlineRef.current)
+        if (frame.p.online) next.add(id)
+        else next.delete(id)
+        onlineRef.current = next
+        if (frame.p.online) {
+          probed.current.clear()
+          offerLateRef.current(id)
+        }
+        setOnline(next)
       }
       if (frame.t === 'chat.typing') {
         const conversationId = String(frame.p.conversation_id ?? '')
@@ -413,12 +459,10 @@ export function ChatApp() {
       }
       if (frame.t === 'chat.file.request') fileApi.current.request(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
       if (frame.t === 'chat.file.probe') fileApi.current.probe(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
-      if (frame.t === 'chat.file.have') {
-        const fileId = String(frame.p.file_id ?? '')
-        if (fileId) setFileState((prev) => (prev[fileId] === 'have' ? prev : { ...prev, [fileId]: 'have' }))
-      }
-      if (frame.t === 'chat.file.missing') fileApi.current.missing(String(frame.p.file_id ?? ''))
-      if (frame.t === 'chat.file.cancel' || frame.t === 'chat.file.busy') {
+      if (frame.t === 'chat.file.have') fileApi.current.have(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
+      if (frame.t === 'chat.file.missing') fileApi.current.missing(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
+      if (frame.t === 'chat.file.busy') fileApi.current.busy(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
+      if (frame.t === 'chat.file.cancel') {
         const fileId = String(frame.p.file_id ?? '')
         if (fileId) cancelledFiles.current.add(fileId)
         void abortPull(fileId, false)
@@ -431,7 +475,6 @@ export function ChatApp() {
           setDownloading(null)
           setTransfer(null)
         }
-        if (frame.t === 'chat.file.busy') toast(tRef.current('transferBusy'))
       }
     })
     sync()
@@ -454,7 +497,9 @@ export function ChatApp() {
       api<Conversation[]>('/v1/conversations'),
     ])
     setContacts(c)
+    conversationsRef.current = conv
     setConversations(conv)
+    for (const id of onlineRef.current) offerLateRef.current(id)
     const devices = await api<{ id: string; trust_state: string; current?: boolean }[]>('/v1/devices')
     setPendingSync(devices.some((d) => d.trust_state === 'trusted' && !d.current))
   }
@@ -622,9 +667,49 @@ export function ChatApp() {
       messagesRef.current = [...messagesRef.current, message]
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
       await sealRow('records', message.id, 'messages', withoutUrls(message))
+      const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
+      if (conv?.kind === 'group' && files.length) {
+        const mineId = meRef.current
+        liveShares.current.set(message.id, {
+          id: message.id,
+          conversationId: message.conversationId,
+          at: message.at,
+          body: message.body,
+          senderId: senderId || '',
+          files,
+          offered: new Set([mineId, senderId].filter((item): item is string => !!item)),
+          keyed: new Set(files.some((file) => file.key) && mineId ? [mineId] : []),
+          cloudReady: new Set(files.filter((file) => file.key).map((file) => file.id)),
+          sending: new Set(),
+          until: Date.now() + SHARE_TAIL,
+        })
+      }
+    } else {
+      await mergeOffer(message)
     }
     if (senderId && senderId !== meRef.current) transport.sendFrame(newFrame('chat.delivered', { message_ids: [message.id] }, { user: senderId }))
     return fresh
+  }
+
+  /** A later offer can add a file the first envelope skipped, or attach the cloud key once the server copy exists. */
+  async function mergeOffer(incoming: LocalMessage) {
+    const current = messagesRef.current.find((item) => item.id === incoming.id)
+    if (!current) return
+    const prevFiles = current.files ?? []
+    const nextFiles = prevFiles.map((file) => {
+      const extra = incoming.files?.find((item) => item.id === file.id)
+      if (extra?.key && !file.key) return { ...file, key: extra.key, header: extra.header, lengths: extra.lengths, via: 'mailbox' as const }
+      return file
+    })
+    for (const extra of incoming.files ?? []) {
+      if (!nextFiles.some((file) => file.id === extra.id)) nextFiles.push(extra)
+    }
+    const changed = nextFiles.length !== prevFiles.length || nextFiles.some((file, index) => file.key !== prevFiles[index]?.key || file.via !== prevFiles[index]?.via)
+    if (!changed) return
+    const next = { ...current, body: current.body || incoming.body, files: nextFiles }
+    messagesRef.current = messagesRef.current.map((item) => (item.id === next.id ? next : item))
+    setMessages((prev) => prev.map((item) => (item.id === next.id ? next : item)))
+    await sealRow('records', next.id, 'messages', withoutUrls(next))
   }
 
   async function drainMailbox() {
@@ -677,7 +762,97 @@ export function ChatApp() {
     }
   }
 
-  async function send() {
+  /** Hand a group file that is still being sent to a member who just came online. */
+  async function offerShare(share: LiveShare, userId: string) {
+    const meId = meRef.current
+    if (!userId || userId === meId) return
+    if (!shareStillCurrent(share)) {
+      liveShares.current.delete(share.id)
+      return
+    }
+    const conv = conversationsRef.current.find((item) => item.id === share.conversationId)
+    if (conv?.kind !== 'group' || !(conv.members ?? []).some((member) => member.id === userId)) return
+    const upgrade = !share.keyed.has(userId) && share.files.some((file) => file.key && share.cloudReady.has(file.id) && share.senderId === meId)
+    if ((share.offered.has(userId) && !upgrade) || share.sending.has(userId)) return
+    share.sending.add(userId)
+    try {
+      const attachments: { file_id: string; name: string; mime: string; size: number; key?: string; header?: string; lengths?: number[] }[] = []
+      let sentKey = false
+      for (const file of share.files) {
+        const held = !!(await sourceFor(file.id))
+        const cloud = !!(file.key && share.cloudReady.has(file.id) && share.senderId === meId)
+        const linked = cloud && await api(`/v1/mailbox/files/${file.id}/recipients`, { method: 'POST', body: JSON.stringify({ recipient_user_id: userId }) }).then(() => true).catch(() => false)
+        if (!held && !linked) continue
+        if (linked) sentKey = true
+        attachments.push({
+          file_id: file.id,
+          name: file.name,
+          mime: file.mime,
+          size: file.size,
+          ...(linked ? { key: file.key, header: file.header, lengths: file.lengths } : {}),
+        })
+      }
+      if (!attachments.length) return
+      const payload = JSON.stringify({
+        message_id: share.id,
+        conversation_id: share.conversationId,
+        sent_at: share.at,
+        kind: 'file_offer',
+        body: share.body,
+        sender_id: share.senderId,
+        attachments,
+      })
+      const recipientKeys = await api<{ x25519: string }>(`/v1/contacts/${userId}/keys`)
+      const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
+      await transport.deliverText({
+        id: crypto.randomUUID(),
+        conversationId: share.conversationId,
+        recipientUserId: userId,
+        state: 'queued',
+        envelope: payload,
+        size: payload.length,
+        attempts: 0,
+      }, recipientKeys.x25519, devices[0]?.id || '')
+      share.offered.add(userId)
+      if (sentKey) share.keyed.add(userId)
+      share.until = Date.now() + SHARE_TAIL
+    } catch {
+      // The next time they are seen online, the offer is tried again.
+    } finally {
+      share.sending.delete(userId)
+    }
+  }
+
+  /** A quiet upload can outlast the tail. Keep the offer while this device is still sending or receiving it, or the message has not been posted yet. */
+  function shareStillCurrent(share: LiveShare) {
+    const moving = share.files.some((file) => transferLock.current === file.id || pull.current?.fileId === file.id)
+    const posting = !messagesRef.current.some((message) => message.id === share.id) && share.files.some((file) => outgoing.current.has(file.id))
+    if (moving || posting) {
+      share.until = Date.now() + SHARE_TAIL
+      return true
+    }
+    return share.until >= Date.now()
+  }
+
+  function announceNewcomers(messageId: string, started: Set<string>) {
+    const share = liveShares.current.get(messageId)
+    if (!share) return
+    share.until = Date.now() + SHARE_TAIL
+    for (const userId of onlineRef.current) {
+      if (started.has(userId)) continue
+      void offerShare(share, userId)
+    }
+  }
+
+  function announceHolders(fileId: string) {
+    for (const share of liveShares.current.values()) {
+      if (!share.files.some((file) => file.id === fileId)) continue
+      share.until = Date.now() + SHARE_TAIL
+      for (const userId of onlineRef.current) void offerShare(share, userId)
+    }
+  }
+
+  async function send(sendMode: 'auto' | 'direct' = 'auto') {
     const conv = conversations.find((c) => c.id === active)
     const text = draft.trim()
     const picked = pending
@@ -692,72 +867,136 @@ export function ChatApp() {
     setPending([])
     const files: ChatFile[] = []
     let activeFile = ''
+    let allowDirect = false
     try {
       await ready()
       const recipients = recipientsOf(conv)
       const isSelf = conv.peer_id === me && conv.kind !== 'group'
-      const reachable = isSelf || recipients.some((userId) => online.has(userId))
-      const who = isSelf ? t('savedMessages') : conv.kind === 'group' ? conv.title || t('newGroup') : (conv.peer_name || conv.peer_username || '')
+      // People who are offline get one shared cloud copy. Everyone online gets the file directly.
+      const presence = onlineRef.current
+      const offline = isSelf ? [] : recipients.filter((userId) => userId !== me && !presence.has(userId))
+      const onlineRecipients = isSelf ? [] : recipients.filter((userId) => userId !== me && presence.has(userId))
+      const startedOnline = new Set(presence)
+      allowDirect = onlineRecipients.length > 0
+      const oversized = picked.some((file) => file.size > MAILBOX_MAX_FILE_BYTES)
+      const cloudBytes = sendMode === 'direct' || !offline.length ? 0 : picked.reduce((sum, file) => file.size <= MAILBOX_MAX_FILE_BYTES ? sum + ciphertextSize(file.size) : sum, 0)
+      if (cloudBytes > 0) {
+        const usage = cloudUsage(await api<CloudUsage>('/v1/mailbox/cloud').catch(() => null))
+        if (usage && usage.used + cloudBytes > usage.limit) {
+          setDraft(text)
+          setPending(picked)
+          setCloudPrompt({ usage, need: cloudBytes, canDirect: onlineRecipients.length > 0 })
+          return
+        }
+      }
+      if (offline.length && oversized) {
+        const onlyOversized = !text && picked.every((file) => file.size > MAILBOX_MAX_FILE_BYTES)
+        if (!onlineRecipients.length && onlyOversized) {
+          setDraft(text)
+          setPending(picked)
+          toast(t('cloudNobodyOnline', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }))
+          return
+        }
+        toast(onlineRecipients.length ? t('cloudDirectOnly', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }) : t('cloudNobodyOnline', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }))
+      }
+      const cloudRecipients = new Map<string, Set<string>>()
+      const directIds = new Set<string>()
+      if (conv.kind === 'group' && picked.length) {
+        liveShares.current.set(id, {
+          id,
+          conversationId: conv.id,
+          at,
+          body: text,
+          senderId: me || '',
+          files,
+          offered: new Set(me ? [me] : []),
+          keyed: new Set(),
+          cloudReady: new Set(),
+          sending: new Set(),
+          until: Date.now() + SHARE_TAIL,
+        })
+      }
       for (const file of picked) {
         const fileId = crypto.randomUUID()
         const name = file.name || 'file'
         const mime = file.type || 'application/octet-stream'
+        if (file.size > MAILBOX_MAX_FILE_BYTES && !onlineRecipients.length && offline.length) continue
         const url = URL.createObjectURL(file)
-        if (file.size >= MAILBOX_MAX_FILE_BYTES) {
-          outgoing.current.set(fileId, file)
+        const queue = sendMode !== 'direct' && offline.length > 0 && file.size <= MAILBOX_MAX_FILE_BYTES
+        if (!queue && offline.length) directIds.add(fileId)
+        outgoing.current.set(fileId, file)
+        sessionFiles.current.set(fileId, file)
+        if (!queue) {
           void keepFile(fileId, file).then(({ kept, removed }) => {
             if (kept) markStored([fileId])
             dropMessages(removed)
             void refreshUsage()
           })
-          if (!reachable) toast(t('fileOfflineLarge', { name: who || name, size: formatBytes(MAILBOX_MAX_FILE_BYTES) }))
           files.push({ id: fileId, name, mime, size: file.size, via: 'peer', url })
+          announceNewcomers(id, startedOnline)
           continue
         }
-        const cipherChunks: Uint8Array[] = []
-        const enc = await createEncryptor(file.size)
-        for await (const { part, final } of blobParts(file)) cipherChunks.push(enc.push(part, final))
-        const cipher = new Blob(cipherChunks as BlobPart[], { type: 'application/octet-stream' })
-        void keepCipher(fileId, cipher, enc.meta, file.size).then(({ kept, removed }) => {
-          if (kept) markStored([fileId])
-          dropMessages(removed)
+        const entry: ChatFile = { id: fileId, name, mime, size: file.size, via: 'peer', url }
+        files.push(entry)
+        announceNewcomers(id, startedOnline)
+        const staged = await stageCipher(fileId, file, session.user?.id || '')
+        if (staged.removed.length) dropMessages(staged.removed)
+        if (staged.stored) {
+          markStored([fileId])
           void refreshUsage()
-        })
+        }
         transferLock.current = fileId
         activeFile = fileId
         const upload = new AbortController()
         transferAbort.current = upload
         abortFile.current = fileId
-        for (const recipientId of recipients) {
-          const form = new FormData()
-          form.set('file', new File([cipher], `${fileId}.bin`, { type: 'application/octet-stream' }))
-          form.set('conversation_id', conv.id)
-          form.set('recipient_user_id', recipientId)
-          form.set('file_id', fileId)
-          form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...enc.meta }))))
-          await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
-            if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
-            bumpTransfer('send', loaded, total, fileId, recipientId)
-          }, upload.signal)
-        }
-        files.push({ id: fileId, name, mime, size: file.size, via: 'mailbox', url, ...enc.meta })
+        const form = new FormData()
+        form.set('file', staged.body, `${fileId}.bin`)
+        form.set('conversation_id', conv.id)
+        form.set('file_id', fileId)
+        form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...staged.meta }))))
+        for (const recipientId of offline) form.append('recipient_user_id', recipientId)
+        await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
+          if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
+          bumpTransfer('send', loaded, total, fileId, offline[0] || '')
+        }, upload.signal)
+        await staged.cleanup?.()
+        cloudRecipients.set(fileId, new Set(offline))
+        Object.assign(entry, { via: 'mailbox' as const, ...staged.meta })
+        liveShares.current.get(id)?.cloudReady.add(fileId)
+        announceNewcomers(id, startedOnline)
       }
       const message: LocalMessage = { id, conversationId: conv.id, body: text, mine: true, at, status: 'sending', senderId: me, files }
       setMessages((prev) => [...prev, message])
-      const payload = JSON.stringify({
-        message_id: id,
-        conversation_id: conv.id,
-        sent_at: at,
-        kind: files.length ? 'file_offer' : 'text',
-        body: text,
-        sender_id: me,
-        attachments: files.map((file) => ({ file_id: file.id, name: file.name, mime: file.mime, size: file.size, key: file.key, header: file.header, lengths: file.lengths })),
-      })
       for (const recipientId of recipients) {
+        const live = onlineRef.current
+        const visible = files.filter((file) => !directIds.has(file.id) || live.has(recipientId) || recipientId === me)
+        if (!text && !visible.length) continue
+        const share = liveShares.current.get(id)
+        const withKeys = visible.some((file) => cloudRecipients.get(file.id)?.has(recipientId))
+        if (share?.offered.has(recipientId) && (!withKeys || share.keyed.has(recipientId))) continue
+        const payload = JSON.stringify({
+          message_id: id,
+          conversation_id: conv.id,
+          sent_at: at,
+          kind: visible.length ? 'file_offer' : 'text',
+          body: text,
+          sender_id: me,
+          attachments: visible.map((file) => {
+            const onCloud = cloudRecipients.get(file.id)?.has(recipientId)
+            return { file_id: file.id, name: file.name, mime: file.mime, size: file.size, ...(onCloud ? { key: file.key, header: file.header, lengths: file.lengths } : {}) }
+          }),
+        })
         const recipientKeys = await api<{ x25519: string }>(`/v1/contacts/${recipientId}/keys`)
         const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${recipientId}/devices`).catch(() => [])
-        const deviceId = online.has(recipientId) || recipientId === me ? devices[0]?.id || '' : ''
+        const deviceId = live.has(recipientId) || recipientId === me ? devices[0]?.id || '' : ''
         await transport.deliverText({ id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, recipientKeys.x25519, deviceId)
+        const omitted = share?.files.some((file) => !visible.some((item) => item.id === file.id))
+        if (!omitted) {
+          share?.offered.add(recipientId)
+          if (withKeys) share?.keyed.add(recipientId)
+        }
+        if (share) share.until = Date.now() + SHARE_TAIL
       }
       setMessages((prev) => prev.map((m) => {
         if (m.id !== id) return m
@@ -776,6 +1015,19 @@ export function ChatApp() {
       if (transferLock.current === activeFile) transferLock.current = null
       setTransfer((cur) => (cur?.fileId === activeFile ? null : cur))
       if (err instanceof DOMException && err.name === 'AbortError') return
+      if (err instanceof Error && err.message === 'stage') {
+        setDraft(text)
+        setPending(picked)
+        toast(t('cloudStageFailed'))
+        return
+      }
+      const usage = err instanceof ApiError && err.code === 'quota_user' ? cloudUsage(err.details) : null
+      if (usage) {
+        setDraft(text)
+        setPending(picked)
+        setCloudPrompt({ usage, need: picked.reduce((sum, file) => sum + ciphertextSize(file.size), 0), canDirect: allowDirect })
+        return
+      }
       setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'failed' } : m)))
       toast(explain(err))
     }
@@ -795,6 +1047,9 @@ export function ChatApp() {
   }
 
   function bumpTransfer(role: 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string) {
+    for (const share of liveShares.current.values()) {
+      if (share.files.some((file) => file.id === fileId)) share.until = Date.now() + SHARE_TAIL
+    }
     if (cancelledFiles.current.has(fileId) || transferLock.current !== fileId) return
     const title = transferTitle(role, peerId)
     setTransfer((prev) => {
@@ -868,7 +1123,6 @@ export function ChatApp() {
   }
 
   function markGone(fileId: string) {
-    setFileState((prev) => (prev[fileId] === 'missing' ? prev : { ...prev, [fileId]: 'missing' }))
     setMessages((prev) => prev.map((m) => {
       if (!m.files?.some((item) => item.id === fileId && !item.gone)) return m
       const next = { ...m, files: m.files.map((item) => (item.id === fileId ? { ...item, gone: true } : item)) }
@@ -895,25 +1149,31 @@ export function ChatApp() {
     let url = await localUrl(file)
     const senderId = message.senderId || conversations.find((c) => c.id === message.conversationId)?.peer_id || ''
     if (!url && file.via === 'peer') {
-      if (message.mine && !outgoing.current.has(file.id)) {
-        toast(t('fileNoLongerHere'))
-        return
-      }
       if (transferLock.current && transferLock.current !== file.id) {
         toast(t('transferBusy'))
         return
       }
-      if (file.gone || fileState[file.id] === 'missing') {
+      if (file.gone) {
         toast(t('fileMissing'))
         return
       }
-      if (!senderId || (senderId !== me && !online.has(senderId))) {
-        toast(t('fileSenderOfflineLong'))
+      const peers = onlinePeers(message.conversationId, senderId)
+      if (!peers.length) {
+        toast(message.mine ? t('fileNoLongerHere') : t('fileSenderOfflineLong'))
         return
       }
       cancelledFiles.current.delete(file.id)
       setDownloading(file.id)
-      transport.sendFrame(newFrame('chat.file.request', { file_id: file.id }, { user: senderId }))
+      const ranked = await chooseHolder(file.id, peers)
+      if (cancelledFiles.current.has(file.id)) return
+      if (!ranked.length) {
+        setDownloading(null)
+        markGone(file.id)
+        toast(t('fileMissing'))
+        return
+      }
+      askOrder.current.set(file.id, ranked)
+      transport.sendFrame(newFrame('chat.file.request', { file_id: file.id }, { user: ranked[0] }))
       return
     }
     if (!url) {
@@ -937,6 +1197,7 @@ export function ChatApp() {
         const meta = file.key && file.header && file.lengths?.length ? { key: file.key, header: file.header, lengths: file.lengths } : null
         if (meta) plain = await decryptFile(plain, meta.key, meta.header, meta.lengths)
         const decoded = new Blob([plain as BlobPart], { type: file.mime || 'application/octet-stream' })
+        sessionFiles.current.set(file.id, decoded)
         url = URL.createObjectURL(decoded)
         const keep = meta ? keepCipher(file.id, blob, meta, file.size) : keepFile(file.id, decoded)
         void keep.then(({ kept, removed }) => {
@@ -1040,13 +1301,83 @@ export function ChatApp() {
     for (const file of message.files ?? []) {
       if (stored.has(file.id)) await forgetFile(file.id)
       outgoing.current.delete(file.id)
+      sessionFiles.current.delete(file.id)
     }
     markStored([], (message.files ?? []).map((file) => file.id))
     await refreshUsage()
   }
 
-  async function sourceFor(fileId: string): Promise<File | StoredFile | undefined> {
-    return outgoing.current.get(fileId) ?? (await openStored(fileId).catch(() => undefined))
+  function onlinePeers(conversationId: string, senderId?: string) {
+    const conv = conversations.find((item) => item.id === conversationId)
+    const ids = conv?.kind === 'group'
+      ? (conv.members ?? []).map((member) => member.id)
+      : [senderId || conv?.peer_id || '']
+    return [...new Set(ids)].filter((id) => id && id !== me && online.has(id))
+  }
+
+  /** Ask who has the file, then order them by the lowest ping. */
+  function chooseHolder(fileId: string, users: string[]) {
+    holdersRef.current.delete(fileId)
+    missingRef.current.delete(fileId)
+    return new Promise<string[]>((resolve) => {
+      const found = new Map<string, number>()
+      const pending = new Set(users)
+      let settled = false
+      let timer = 0
+      const finish = () => {
+        if (settled) return
+        settled = true
+        window.clearTimeout(timer)
+        holderWaits.current.delete(fileId)
+        void rankHolders(found).then(resolve)
+      }
+      timer = window.setTimeout(finish, 1500)
+      holderWaits.current.set(fileId, { pending, found, finish })
+      for (const userId of users) {
+        probeStamp.current.set(`${fileId}:${userId}`, performance.now())
+        transport.sendFrame(newFrame('chat.file.probe', { file_id: fileId }, { user: userId }))
+      }
+      if (!users.length) finish()
+    })
+  }
+
+  async function rankHolders(found: Map<string, number>) {
+    const ranked = await Promise.all([...found].map(async ([userId, probeRtt]) => {
+      const live = await transport.rtt(userId)
+      return { userId, rtt: live ?? probeRtt }
+    }))
+    ranked.sort((a, b) => a.rtt - b.rtt)
+    return ranked.map((row) => row.userId)
+  }
+
+  function noteHave(fileId: string, userId: string) {
+    if (!fileId || !userId) return
+    const started = probeStamp.current.get(`${fileId}:${userId}`)
+    const rtt = started ? Math.max(1, performance.now() - started) : 1000
+    const map = holdersRef.current.get(fileId) ?? new Map<string, number>()
+    map.set(userId, rtt)
+    holdersRef.current.set(fileId, map)
+    missingRef.current.get(fileId)?.delete(userId)
+    const wait = holderWaits.current.get(fileId)
+    if (wait) {
+      wait.found.set(userId, rtt)
+      wait.pending.delete(userId)
+      if (wait.pending.size === 0) wait.finish()
+    }
+    setSwarmTick((n) => n + 1)
+  }
+
+  function nextHolder(fileId: string, userId: string) {
+    const order = askOrder.current.get(fileId)
+    if (!order || order[0] !== userId) return ''
+    order.shift()
+    return order[0] ?? ''
+  }
+
+  async function sourceFor(fileId: string): Promise<File | Blob | StoredFile | undefined> {
+    const live = outgoing.current.get(fileId) ?? sessionFiles.current.get(fileId)
+    if (live) return live
+    return openStored(fileId).catch(() => undefined)
   }
 
   fileApi.current.request = (fileId, userId) => {
@@ -1071,25 +1402,62 @@ export function ChatApp() {
       transport.sendFrame(newFrame(source ? 'chat.file.have' : 'chat.file.missing', { file_id: fileId }, { user: userId }))
     })
   }
-  fileApi.current.missing = (fileId) => {
+  fileApi.current.have = (fileId, userId) => noteHave(fileId, userId)
+  fileApi.current.missing = (fileId, userId) => {
     if (!fileId) return
-    void (async () => {
-      const source = await sourceFor(fileId)
-      if (source) {
-        setFileState((prev) => (prev[fileId] === 'have' ? prev : { ...prev, [fileId]: 'have' }))
-        return
+    if (userId) {
+      const missed = missingRef.current.get(fileId) ?? new Set<string>()
+      missed.add(userId)
+      missingRef.current.set(fileId, missed)
+      holdersRef.current.get(fileId)?.delete(userId)
+      const wait = holderWaits.current.get(fileId)
+      if (wait) {
+        wait.pending.delete(userId)
+        if (wait.pending.size === 0) wait.finish()
       }
+    }
+    const next = userId ? nextHolder(fileId, userId) : ''
+    if (next) {
+      transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: next }))
+      setSwarmTick((n) => n + 1)
+      return
+    }
+    const order = askOrder.current.get(fileId)
+    if (order && order.length === 0) {
       markGone(fileId)
       if (transferLock.current === fileId) transferLock.current = null
       setDownloading((cur) => (cur === fileId ? null : cur))
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
-      if (downloading === fileId || wantView.current === fileId) toast(t('fileMissing'))
+      if (wantView.current === fileId) toast(t('fileMissing'))
       wantView.current = ''
-    })()
+    }
+    setSwarmTick((n) => n + 1)
+  }
+  fileApi.current.busy = (fileId, userId) => {
+    const next = nextHolder(fileId, userId)
+    if (next) {
+      transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: next }))
+      return
+    }
+    const tries = busyRetry.current.get(fileId) ?? 0
+    if (userId && tries < 4) {
+      busyRetry.current.set(fileId, tries + 1)
+      window.setTimeout(() => {
+        if (cancelledFiles.current.has(fileId)) return
+        askOrder.current.set(fileId, [userId])
+        transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: userId }))
+      }, 2000)
+      return
+    }
+    busyRetry.current.delete(fileId)
+    if (transferLock.current === fileId) transferLock.current = null
+    setDownloading((cur) => (cur === fileId ? null : cur))
+    setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
+    toast(t('transferBusy'))
   }
 
   /** Stream a file to one peer over the data channel with back-pressure. Stored ciphertext is sent as is. */
-  async function sendFileChunks(source: File | StoredFile, fileId: string, userId: string) {
+  async function sendFileChunks(source: File | Blob | StoredFile, fileId: string, userId: string) {
     if (transferLock.current && transferLock.current !== fileId) {
       if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
       return
@@ -1099,14 +1467,14 @@ export function ChatApp() {
     const deviceId = devices[0]?.id || ''
     const channel = deviceId ? await transport.ensurePeer(userId, deviceId, 8000) : null
     if (!channel || channel.readyState !== 'open') {
-      toast(t('waitingPeer'))
       if (transferLock.current === fileId) transferLock.current = null
+      if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
       return
     }
     const known = messagesRef.current.flatMap((message) => message.files ?? []).find((item) => item.id === fileId)
     const name = source instanceof File ? source.name || known?.name || 'file' : known?.name || 'file'
-    const mime = source instanceof File ? source.type || known?.mime || 'application/octet-stream' : known?.mime || 'application/octet-stream'
-    const size = source instanceof File ? source.size : source.size
+    const mime = source instanceof Blob ? source.type || known?.mime || 'application/octet-stream' : known?.mime || 'application/octet-stream'
+    const size = source.size
     const cancelled = () => cancelledFiles.current.has(fileId) || channel.readyState !== 'open'
     let sent = 0
     const emit = async (chunk: Uint8Array, plainBytes: number) => {
@@ -1117,7 +1485,7 @@ export function ChatApp() {
       bumpTransfer('send', sent, size, fileId, userId)
     }
     try {
-      if (!(source instanceof File) && source.kind === 'opfs') {
+      if (!(source instanceof Blob) && source.kind === 'opfs') {
         channel.send(JSON.stringify({ t: 'file.start', file_id: fileId, name, mime, size, ...source.meta }))
         let offset = 0
         const overhead = source.meta.lengths.length ? Math.max(0, source.cipher.size - size) / source.meta.lengths.length : 0
@@ -1127,7 +1495,7 @@ export function ChatApp() {
           await emit(chunk, Math.max(0, length - overhead))
         }
       } else {
-        const blob = source instanceof File ? source : new Blob([source.bytes as BlobPart])
+        const blob = source instanceof Blob ? source : new Blob([source.bytes as BlobPart])
         const enc = await createEncryptor(blob.size)
         channel.send(JSON.stringify({ t: 'file.start', file_id: fileId, name, mime, size, ...enc.meta }))
         for await (const { part, final } of blobParts(blob)) await emit(enc.push(part, final), part.byteLength)
@@ -1187,6 +1555,8 @@ export function ChatApp() {
     }
     const blob = new Blob(slot.parts as BlobPart[], { type: slot.mime })
     slot.parts = []
+    sessionFiles.current.set(fileId, blob)
+    announceHolders(fileId)
     const url = URL.createObjectURL(blob)
     const kept = slot.sink ? slot.sink.finish(slot.meta).then((removed) => ({ kept: true, removed })) : keepFile(fileId, blob)
     void kept.then(({ kept: ok, removed }) => {
@@ -1335,22 +1705,25 @@ export function ChatApp() {
     }))
   }, [active, activeConv, messages, selfChat, me])
 
-  // Ask online senders whether their large files are still available, so the status is right before a tap.
+  // Ask every online member whether they still have a peer file, so the status is right before a tap.
   useEffect(() => {
     if (!active || !activeConv || !wsOnline) return
     const now = Date.now()
     for (const m of thread) {
-      if (m.mine) continue
       for (const file of m.files ?? []) {
-        if (file.via !== 'peer' || file.url || file.gone || stored.has(file.id)) continue
-        const sender = m.senderId || activeConv.peer_id
-        if (!sender || sender === me || !online.has(sender)) continue
-        if (now - (probed.current.get(file.id) ?? 0) < PROBE_TTL) continue
-        probed.current.set(file.id, now)
-        transport.sendFrame(newFrame('chat.file.probe', { file_id: file.id }, { user: sender }))
+        if (file.via !== 'peer' || file.url || file.gone || stored.has(file.id) || sessionFiles.current.has(file.id)) continue
+        for (const userId of onlinePeers(m.conversationId, m.senderId || activeConv.peer_id)) {
+          const key = `${file.id}:${userId}`
+          if (now - (probed.current.get(key) ?? 0) < PROBE_TTL) continue
+          probed.current.set(key, now)
+          probeStamp.current.set(key, performance.now())
+          transport.sendFrame(newFrame('chat.file.probe', { file_id: file.id }, { user: userId }))
+        }
       }
     }
-  }, [active, activeConv, thread, online, stored, wsOnline, me])
+    // onlinePeers is recreated each render; conversations, online, and me are already covered.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, activeConv, thread, online, stored, wsOnline, me, swarmTick])
 
   // Keep the newest message in view unless the reader scrolled up on purpose.
   useEffect(() => {
@@ -1366,15 +1739,17 @@ export function ChatApp() {
   }, [active])
 
   function availability(message: LocalMessage, file: ChatFile): FileAvailability {
-    if (file.url || stored.has(file.id)) return message.mine && file.via === 'peer' ? 'sharing' : 'ready'
-    if (message.mine) {
-      if (file.via === 'peer') return outgoing.current.has(file.id) ? 'sessionOnly' : 'gone'
-      return message.status === 'expired' ? 'gone' : 'server'
-    }
-    if (file.gone || fileState[file.id] === 'missing') return 'gone'
-    if (file.via === 'mailbox') return message.status === 'expired' ? 'gone' : 'server'
-    const sender = message.senderId || conversations.find((c) => c.id === message.conversationId)?.peer_id
-    if (!sender || (sender !== me && !online.has(sender))) return 'offline'
+    void swarmTick
+    const local = file.url || stored.has(file.id) || sessionFiles.current.has(file.id) || outgoing.current.has(file.id)
+    if (local) return message.mine && file.via === 'peer' ? 'sharing' : 'ready'
+    if (file.gone) return 'gone'
+    if (file.via !== 'peer') return message.status === 'expired' ? 'gone' : 'server'
+    const peers = onlinePeers(message.conversationId, message.senderId)
+    const haves = holdersRef.current.get(file.id)
+    if (haves && [...haves.keys()].some((id) => peers.includes(id))) return 'peer'
+    const missed = missingRef.current.get(file.id)
+    if (!peers.length) return 'offline'
+    if (missed && peers.every((id) => missed.has(id))) return 'gone'
     return 'peer'
   }
 
@@ -1613,6 +1988,14 @@ export function ChatApp() {
           </div>
         ) : null}
       </SettingsSection>
+      <SettingsSection title={t('cloudStorage')} description={t('cloudStorageLead', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) })}>
+        <SettingsRow label={t('cloudUsedLabel')} hint={t('cloudExpires')}>
+          <Button variant="outline" onClick={() => void api<CloudUsage>('/v1/mailbox/cloud').then((row) => {
+            const usage = cloudUsage(row)
+            if (usage) setCloudPrompt({ usage, need: 0, canDirect: false })
+          }).catch((err) => toast(explain(err)))}>{t('cloudManage')}</Button>
+        </SettingsRow>
+      </SettingsSection>
       {localDataSection}
     </AppSettings>
   ) : null
@@ -1654,6 +2037,21 @@ export function ChatApp() {
   return (
     <>
     {chatSettings}
+    <CloudQuotaDialog
+      open={!!cloudPrompt}
+      usage={cloudPrompt?.usage ?? null}
+      need={cloudPrompt?.need ?? 0}
+      titleFor={(conversationId) => {
+        const conv = conversations.find((item) => item.id === conversationId)
+        return conv ? convTitle(conv) : ''
+      }}
+      onOpenChange={(open) => { if (!open) setCloudPrompt(null) }}
+      onSendDirect={cloudPrompt?.canDirect ? () => { setCloudPrompt(null); void send('direct') } : undefined}
+      onRemove={(fileId) => void api(`/v1/mailbox/cloud/${fileId}`, { method: 'DELETE' }).then(async () => {
+        const usage = cloudUsage(await api<CloudUsage>('/v1/mailbox/cloud'))
+        setCloudPrompt((cur) => (cur && usage ? { ...cur, usage } : cur))
+      }).catch((err) => toast(explain(err)))}
+    />
     <RecoveryKeyDialog value={recoveryKey} onClose={() => setRecoveryKey('')} />
     <TotpDialog open={totpOpen} onOpenChange={setTotpOpen} onEnabled={() => setTotpEnabled(true)} />
     <GroupInfo
@@ -2007,6 +2405,45 @@ function statusLabel(translate: (key: string) => string, status: string) {
   if (status === 'expired') return translate('statusExpired')
   if (status === 'cancelled') return translate('cancelled')
   return status
+}
+
+const STAGE_MEMORY_BYTES = 32 * 1024 * 1024
+
+/** Encrypt once, straight to disk, so a multi-gigabyte cloud upload is never held in memory. */
+async function stageCipher(fileId: string, file: File, userId: string): Promise<{ meta: FileCipherMeta; body: Blob; stored: boolean; removed: string[]; cleanup?: () => Promise<void> }> {
+  const sink = await beginCipherFile(fileId, file.size)
+  if (sink) {
+    const enc = await createEncryptor(file.size)
+    try {
+      for await (const { part, final } of blobParts(file)) await sink.write(enc.push(part, final))
+      const removed = await sink.finish(enc.meta)
+      const stored = await openStored(fileId)
+      if (stored?.kind === 'opfs') return { meta: enc.meta, body: stored.cipher, stored: true, removed }
+    } catch (err) {
+      await sink.abort()
+      throw err
+    }
+  }
+  const enc = await createEncryptor(file.size)
+  if (opfsAvailable() && userId) {
+    const writer = await openWriter(userId, 'sync-temp', fileId).catch(() => null)
+    if (writer) {
+      try {
+        for await (const { part, final } of blobParts(file)) await writer.write(enc.push(part, final))
+        await writer.close()
+      } catch (err) {
+        await writer.abort()
+        throw err
+      }
+      const body = await openNamed(userId, 'sync-temp', fileId)
+      if (body) return { meta: enc.meta, body, stored: false, removed: [], cleanup: () => removeNamed(userId, 'sync-temp', fileId) }
+    }
+  }
+  if (file.size > STAGE_MEMORY_BYTES) throw new Error('stage')
+  const chunks: Uint8Array[] = []
+  const mem = await createEncryptor(file.size)
+  for await (const { part, final } of blobParts(file)) chunks.push(mem.push(part, final))
+  return { meta: mem.meta, body: new Blob(chunks as BlobPart[]), stored: false, removed: [] }
 }
 
 function FileButton({ label, onPick }: { label: string; onPick: (files: File[]) => void }) {

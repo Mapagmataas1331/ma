@@ -5,6 +5,11 @@ export const FILE_CHUNK_BYTES = 64 * 1024
 
 export type FileCipherMeta = { key: string; header: string; lengths: number[] }
 
+/** Bytes the ciphertext will occupy, including the secretstream tag on every chunk. */
+export function ciphertextSize(plainBytes: number) {
+  return chunkLengths(plainBytes).reduce((sum, n) => sum + n, 0)
+}
+
 /** Ciphertext chunk sizes for a plaintext of `size` bytes. Deterministic, so both sides can compute it. */
 export function chunkLengths(size: number, chunk = FILE_CHUNK_BYTES) {
   const overhead = secretstreamOverhead()

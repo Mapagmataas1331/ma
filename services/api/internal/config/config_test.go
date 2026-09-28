@@ -28,7 +28,7 @@ func TestValidateLocalAllowsEmptyKEK(t *testing.T) {
 
 func TestDefaultsMatchArchitecture(t *testing.T) {
 	cfg := Load()
-	if cfg.MaxFileBytes != 25<<20 || cfg.UserQuotaBytes != 500<<20 || cfg.GlobalQuotaBytes != 60<<30 || cfg.MinFreeBytes != 15<<30 {
+	if cfg.MaxFileBytes != 5<<30 || cfg.UserQuotaBytes != 5<<30 || cfg.GlobalQuotaBytes != 60<<30 || cfg.MinFreeBytes != 15<<30 {
 		t.Fatalf("unexpected quotas: %+v", cfg)
 	}
 }

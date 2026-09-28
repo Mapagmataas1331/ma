@@ -72,8 +72,10 @@ export type PlaintextMessage = z.infer<typeof plaintextMessageSchema>
 
 export { canonicalDisplayName, canonicalUsername, deviceNameError, displayNameError, graphemeLength, groupNameError, passwordError, usernameError } from './limits'
 
-export const MAILBOX_MAX_FILE_BYTES = 26_214_400
-export const MAILBOX_DIRECT_FILE_BYTES = 26_214_400
+/** One queued file may use the whole cloud budget. The budget itself is what stops the next file. */
+export const MAILBOX_MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
+export const MAILBOX_USER_QUOTA_BYTES = MAILBOX_MAX_FILE_BYTES
+export const MAILBOX_DIRECT_FILE_BYTES = MAILBOX_MAX_FILE_BYTES
 export const MAILBOX_MAX_MESSAGE_BYTES = 65_536
 
 export function newFrame(t: string, p: Record<string, unknown> = {}, to?: SignalFrame['to']): SignalFrame {

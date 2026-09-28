@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mapagmataas1331/ma/services/api/internal/authz"
 )
 
 type Store struct {
@@ -512,8 +513,22 @@ type MailFile struct {
 	Path         string
 }
 
+type CloudFile struct {
+	FileID       uuid.UUID
+	Conversation uuid.UUID
+	Envelope     []byte
+	Size         int64
+	Recipients   int
+	Waiting      int
+	Expires      time.Time
+}
+
 func (s *Store) InboxFiles(ctx context.Context, user uuid.UUID) ([]MailFile, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT file_id, conversation_id, envelope, size_bytes FROM mailbox_files WHERE recipient_user_id=$1 AND state='ready' AND expires_at > now() ORDER BY created_at LIMIT 50`, user)
+	rows, err := s.Pool.Query(ctx, `SELECT b.file_id, b.conversation_id, b.envelope, b.size_bytes
+		FROM mailbox_blobs b
+		JOIN mailbox_file_recipients r ON r.blob_id=b.id
+		WHERE r.recipient_user_id=$1 AND r.delivered_at IS NULL AND b.expires_at > now()
+		ORDER BY b.created_at LIMIT 50`, user)
 	if err != nil {
 		return nil, err
 	}
@@ -531,60 +546,191 @@ func (s *Store) InboxFiles(ctx context.Context, user uuid.UUID) ([]MailFile, err
 
 func (s *Store) OpenFile(ctx context.Context, user, fileID uuid.UUID) (MailFile, error) {
 	var f MailFile
-	err := s.Pool.QueryRow(ctx, `SELECT file_id, conversation_id, envelope, size_bytes, storage_path FROM mailbox_files
-		WHERE file_id=$2 AND state='ready' AND expires_at > now() AND (recipient_user_id=$1 OR sender_user_id=$1)`, user, fileID).Scan(&f.ID, &f.Conversation, &f.Envelope, &f.Size, &f.Path)
+	err := s.Pool.QueryRow(ctx, `SELECT b.file_id, b.conversation_id, b.envelope, b.size_bytes, b.storage_path
+		FROM mailbox_blobs b
+		WHERE b.file_id=$2 AND b.expires_at > now()
+		AND (b.sender_user_id=$1 OR EXISTS(SELECT 1 FROM mailbox_file_recipients r WHERE r.blob_id=b.id AND r.recipient_user_id=$1))`, user, fileID).Scan(&f.ID, &f.Conversation, &f.Envelope, &f.Size, &f.Path)
 	return f, err
 }
 
+// AckFile drops one recipient's link. The blob, and its path, go away only when nobody is waiting for it.
 func (s *Store) AckFile(ctx context.Context, user, fileID uuid.UUID) (string, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	var blob uuid.UUID
+	err = tx.QueryRow(ctx, `DELETE FROM mailbox_file_recipients r USING mailbox_blobs b
+		WHERE r.blob_id=b.id AND b.file_id=$2 AND r.recipient_user_id=$1
+		RETURNING b.id`, user, fileID).Scan(&blob)
+	if err != nil {
+		return "", err
+	}
+	var left int
+	if err = tx.QueryRow(ctx, `SELECT count(*) FROM mailbox_file_recipients WHERE blob_id=$1`, blob).Scan(&left); err != nil {
+		return "", err
+	}
 	var path string
-	err := s.Pool.QueryRow(ctx, `DELETE FROM mailbox_files WHERE recipient_user_id=$1 AND file_id=$2 RETURNING storage_path`, user, fileID).Scan(&path)
-	return path, err
+	if left == 0 {
+		if err = tx.QueryRow(ctx, `DELETE FROM mailbox_blobs WHERE id=$1 RETURNING storage_path`, blob).Scan(&path); err != nil {
+			return "", err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
+// UserUsage is the sender's cloud total. One blob counts once, however many recipients it is linked to. Messages are not included.
 func (s *Store) UserUsage(ctx context.Context, user uuid.UUID) (int64, error) {
 	var n int64
-	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE recipient_user_id=$1 AND state IN ('uploading','ready')`, user).Scan(&n)
+	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_blobs WHERE sender_user_id=$1 AND expires_at > now()`, user).Scan(&n)
 	return n, err
 }
 
 func (s *Store) GlobalUsage(ctx context.Context) (int64, error) {
 	var n int64
-	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE state IN ('uploading','ready')`).Scan(&n)
+	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_blobs WHERE expires_at > now()`).Scan(&n)
 	return n, err
 }
 
-func (s *Store) PutFile(ctx context.Context, conv, sender, recipient, fileID uuid.UUID, envelope []byte, size int64, sha []byte, path string, expires time.Time, userQuota, globalQuota int64) (bool, error) {
+func (s *Store) CloudFiles(ctx context.Context, sender uuid.UUID) ([]CloudFile, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT b.file_id, b.conversation_id, b.envelope, b.size_bytes, b.expires_at,
+		(SELECT count(*) FROM mailbox_file_recipients r WHERE r.blob_id=b.id),
+		(SELECT count(*) FROM mailbox_file_recipients r WHERE r.blob_id=b.id AND r.delivered_at IS NULL)
+		FROM mailbox_blobs b WHERE b.sender_user_id=$1 AND b.expires_at > now() ORDER BY b.created_at`, sender)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []CloudFile
+	for rows.Next() {
+		var f CloudFile
+		if err := rows.Scan(&f.FileID, &f.Conversation, &f.Envelope, &f.Size, &f.Expires, &f.Recipients, &f.Waiting); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// PutBlob stores one ciphertext and links it to every recipient. A repeat upload of the same file only adds links.
+// stored is false when the blob already existed, so the caller can delete the duplicate it just wrote.
+func (s *Store) PutBlob(ctx context.Context, conv, sender, fileID uuid.UUID, envelope []byte, size int64, sha []byte, path string, expires time.Time, recipients []uuid.UUID, userQuota, globalQuota int64) (stored bool, err error) {
+	if len(recipients) == 0 {
+		return false, ErrForbidden
+	}
 	tx, err := s.Pool.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
 	defer tx.Rollback(ctx)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, recipient.String()); err != nil {
+	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, sender.String()); err != nil {
+		return false, err
+	}
+	var existing uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT id FROM mailbox_blobs WHERE file_id=$1 AND sender_user_id=$2`, fileID, sender).Scan(&existing)
+	if err == nil {
+		for _, rid := range recipients {
+			if _, err = tx.Exec(ctx, `INSERT INTO mailbox_file_recipients (blob_id, recipient_user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, existing, rid); err != nil {
+				return false, err
+			}
+		}
+		return false, tx.Commit(ctx)
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
 	var userUsed, globalUsed int64
-	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE recipient_user_id=$1 AND state IN ('uploading','ready')`, recipient).Scan(&userUsed); err != nil {
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_blobs WHERE sender_user_id=$1 AND expires_at > now()`, sender).Scan(&userUsed); err != nil {
 		return false, err
 	}
-	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_files WHERE state IN ('uploading','ready')`).Scan(&globalUsed); err != nil {
+	if userUsed+size > userQuota {
+		return false, ErrUserQuota
+	}
+	if err = tx.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes),0) FROM mailbox_blobs WHERE expires_at > now()`).Scan(&globalUsed); err != nil {
 		return false, err
 	}
-	if userUsed+size > userQuota || globalUsed+size > globalQuota {
-		return false, ErrForbidden
+	if globalUsed+size > globalQuota {
+		return false, ErrGlobalQuota
 	}
-	tag, err := tx.Exec(ctx, `INSERT INTO mailbox_files (conversation_id, sender_user_id, recipient_user_id, file_id, envelope, size_bytes, sha256, storage_path, state, expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ready',$9) ON CONFLICT (recipient_user_id, file_id) DO NOTHING`, conv, sender, recipient, fileID, envelope, size, sha, path, expires)
-	if err != nil {
+	var blob uuid.UUID
+	if err = tx.QueryRow(ctx, `INSERT INTO mailbox_blobs (sender_user_id, conversation_id, file_id, envelope, size_bytes, sha256, storage_path, expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, sender, conv, fileID, envelope, size, sha, path, expires).Scan(&blob); err != nil {
 		return false, err
 	}
-	if tag.RowsAffected() != 1 {
-		return false, nil
+	for _, rid := range recipients {
+		if _, err = tx.Exec(ctx, `INSERT INTO mailbox_file_recipients (blob_id, recipient_user_id) VALUES ($1,$2)`, blob, rid); err != nil {
+			return false, err
+		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+// LinkRecipient attaches one more group member to a blob the sender already stored.
+// The ciphertext stays one copy. A member who was offline when the upload started can be added while it is still current.
+func (s *Store) LinkRecipient(ctx context.Context, sender, fileID, recipient uuid.UUID) error {
+	var conv uuid.UUID
+	err := s.Pool.QueryRow(ctx, `SELECT conversation_id FROM mailbox_blobs
+		WHERE file_id=$1 AND sender_user_id=$2 AND expires_at > now()`, fileID, sender).Scan(&conv)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	access, err := s.AuthorizeDelivery(ctx, conv, sender, recipient)
+	if err != nil {
+		return err
+	}
+	if authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
+		return ErrForbidden
+	}
+	_, err = s.Pool.Exec(ctx, `INSERT INTO mailbox_file_recipients (blob_id, recipient_user_id)
+		SELECT id, $3 FROM mailbox_blobs WHERE file_id=$1 AND sender_user_id=$2
+		ON CONFLICT DO NOTHING`, fileID, sender, recipient)
+	return err
+}
+
+// DeleteCloudFile removes a sender's blob and every recipient link. The returned path is safe to unlink.
+func (s *Store) DeleteCloudFile(ctx context.Context, sender, fileID uuid.UUID) (string, []uuid.UUID, error) {
+	tx, err := s.Pool.Begin(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	defer tx.Rollback(ctx)
+	rows, err := tx.Query(ctx, `SELECT r.recipient_user_id FROM mailbox_file_recipients r
+		JOIN mailbox_blobs b ON b.id=r.blob_id WHERE b.sender_user_id=$1 AND b.file_id=$2`, sender, fileID)
+	if err != nil {
+		return "", nil, err
+	}
+	var recipients []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return "", nil, err
+		}
+		recipients = append(recipients, id)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return "", nil, err
+	}
+	var path string
+	err = tx.QueryRow(ctx, `DELETE FROM mailbox_blobs WHERE sender_user_id=$1 AND file_id=$2 RETURNING storage_path`, sender, fileID).Scan(&path)
+	if err != nil {
+		return "", nil, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return "", nil, err
+	}
+	return path, recipients, nil
 }
 
 type DroppedMail struct {
@@ -627,7 +773,7 @@ func (s *Store) DropMailbox(ctx context.Context, minAge time.Duration) ([]Droppe
 	if err = messages.Err(); err != nil {
 		return nil, err
 	}
-	files, err := tx.Query(ctx, `SELECT sender_user_id, file_id, storage_path FROM mailbox_files WHERE created_at < $1 OR expires_at < now() OR state IN ('delivered','expired')`, cutoff)
+	files, err := tx.Query(ctx, `SELECT sender_user_id, file_id, storage_path FROM mailbox_blobs WHERE created_at < $1 OR expires_at < now()`, cutoff)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +797,7 @@ func (s *Store) DropMailbox(ctx context.Context, minAge time.Duration) ([]Droppe
 	if _, err = tx.Exec(ctx, `DELETE FROM mailbox_messages WHERE created_at < $1 OR expires_at < now()`, cutoff); err != nil {
 		return nil, err
 	}
-	if _, err = tx.Exec(ctx, `DELETE FROM mailbox_files WHERE created_at < $1 OR expires_at < now() OR state IN ('delivered','expired')`, cutoff); err != nil {
+	if _, err = tx.Exec(ctx, `DELETE FROM mailbox_blobs WHERE created_at < $1 OR expires_at < now()`, cutoff); err != nil {
 		return nil, err
 	}
 	if err = tx.Commit(ctx); err != nil {

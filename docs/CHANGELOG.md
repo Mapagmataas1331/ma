@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Cloud queue is 5 GB per sender for files only. One ciphertext is stored and linked to every offline recipient, so a group does not multiply disk use. Hitting the limit shows what is using the space and lets the sender remove a file or send only to people who are online. Files leave after 24 hours, after every recipient downloads them, or when the sender removes them.
+- A file larger than 5 GB is sent only to members who are online. Any online member who already has a copy can hand it to another member; if several can, the one with the lowest ping is used.
+- A group member who comes online while a file is still being sent receives it too. A direct file is handed over by whoever already has it. A cloud file is linked to them as well, so they can download it from the server.
 - Group chats work end to end: messages, typing, receipts, and files fan out to every member; sender names in bubbles; a group info sheet for rename, add/remove members, transfer ownership, leave, and delete. The API returns `group_full`, `not_contact`, and `owner_must_transfer` codes and notifies every member when a group changes.
 - Storage is one per-account budget (default 5 GB) for chats, cached files, and the outbox queue instead of per-file caps. File ciphertext lives in OPFS with keys sealed in the vault; the oldest files are evicted first.
 - Large files are encrypted once at send time and kept, so the sender can keep sharing after a reload or reconnect. Transfers stream 64 KB chunks with data-channel back-pressure, and receivers write ciphertext directly to disk.

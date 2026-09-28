@@ -110,7 +110,7 @@ export type ChatFile = {
  * Where a file can be fetched from right now.
  * - `ready`: bytes are on this device.
  * - `server`: waiting in the encrypted mailbox.
- * - `peer`: the other device is online and has confirmed or is expected to have it.
+ * - `peer`: someone in the chat is online and can hand the file over. The closest connection is chosen.
  * - `offline`: the other device is offline, so nothing can be fetched yet.
  * - `gone`: nobody reachable has it any more.
  * - `sharing`: our own large file that this device can still hand out.

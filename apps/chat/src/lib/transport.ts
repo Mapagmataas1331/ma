@@ -144,6 +144,24 @@ export class Transport {
     for (const candidate of queued) await pc.addIceCandidate(candidate)
   }
 
+  /** Round-trip time of an open connection to this user, in milliseconds. Empty when no channel is up yet. */
+  async rtt(userId: string) {
+    let best: number | null = null
+    for (const [key, pc] of this.peers) {
+      if (!key.startsWith(`${userId}:`)) continue
+      const stats = await pc.getStats().catch(() => null)
+      if (!stats) continue
+      stats.forEach((report) => {
+        const row = report as { type?: string; state?: string; currentRoundTripTime?: number }
+        if (row.type === 'candidate-pair' && row.state === 'succeeded' && typeof row.currentRoundTripTime === 'number') {
+          const ms = row.currentRoundTripTime * 1000
+          if (best === null || ms < best) best = ms
+        }
+      })
+    }
+    return best
+  }
+
   async ensurePeer(userId: string, deviceId: string, timeoutMs = 4000) {
     const key = `${userId}:${deviceId}`
     const existing = this.channels.get(key)

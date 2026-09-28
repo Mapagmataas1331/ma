@@ -17,6 +17,8 @@ var (
 	ErrGroupFull         = errors.New("group_full")
 	ErrNotContact        = errors.New("not_contact")
 	ErrOwnerMustTransfer = errors.New("owner_must_transfer")
+	ErrUserQuota         = errors.New("quota_user")
+	ErrGlobalQuota       = errors.New("quota_global")
 )
 
 type DeliveryAuth struct {

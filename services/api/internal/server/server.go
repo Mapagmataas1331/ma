@@ -121,6 +121,9 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/mailbox/files", a.getFiles)
 	mux.HandleFunc("GET /v1/mailbox/files/{id}", a.downloadFile)
 	mux.HandleFunc("POST /v1/mailbox/files/{id}/ack", a.ackFile)
+	mux.HandleFunc("POST /v1/mailbox/files/{id}/recipients", a.linkFileRecipient)
+	mux.HandleFunc("GET /v1/mailbox/cloud", a.cloudFiles)
+	mux.HandleFunc("DELETE /v1/mailbox/cloud/{id}", a.deleteCloudFile)
 	mux.HandleFunc("GET /v1/turn/credentials", a.turnCreds)
 	mux.HandleFunc("POST /v1/auth/2fa/totp/setup", a.totpSetup)
 	mux.HandleFunc("POST /v1/auth/2fa/totp/confirm", a.totpConfirm)
@@ -1045,8 +1048,12 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	if hdr.Size > a.Cfg.MaxFileBytes {
-		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+	sizeHint := hdr.Size
+	if sizeHint < 0 {
+		sizeHint = 0
+	}
+	if sizeHint > a.Cfg.MaxFileBytes {
+		httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
 		return
 	}
 	fileID, err := uuid.Parse(r.FormValue("file_id"))
@@ -1054,20 +1061,22 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		fileID = uuid.New()
 	}
 	conv, _ := uuid.Parse(r.FormValue("conversation_id"))
-	rec, _ := uuid.Parse(r.FormValue("recipient_user_id"))
-	access, err := a.DB.AuthorizeDelivery(r.Context(), conv, p.User.ID, rec)
-	if err != nil || authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
-		httpx.WriteError(w, 403, "forbidden", "conversation")
+	recipients, okRec := a.cloudRecipients(w, r, p, conv)
+	if !okRec {
 		return
 	}
-	// The mailbox quota belongs to the recipient's inbox, which is also what PutFile enforces under lock.
-	userUsed, _ := a.DB.UserUsage(r.Context(), rec)
+	// Quota belongs to the sender and counts this blob once, not once per recipient.
+	userUsed, _ := a.DB.UserUsage(r.Context(), p.User.ID)
 	globalUsed, _ := a.DB.GlobalUsage(r.Context())
 	free, _ := a.disk()
 	lim := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
-	if err := lim.CheckFile(hdr.Size, userUsed, globalUsed, free); err != nil {
+	if err := lim.CheckFile(sizeHint, userUsed, globalUsed, free); err != nil {
 		if errors.Is(err, quota.ErrTooLarge) {
-			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+			httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
+			return
+		}
+		if errors.Is(err, quota.ErrUser) {
+			a.writeCloudQuota(w, r, p.User.ID)
 			return
 		}
 		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
@@ -1080,7 +1089,8 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := filepath.Join(a.Cfg.MailboxDir, time.Now().Format("2006"), time.Now().Format("01"))
 	_ = os.MkdirAll(dir, 0o750)
-	path := filepath.Join(dir, rec.String()+"-"+fileID.String())
+	// A fresh name so a retry cannot truncate the blob already linked to recipients.
+	path := filepath.Join(dir, fileID.String()+"-"+uuid.NewString())
 	out, err := os.Create(path)
 	if err != nil {
 		httpx.WriteError(w, 500, "internal", "disk")
@@ -1091,7 +1101,7 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	_ = out.Close()
 	if n > a.Cfg.MaxFileBytes {
 		_ = os.Remove(path)
-		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+		httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
 		return
 	}
 	if err != nil {
@@ -1099,21 +1109,135 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 500, "internal", "disk")
 		return
 	}
-	inserted, err := a.DB.PutFile(r.Context(), conv, p.User.ID, rec, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL), a.Cfg.UserQuotaBytes, a.Cfg.GlobalQuotaBytes)
-	if err != nil || !inserted {
+	stored, err := a.DB.PutBlob(r.Context(), conv, p.User.ID, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL), recipients, a.Cfg.UserQuotaBytes, a.Cfg.GlobalQuotaBytes)
+	if err != nil || !stored {
 		_ = os.Remove(path)
+		if errors.Is(err, store.ErrUserQuota) {
+			a.writeCloudQuota(w, r, p.User.ID)
+			return
+		}
 		if err != nil {
 			httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 			return
 		}
+		for _, rec := range recipients {
+			a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
+		}
 		httpx.WriteJSON(w, 200, map[string]string{"status": "duplicate"})
 		return
 	}
-	a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
-	if !a.Hub.Online(rec) {
-		a.pushMailbox(r.Context(), rec, 1)
+	for _, rec := range recipients {
+		a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
+		if !a.Hub.Online(rec) {
+			a.pushMailbox(r.Context(), rec, 1)
+		}
 	}
 	httpx.WriteJSON(w, 201, map[string]string{"status": "stored", "sha256": hex.EncodeToString(h.Sum(nil))})
+}
+
+func (a *App) cloudRecipients(w http.ResponseWriter, r *http.Request, p principal, conv uuid.UUID) ([]uuid.UUID, bool) {
+	raw := []string{}
+	if r.MultipartForm != nil {
+		raw = r.MultipartForm.Value["recipient_user_id"]
+	}
+	if len(raw) == 0 && r.FormValue("recipient_user_id") != "" {
+		raw = []string{r.FormValue("recipient_user_id")}
+	}
+	seen := map[uuid.UUID]struct{}{}
+	var recipients []uuid.UUID
+	for _, value := range raw {
+		id, err := uuid.Parse(value)
+		if err != nil || id == uuid.Nil {
+			httpx.WriteError(w, 400, "bad_request", "recipient")
+			return nil, false
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		access, err := a.DB.AuthorizeDelivery(r.Context(), conv, p.User.ID, id)
+		if err != nil || authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
+			httpx.WriteError(w, 403, "forbidden", "conversation")
+			return nil, false
+		}
+		recipients = append(recipients, id)
+	}
+	if len(recipients) == 0 {
+		httpx.WriteError(w, 400, "bad_request", "recipient")
+		return nil, false
+	}
+	return recipients, true
+}
+
+func (a *App) cloudFiles(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.requireChat(w, r)
+	if !ok {
+		return
+	}
+	used, files, err := a.cloudSnapshot(r.Context(), p.User.ID)
+	if err != nil {
+		httpx.WriteError(w, 500, "internal", "cloud")
+		return
+	}
+	httpx.WriteJSON(w, 200, map[string]any{"used": used, "limit": a.Cfg.UserQuotaBytes, "files": files})
+}
+
+func (a *App) deleteCloudFile(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.requireChat(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	path, recipients, err := a.DB.DeleteCloudFile(r.Context(), p.User.ID, id)
+	if err != nil {
+		httpx.WriteError(w, 404, "not_found", "file")
+		return
+	}
+	if path != "" {
+		_ = os.Remove(path)
+	}
+	for _, rec := range recipients {
+		a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "chat.file.missing", ID: uuid.NewString(), P: map[string]any{"file_id": id.String()}})
+	}
+	w.WriteHeader(204)
+}
+
+func (a *App) writeCloudQuota(w http.ResponseWriter, r *http.Request, user uuid.UUID) {
+	used, files, _ := a.cloudSnapshot(r.Context(), user)
+	httpx.WriteJSON(w, 413, map[string]any{
+		"code":    "quota_user",
+		"message": "cloud storage is full",
+		"details": map[string]any{"used": used, "limit": a.Cfg.UserQuotaBytes, "files": files},
+	})
+}
+
+func (a *App) cloudSnapshot(ctx context.Context, user uuid.UUID) (int64, []map[string]any, error) {
+	used, err := a.DB.UserUsage(ctx, user)
+	if err != nil {
+		return 0, nil, err
+	}
+	list, err := a.DB.CloudFiles(ctx, user)
+	if err != nil {
+		return 0, nil, err
+	}
+	files := make([]map[string]any, 0, len(list))
+	for _, f := range list {
+		name, _ := fileMeta(f.Envelope)
+		files = append(files, map[string]any{
+			"file_id":         f.FileID.String(),
+			"conversation_id": f.Conversation.String(),
+			"name":            name,
+			"size":            f.Size,
+			"recipients":      f.Recipients,
+			"waiting":         f.Waiting,
+			"expires_at":      f.Expires,
+		})
+	}
+	return used, files, nil
 }
 
 func (a *App) getFiles(w http.ResponseWriter, r *http.Request) {
@@ -1165,6 +1289,40 @@ func (a *App) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(200)
 	_, _ = io.Copy(w, body)
+}
+
+func (a *App) linkFileRecipient(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.requireChat(w, r)
+	if !ok {
+		return
+	}
+	fileID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httpx.WriteError(w, 400, "bad_request", "id")
+		return
+	}
+	var body struct {
+		Recipient uuid.UUID `json:"recipient_user_id"`
+	}
+	if err := httpx.ReadJSON(r, &body); err != nil || body.Recipient == uuid.Nil {
+		httpx.WriteError(w, 400, "bad_request", "recipient")
+		return
+	}
+	err = a.DB.LinkRecipient(r.Context(), p.User.ID, fileID, body.Recipient)
+	if errors.Is(err, store.ErrNotFound) {
+		httpx.WriteError(w, 404, "not_found", "file")
+		return
+	}
+	if errors.Is(err, store.ErrForbidden) {
+		httpx.WriteError(w, 403, "forbidden", "conversation")
+		return
+	}
+	if err != nil {
+		httpx.WriteError(w, 500, "internal", "file")
+		return
+	}
+	a.Hub.Notify(r.Context(), body.Recipient, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
+	w.WriteHeader(204)
 }
 
 func (a *App) ackFile(w http.ResponseWriter, r *http.Request) {

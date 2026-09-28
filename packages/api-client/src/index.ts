@@ -3,10 +3,12 @@ import { apiErrorSchema } from '@ma/protocol'
 export class ApiError extends Error {
   code: string
   status: number
-  constructor(status: number, code: string, message: string) {
+  details?: unknown
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message)
     this.status = status
     this.code = code
+    this.details = details
   }
 }
 
@@ -35,7 +37,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!res.ok) {
     const parsed = apiErrorSchema.safeParse(data)
-    throw new ApiError(res.status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : res.statusText)
+    throw new ApiError(res.status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : res.statusText, parsed.success ? parsed.data.details : undefined)
   }
   return data as T
 }
@@ -45,9 +47,16 @@ export async function apiBlob(path: string): Promise<Blob> {
 }
 
 function readApiError(status: number, text: string, statusText: string): ApiError {
-  const data = text ? JSON.parse(text) : null
+  let data: unknown = null
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = null
+    }
+  }
   const parsed = apiErrorSchema.safeParse(data)
-  return new ApiError(status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : statusText)
+  return new ApiError(status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : statusText, parsed.success ? parsed.data.details : undefined)
 }
 
 export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<T> {
