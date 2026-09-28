@@ -135,6 +135,11 @@ export function secretstreamPull(state: unknown, chunk: Uint8Array) {
   return sodium.crypto_secretstream_xchacha20poly1305_pull(state, chunk, null)
 }
 
+/** Bytes secretstream adds to every chunk (tag + MAC). */
+export function secretstreamOverhead() {
+  return sodium.crypto_secretstream_xchacha20poly1305_ABYTES
+}
+
 export function zero(bytes: Uint8Array | null | undefined) {
   if (bytes) sodium.memzero(bytes)
 }

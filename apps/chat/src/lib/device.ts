@@ -41,6 +41,13 @@ export function ensureDeviceSecrets(userId: string): PublicKeys {
   return { ed25519: keys.ed25519, x25519: keys.x25519 }
 }
 
+/** "Chrome on Windows" instead of a raw user-agent string in the device list. */
+export function friendlyDeviceName(ua = typeof navigator === 'undefined' ? '' : navigator.userAgent) {
+  const browser = /Edg\//.test(ua) ? 'Edge' : /OPR\//.test(ua) ? 'Opera' : /Firefox\//.test(ua) ? 'Firefox' : /YaBrowser\//.test(ua) ? 'Yandex' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : 'Browser'
+  const os = /Android/.test(ua) ? 'Android' : /iPhone|iPad|iPod/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : ''
+  return os ? `${browser} on ${os}` : browser
+}
+
 export function clearDeviceSecrets() {
   for (const keys of pending.values()) {
     zero(keys.signSk)

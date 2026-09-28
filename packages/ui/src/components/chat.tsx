@@ -4,7 +4,8 @@ import { cn } from '../lib/cn'
 import { HoldMenu, Progress } from './primitives'
 
 export function PresenceDot({ online }: { online: boolean }) {
-  return <span className={cn('inline-block size-2 rounded-full', online ? 'bg-ok' : 'bg-muted/50')} aria-label={online ? 'Online' : 'Offline'} />
+  const { t } = useTranslation('common')
+  return <span className={cn('inline-block size-2 rounded-full', online ? 'bg-ok' : 'bg-muted/50')} aria-label={online ? t('online') : t('offline')} />
 }
 
 export function MessageBubble({
@@ -12,6 +13,7 @@ export function MessageBubble({
   grouped,
   time,
   status,
+  sender,
   menu,
   children,
 }: {
@@ -19,11 +21,14 @@ export function MessageBubble({
   grouped?: boolean
   time?: string
   status?: string
+  /** Shown above the bubble in group chats when the previous message came from someone else. */
+  sender?: string
   menu?: { label: string; items: { id: string; label: string; onSelect: () => void }[] }
   children: ReactNode
 }) {
   const bubble = (
     <div className={cn('px-3.5 py-2 text-sm leading-relaxed break-words shadow-float', mine ? 'rounded-lg rounded-br-sm bg-accent text-accent-fg' : 'rounded-lg rounded-bl-sm bg-surface-1 text-fg')}>
+      {sender && !grouped ? <p className="mb-0.5 text-xs font-medium text-accent">{sender}</p> : null}
       {children}
       {time || status ? (
         <p className={cn('mt-1 text-[11px]', mine ? 'text-accent-fg/70' : 'text-muted')}>
@@ -59,7 +64,8 @@ export function DayDivider({ label }: { label: string }) {
 }
 
 export function TypingIndicator({ name }: { name: string }) {
-  return <p className="px-1 py-1 text-xs text-muted">{name} is typing…</p>
+  const { t } = useTranslation('common')
+  return <p className="px-1 py-1 text-xs text-muted">{t('typing', { name })}</p>
 }
 
 export function TransferProgress({ title, loaded, total, startedAt, onCancel }: { title: string; loaded: number; total: number; startedAt: number; onCancel?: () => void }) {
@@ -96,12 +102,46 @@ export type ChatFile = {
   key?: string
   header?: string
   lengths?: number[]
+  /** The source confirmed it no longer has this file. */
+  gone?: boolean
+}
+
+/**
+ * Where a file can be fetched from right now.
+ * - `ready`: bytes are on this device.
+ * - `server`: waiting in the encrypted mailbox.
+ * - `peer`: the other device is online and has confirmed or is expected to have it.
+ * - `offline`: the other device is offline, so nothing can be fetched yet.
+ * - `gone`: nobody reachable has it any more.
+ * - `sharing`: our own large file that this device can still hand out.
+ * - `sessionOnly`: our own file kept only in memory; reloading the page drops it.
+ */
+export type FileAvailability = 'ready' | 'server' | 'peer' | 'offline' | 'gone' | 'sharing' | 'sessionOnly'
+
+export function availabilityLabel(t: (key: string) => string, state: FileAvailability) {
+  const map: Record<FileAvailability, string> = {
+    ready: 'fileReady',
+    server: 'fileOnServer',
+    peer: 'fileAvailable',
+    offline: 'fileSenderOffline',
+    gone: 'fileUnavailable',
+    sharing: 'fileSharing',
+    sessionOnly: 'fileSessionOnly',
+  }
+  return t(map[state])
+}
+
+function availabilityTone(state: FileAvailability) {
+  if (state === 'gone') return 'text-danger'
+  if (state === 'offline' || state === 'sessionOnly') return 'opacity-70'
+  return 'opacity-80'
 }
 
 export function MessageAttachments({
   files,
   expanded,
   downloading,
+  availability,
   onExpand,
   onDownload,
   onView,
@@ -110,6 +150,7 @@ export function MessageAttachments({
   files: ChatFile[]
   expanded?: boolean
   downloading?: string | null
+  availability?: (file: ChatFile) => FileAvailability | undefined
   onExpand?: () => void
   onDownload?: (file: ChatFile) => void
   onView?: (file: ChatFile) => void
@@ -129,23 +170,27 @@ export function MessageAttachments({
     <div className="space-y-2">
       {images.length ? (
         <div className={images.length > 1 ? 'grid grid-cols-2 gap-1' : ''}>
-          {images.map((file) => wrap(file, file.url ? (
-            <button type="button" className="block w-full" onClick={() => onView?.(file)}>
-              <img src={file.url} alt={file.name} className="max-h-72 w-full rounded-md object-cover" />
-            </button>
-          ) : (
-            <button type="button" className="flex min-h-24 w-full flex-col items-start justify-center rounded-md bg-black/10 px-3 py-2 text-left" onClick={() => onView?.(file)}>
-              <span className="truncate text-sm font-medium">{file.name}</span>
-              <span className="text-xs opacity-80">{t('view')}</span>
-            </button>
-          )))}
+          {images.map((file) => {
+            const state = availability?.(file)
+            return wrap(file, file.url ? (
+              <button type="button" className="block w-full" onClick={() => onView?.(file)}>
+                <img src={file.url} alt={file.name} className="max-h-72 w-full rounded-md object-cover" />
+              </button>
+            ) : (
+              <button type="button" className="flex min-h-24 w-full flex-col items-start justify-center rounded-md bg-black/10 px-3 py-2 text-left" onClick={() => onView?.(file)} disabled={state === 'gone'}>
+                <span className="w-full truncate text-sm font-medium">{file.name}</span>
+                <span className="text-xs opacity-80">{formatSize(file.size)}</span>
+                <span className={cn('text-xs', state ? availabilityTone(state) : 'opacity-80')}>{state ? availabilityLabel(t, state) : t('view')}</span>
+              </button>
+            ))
+          })}
         </div>
       ) : null}
       {videos.map((file) => wrap(file, (
         <video src={file.url} controls playsInline className="max-h-72 w-full rounded-md bg-black" />
       )))}
       {rest.map((file) => wrap(file, (
-        <FileOffer file={file} downloading={downloading === file.id} onDownload={onDownload ? () => onDownload(file) : undefined} onView={onView ? () => onView(file) : undefined} />
+        <FileOffer file={file} state={availability?.(file)} downloading={downloading === file.id} onDownload={onDownload ? () => onDownload(file) : undefined} onView={onView ? () => onView(file) : undefined} />
       )))}
       {!expanded && files.length > 5 && onExpand ? (
         <button type="button" className="text-xs underline underline-offset-2" onClick={onExpand}>
@@ -156,19 +201,21 @@ export function MessageAttachments({
   )
 }
 
-function FileOffer({ file, downloading, onDownload, onView }: { file: ChatFile; downloading?: boolean; onDownload?: () => void; onView?: () => void }) {
+function FileOffer({ file, state, downloading, onDownload, onView }: { file: ChatFile; state?: FileAvailability; downloading?: boolean; onDownload?: () => void; onView?: () => void }) {
   const { t } = useTranslation('common')
   const format = fileFormat(file.name, file.mime)
+  const blocked = state === 'gone' || state === 'offline'
   return (
     <div className="min-w-48 rounded-md bg-black/10 px-3 py-2">
       <button type="button" className="block w-full text-left" onClick={onView}>
         <p className="truncate text-sm font-medium">{file.name}</p>
         <p className="text-xs opacity-80">{format} · {formatSize(file.size)}</p>
+        {state ? <p className={cn('text-xs', availabilityTone(state))}>{availabilityLabel(t, state)}</p> : null}
       </button>
       {file.url && file.mime.startsWith('audio/') ? <audio src={file.url} controls className="mt-2 w-full" /> : null}
-      {onDownload ? (
+      {onDownload && !blocked ? (
         <button type="button" className="mt-1 text-xs underline underline-offset-2" onClick={onDownload} disabled={downloading}>
-          {downloading ? t('downloading') : t('download')}
+          {downloading ? t('downloading') : file.url ? t('save') : t('download')}
         </button>
       ) : null}
     </div>

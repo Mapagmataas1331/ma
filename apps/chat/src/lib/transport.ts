@@ -87,9 +87,34 @@ export class Transport {
     return this.ws?.bufferedAmount ?? 0
   }
 
+  private ice: { servers: RTCIceServer[]; until: number } | null = null
+
   private async iceServers() {
+    if (this.ice && this.ice.until > Date.now()) return this.ice.servers
     const creds = await api<{ urls: string[]; username: string; credential: string }>('/v1/turn/credentials')
-    return [{ urls: creds.urls, username: creds.username, credential: creds.credential }]
+    const servers = [{ urls: creds.urls, username: creds.username, credential: creds.credential }]
+    this.ice = { servers, until: Date.now() + 60 * 60 * 1000 }
+    return servers
+  }
+
+  /** Resolve once the channel's send buffer has drained below the threshold. */
+  static drain(channel: RTCDataChannel, threshold = 1024 * 1024) {
+    if (channel.bufferedAmount <= threshold) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      channel.bufferedAmountLowThreshold = threshold
+      const done = () => {
+        channel.removeEventListener('bufferedamountlow', done)
+        channel.removeEventListener('close', done)
+        resolve()
+      }
+      channel.addEventListener('bufferedamountlow', done)
+      channel.addEventListener('close', done)
+    })
+  }
+
+  peerOpen(userId: string, deviceId: string) {
+    const channel = this.channels.get(`${userId}:${deviceId}`)
+    return !!channel && channel.readyState === 'open'
   }
 
   private peerFrom(key: string) {

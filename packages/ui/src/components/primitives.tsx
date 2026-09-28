@@ -19,6 +19,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ButtonHTML
 import { useTranslation } from 'react-i18next'
 import { Toaster as Sonner, toast } from 'sonner'
 import { cn } from '../lib/cn'
+import { ThemeContext } from '../theme'
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'ghost' | 'outline' | 'danger'
@@ -372,6 +373,7 @@ type CommandItem = { id: string; label: string; hint?: string; onSelect: () => v
 const CommandCtx = createContext<{ open: boolean; setOpen: (v: boolean) => void; items: CommandItem[] } | null>(null)
 
 export function CommandProvider({ items, children }: { items: CommandItem[]; children: ReactNode }) {
+  const { t } = useTranslation('common')
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -386,11 +388,11 @@ export function CommandProvider({ items, children }: { items: CommandItem[]; chi
   return (
     <CommandCtx.Provider value={{ open, setOpen, items }}>
       {children}
-      <Dialog open={open} onOpenChange={setOpen} title="Search">
-        <Command className="flex flex-col gap-2" label="Command palette">
-          <Command.Input placeholder="Type a command" className="h-10 rounded-sm border border-line bg-surface-2 px-3 text-sm outline-none" />
+      <Dialog open={open} onOpenChange={setOpen} title={t('search')}>
+        <Command className="flex flex-col gap-2" label={t('search')}>
+          <Command.Input placeholder={t('searchPlaceholder')} className="h-10 rounded-sm border border-line bg-surface-2 px-3 text-sm outline-none" />
           <Command.List className="max-h-64 overflow-auto">
-            <Command.Empty className="px-2 py-3 text-sm text-muted">Nothing matches.</Command.Empty>
+            <Command.Empty className="px-2 py-3 text-sm text-muted">{t('nothingMatches')}</Command.Empty>
             {items.map((item) => (
               <Command.Item
                 key={item.id}
@@ -437,7 +439,8 @@ export function Select({ value, onValueChange, options, label }: { value: string
 }
 
 export function Toaster() {
-  return <Sonner theme="system" position="bottom-right" />
+  const theme = useContext(ThemeContext)
+  return <Sonner theme={theme?.resolved ?? 'system'} position="bottom-right" closeButton />
 }
 
 export { toast }
@@ -453,13 +456,14 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
 }
 
 export function ErrorState({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }) {
+  const { t } = useTranslation('common')
   return (
     <div className="rounded-lg border border-danger/30 bg-danger/5 p-5" role="alert">
       <p className="font-medium text-danger">{title}</p>
       <p className="mt-1 text-sm text-muted">{body}</p>
       {onRetry ? (
         <Button className="mt-3" variant="outline" onClick={onRetry}>
-          Try again
+          {t('tryAgain')}
         </Button>
       ) : null}
     </div>

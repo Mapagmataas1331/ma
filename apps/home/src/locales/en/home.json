@@ -1,5 +1,8 @@
 {
   "lead": "A small set of sites for writing, work, and a private messenger.",
   "intro": "I build web systems that have to run: APIs, databases, and the Linux hosts around them.",
-  "open": "Open"
+  "open": "Open",
+  "resumeBlurb": "Experience, stack, and how to reach me.",
+  "projectsBlurb": "Systems I run and what they are made of.",
+  "chatBlurb": "Invite-only, end-to-end encrypted, direct file transfers of any size."
 }

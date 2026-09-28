@@ -12,7 +12,15 @@ Same as the server, except `SERVER_KEK` stays on disk outside the dump, so TOTP 
 
 ## Temporary file storage
 
-Offline files are encrypted before upload. The per-file key is inside the client envelope, not on the server.
+Offline files are encrypted before upload. The per-file key is inside the client envelope, not on the server. Downloads are served as opaque `application/octet-stream` attachments so a browser never renders mailbox bytes in the API origin.
+
+## Files kept on a device
+
+Large files are kept as secretstream ciphertext in OPFS so the sender can share them again later. The file key, header, and chunk lengths are sealed under the vault DEK in IndexedDB, so a copy of the OPFS directory alone is useless. Availability probes (`chat.file.probe`) reveal to a peer whether you still hold a file they were sent; they are answered only for related users, and only for files that peer already knows about.
+
+## Clearing a browser
+
+"Clear all local data" deletes every account database, the legacy `ma-chat` database, OPFS, caches, storage, and service workers for the origin. It does not touch the server or other devices. Chats that exist only on that browser are gone.
 
 ## Browser XSS while unlocked
 

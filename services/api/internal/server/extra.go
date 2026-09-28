@@ -184,6 +184,37 @@ func membersJSON(members []store.Member) []map[string]string {
 	return out
 }
 
+// writeGroupError maps store errors from group operations to stable API codes.
+func writeGroupError(w http.ResponseWriter, err error, what string) {
+	switch {
+	case errors.Is(err, store.ErrGroupFull):
+		httpx.WriteError(w, 409, "group_full", "group already has the maximum number of members")
+	case errors.Is(err, store.ErrNotContact):
+		httpx.WriteError(w, 403, "not_contact", "only accepted contacts can be added")
+	case errors.Is(err, store.ErrOwnerMustTransfer):
+		httpx.WriteError(w, 409, "owner_must_transfer", "transfer ownership or delete the group before leaving")
+	case errors.Is(err, store.ErrNotFound):
+		httpx.WriteError(w, 404, "not_found", what)
+	case errors.Is(err, store.ErrForbidden):
+		httpx.WriteError(w, 403, "forbidden", what)
+	default:
+		httpx.WriteError(w, 500, "internal", what)
+	}
+}
+
+// touchMembers tells every listed user (and any extra ids) that a conversation changed so their lists refresh.
+func (a *App) touchMembers(ctx context.Context, conversation uuid.UUID, extra ...uuid.UUID) {
+	seen := map[uuid.UUID]struct{}{}
+	ids, _ := a.DB.MemberIDs(ctx, conversation)
+	for _, id := range append(ids, extra...) {
+		if _, ok := seen[id]; ok || id == uuid.Nil {
+			continue
+		}
+		seen[id] = struct{}{}
+		a.touch(ctx, id, "conversations.updated")
+	}
+}
+
 func (a *App) renameConversation(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.requireChat(w, r)
 	if !ok {
@@ -202,9 +233,10 @@ func (a *App) renameConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.DB.RenameConversation(r.Context(), id, p.User.ID, body.Title); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "group")
+		writeGroupError(w, err, "group")
 		return
 	}
+	a.touchMembers(r.Context(), id)
 	w.WriteHeader(204)
 }
 
@@ -218,10 +250,13 @@ func (a *App) deleteConversation(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "id")
 		return
 	}
+	// Collect members before they are marked as left, so everyone learns the group is gone.
+	members, _ := a.DB.MemberIDs(r.Context(), id)
 	if err = a.DB.DeleteConversation(r.Context(), id, p.User.ID); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "group")
+		writeGroupError(w, err, "group")
 		return
 	}
+	a.touchMembers(r.Context(), id, members...)
 	w.WriteHeader(204)
 }
 
@@ -238,14 +273,15 @@ func (a *App) addMember(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		User uuid.UUID `json:"user_id"`
 	}
-	if err = httpx.ReadJSON(r, &body); err != nil {
+	if err = httpx.ReadJSON(r, &body); err != nil || body.User == uuid.Nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
 		return
 	}
 	if err = a.DB.AddMember(r.Context(), id, p.User.ID, body.User); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "member")
+		writeGroupError(w, err, "member")
 		return
 	}
+	a.touchMembers(r.Context(), id)
 	w.WriteHeader(204)
 }
 
@@ -265,9 +301,10 @@ func (a *App) removeMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.DB.RemoveMember(r.Context(), id, p.User.ID, userID); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "member")
+		writeGroupError(w, err, "member")
 		return
 	}
+	a.touchMembers(r.Context(), id, userID)
 	w.WriteHeader(204)
 }
 
@@ -282,9 +319,10 @@ func (a *App) leaveConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err = a.DB.LeaveConversation(r.Context(), id, p.User.ID); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "leave")
+		writeGroupError(w, err, "leave")
 		return
 	}
+	a.touchMembers(r.Context(), id, p.User.ID)
 	w.WriteHeader(204)
 }
 
@@ -301,13 +339,14 @@ func (a *App) transferOwnership(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		User uuid.UUID `json:"user_id"`
 	}
-	if err = httpx.ReadJSON(r, &body); err != nil {
+	if err = httpx.ReadJSON(r, &body); err != nil || body.User == uuid.Nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
 		return
 	}
 	if err = a.DB.TransferOwnership(r.Context(), id, p.User.ID, body.User); err != nil {
-		httpx.WriteError(w, 403, "forbidden", "owner")
+		writeGroupError(w, err, "owner")
 		return
 	}
+	a.touchMembers(r.Context(), id)
 	w.WriteHeader(204)
 }

@@ -10,9 +10,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -932,13 +934,15 @@ func (a *App) createConversation(w http.ResponseWriter, r *http.Request) {
 		}
 		conv, err := a.DB.CreateGroup(r.Context(), p.User.ID, strings.TrimSpace(body.Title), body.Members)
 		if err != nil {
-			httpx.WriteError(w, 403, "forbidden", "group")
+			writeGroupError(w, err, "group")
 			return
 		}
 		for _, member := range body.Members {
 			a.touch(r.Context(), member, "conversations.updated")
 		}
-		httpx.WriteJSON(w, 201, conversationJSON(conv, nil))
+		// Return the member list right away so the creator can address the group without a second fetch.
+		members, _ := a.DB.Members(r.Context(), conv.ID, p.User.ID)
+		httpx.WriteJSON(w, 201, conversationJSON(conv, members))
 		return
 	}
 	conv, err := a.DB.DirectConversation(r.Context(), p.User.ID, body.User)
@@ -1045,18 +1049,6 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
 		return
 	}
-	userUsed, _ := a.DB.UserUsage(r.Context(), p.User.ID)
-	globalUsed, _ := a.DB.GlobalUsage(r.Context())
-	free, _ := a.disk()
-	lim := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
-	if err := lim.CheckFile(hdr.Size, userUsed, globalUsed, free); err != nil {
-		if errors.Is(err, quota.ErrTooLarge) {
-			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
-			return
-		}
-		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
-		return
-	}
 	fileID, err := uuid.Parse(r.FormValue("file_id"))
 	if err != nil {
 		fileID = uuid.New()
@@ -1066,6 +1058,19 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	access, err := a.DB.AuthorizeDelivery(r.Context(), conv, p.User.ID, rec)
 	if err != nil || authz.AllowDelivery(authz.DeliveryInput{Found: access.Found, SenderMember: access.SenderMember, RecipientMember: access.RecipientMember, DirectPeerMatches: access.DirectPeerMatches, Blocked: access.Blocked}) != nil {
 		httpx.WriteError(w, 403, "forbidden", "conversation")
+		return
+	}
+	// The mailbox quota belongs to the recipient's inbox, which is also what PutFile enforces under lock.
+	userUsed, _ := a.DB.UserUsage(r.Context(), rec)
+	globalUsed, _ := a.DB.GlobalUsage(r.Context())
+	free, _ := a.disk()
+	lim := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
+	if err := lim.CheckFile(hdr.Size, userUsed, globalUsed, free); err != nil {
+		if errors.Is(err, quota.ErrTooLarge) {
+			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+			return
+		}
+		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 		return
 	}
 	env, err := base64.RawURLEncoding.DecodeString(r.FormValue("envelope"))
@@ -1150,9 +1155,14 @@ func (a *App) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer body.Close()
-	name, mime := fileMeta(f.Envelope)
-	w.Header().Set("Content-Type", mime)
-	w.Header().Set("Content-Disposition", "inline; filename=\""+strings.ReplaceAll(name, "\"", "")+"\"")
+	name, _ := fileMeta(f.Envelope)
+	// The body is ciphertext; never let the browser sniff or render it, and quote the name safely.
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	if info, err := body.Stat(); err == nil {
+		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	}
 	w.WriteHeader(200)
 	_, _ = io.Copy(w, body)
 }

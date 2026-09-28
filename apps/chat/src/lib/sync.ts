@@ -9,7 +9,7 @@ export type SyncMessage = {
   at: string
   status: string
   senderId?: string
-  files?: { id: string; name?: string; mime?: string; size?: number; url?: string; via?: string; key?: string; header?: string; lengths?: number[] }[]
+  files?: { id: string; name?: string; mime?: string; size?: number; url?: string; via?: string; key?: string; header?: string; lengths?: number[]; gone?: boolean }[]
   deliveredAt?: string
   readAt?: string
 }

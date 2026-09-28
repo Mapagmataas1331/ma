@@ -1,9 +1,9 @@
-import { api } from '@ma/api-client'
-import { Button } from '@ma/ui'
+import { ApiError, api } from '@ma/api-client'
+import { Button, toast } from '@ma/ui'
 import { useQuery } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 
-type Device = { id: string; name: string; platform: string; trust_state: string; current?: boolean }
+type Device = { id: string; name: string; platform: string; trust_state: string; current?: boolean; last_seen_at?: string | null }
 
 export function DeviceList({ enabled, userId }: { enabled: boolean; userId: string }) {
   const { t } = useTranslation('common')
@@ -13,18 +13,33 @@ export function DeviceList({ enabled, userId }: { enabled: boolean; userId: stri
     queryFn: () => api<Device[]>('/v1/devices'),
   })
   if (!query.data?.length) return null
+
+  async function revoke(device: Device, confirmLast = false) {
+    try {
+      await api(`/v1/devices/${device.id}/revoke`, { method: 'POST', body: JSON.stringify({ confirm_last: confirmLast }) })
+      await query.refetch()
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'last_trusted_device' && !confirmLast) {
+        if (window.confirm(t('revokeLastConfirm'))) await revoke(device, true)
+        return
+      }
+      toast(err instanceof Error ? err.message : t('somethingWentWrong'))
+    }
+  }
+
   return (
-    <ul className="space-y-2 px-4 py-2 text-sm">
+    <ul className="divide-y divide-line text-sm">
       {query.data.map((device) => (
-        <li key={device.id} className="flex items-center justify-between gap-2">
-          <span className="truncate">{device.current ? t('thisDevice') : device.name || device.platform}</span>
-          <span className="text-xs text-muted">{t(device.trust_state === 'trusted' ? 'trusted' : device.trust_state === 'revoked' ? 'revoked' : 'pending')}</span>
+        <li key={device.id} className="flex items-center justify-between gap-2 px-4 py-2">
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{device.current ? t('thisDevice') : device.name || device.platform}</span>
+            <span className="block text-xs text-muted">
+              {t(device.trust_state === 'trusted' ? 'trusted' : device.trust_state === 'revoked' ? 'revoked' : 'pending')}
+              {device.last_seen_at && !device.current ? ` · ${t('lastSeen', { date: new Date(device.last_seen_at).toLocaleDateString() })}` : ''}
+            </span>
+          </span>
           {!device.current && device.trust_state !== 'revoked' ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void api(`/v1/devices/${device.id}/revoke`, { method: 'POST', body: JSON.stringify({ confirm_last: false }) }).then(() => query.refetch())}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={() => void revoke(device)}>
               {t('revoke')}
             </Button>
           ) : null}

@@ -11,7 +11,7 @@ type ThemeState = {
 }
 
 const KEY = 'ma.theme'
-const ThemeContext = createContext<ThemeState | null>(null)
+export const ThemeContext = createContext<ThemeState | null>(null)
 
 function readStored(): { mode: ThemeMode; accentH: number } {
   try {

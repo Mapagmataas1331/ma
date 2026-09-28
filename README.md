@@ -23,7 +23,7 @@ The home page is [ma.cyou](https://ma.cyou). It introduces the other sites and l
 
 **[projects.ma.cyou](https://projects.ma.cyou)** is a list of work and personal projects, with a page for each one. Examples include database workspaces, time-series charts, monitoring, PocketCam, and [chat.ma.cyou](https://chat.ma.cyou).
 
-**[chat.ma.cyou](https://chat.ma.cyou)** is an invite-only messenger. Conversations are one to one. Message text and files are encrypted in the browser before they leave the device. When both people are online, traffic goes directly between them. When one is offline, a short-lived encrypted copy can wait on [api.ma.cyou](https://api.ma.cyou) until it is delivered. Accounts are created with an invite, not an open sign-up form.
+**[chat.ma.cyou](https://chat.ma.cyou)** is an invite-only messenger. Conversations are one to one or groups of up to 20 contacts. Message text and files are encrypted in the browser before they leave the device. When people are online, traffic goes directly between them and files have no size limit. When someone is offline, a short-lived encrypted copy of small messages and files (up to 25 MB) can wait on [api.ma.cyou](https://api.ma.cyou) until it is delivered. Accounts are created with an invite, not an open sign-up form.
 
 ## Contact
 

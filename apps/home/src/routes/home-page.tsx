@@ -21,6 +21,7 @@ export function HomePage() {
             <Card>
               <p className="text-xs text-muted">{t(link.key, { ns: 'common' })}</p>
               <p className="mt-2 text-lg font-medium">{link.title}</p>
+              <p className="mt-2 text-sm text-muted">{t(`${link.key}Blurb`)}</p>
             </Card>
           </a>
         ))}

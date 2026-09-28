@@ -15,6 +15,8 @@ import {
   type WrappedSlot,
 } from '@ma/crypto'
 import { accountKey, activeDatabase, activeUserId } from './db'
+import { decryptParts, encryptStream, type FileCipherMeta } from './files'
+import { listNamed, openNamed, openWriter, opfsAvailable, removeKind, removeNamed } from './opfs'
 
 type Secrets = {
   dek: Uint8Array
@@ -182,40 +184,188 @@ export function touchVault() {
   if (secrets) armLock()
 }
 
+/** Default budget for everything this account keeps on this device: chats, cached files, files waiting to be sent. */
+export const DEFAULT_STORAGE_GB = 5
+/** Blobs up to this size may fall back to IndexedDB when OPFS is unavailable. */
+const IDB_FALLBACK_BYTES = 32 * 1024 * 1024
+
+type StoredMeta = { data?: string; opfs?: boolean; key?: string; header?: string; lengths?: number[] }
+
 export function storageLimitBytes() {
   const raw = localStorage.getItem(accountKey(activeUserId(), 'storageGb'))
-  if (raw === null || raw === '') return 5 * 1024 * 1024 * 1024
+  if (raw === null || raw === '') return DEFAULT_STORAGE_GB * 1024 * 1024 * 1024
   const gb = Number(raw)
-  if (!Number.isFinite(gb) || gb < 0) return 5 * 1024 * 1024 * 1024
+  if (!Number.isFinite(gb) || gb < 0) return DEFAULT_STORAGE_GB * 1024 * 1024 * 1024
   if (gb === 0) return Number.POSITIVE_INFINITY
   return gb * 1024 * 1024 * 1024
 }
 
-export async function rememberBytes(id: string, bytes: Uint8Array) {
-  const rec = encryptRecord(getDek(), id, 'files', { data: b64(bytes) })
-  await activeDatabase().files.put({ id, size: bytes.byteLength, savedAt: Date.now(), nonce: rec.nonce, ciphertext: rec.ciphertext })
-  return enforceStorageLimit()
+/** True when a file of this size fits inside the budget at all. */
+export function fitsBudget(size: number) {
+  const limit = storageLimitBytes()
+  return !Number.isFinite(limit) || size <= limit
 }
 
-export async function readBytes(id: string) {
-  const row = await activeDatabase().files.get(id)
-  if (!row) return
+function opfsName(id: string) {
+  return `${id}.bin`
+}
+
+async function putFileRow(id: string, size: number, meta: StoredMeta) {
+  const rec = encryptRecord(getDek(), id, 'files', meta)
+  await activeDatabase().files.put({ id, size, savedAt: Date.now(), nonce: rec.nonce, ciphertext: rec.ciphertext })
+}
+
+function readMeta(id: string, row: { nonce: string; ciphertext: string }) {
   try {
-    const opened = decryptRecord<{ data: string }>(getDek(), id, 'files', row.nonce, row.ciphertext)
-    return unb64(opened.data)
+    return decryptRecord<StoredMeta>(getDek(), id, 'files', row.nonce, row.ciphertext)
   } catch {
-    return
+    return undefined
   }
 }
 
+/** Keep plaintext for later viewing or re-sending. Encrypted chunk by chunk into OPFS; small blobs may fall back to IndexedDB. */
+export async function keepFile(id: string, blob: Blob): Promise<{ kept: boolean; removed: string[] }> {
+  if (!fitsBudget(blob.size)) return { kept: false, removed: [] }
+  const userId = activeUserId()
+  if (opfsAvailable() && userId) {
+    const writer = await openWriter(userId, 'files', opfsName(id)).catch(() => null)
+    if (writer) {
+      try {
+        const meta = await encryptStream(blob, (chunk) => writer.write(chunk))
+        await writer.close()
+        await putFileRow(id, blob.size, { opfs: true, ...meta })
+        return { kept: true, removed: await enforceStorageLimit() }
+      } catch {
+        await writer.abort()
+      }
+    }
+  }
+  if (blob.size > IDB_FALLBACK_BYTES) return { kept: false, removed: [] }
+  await putFileRow(id, blob.size, { data: b64(new Uint8Array(await blob.arrayBuffer())) })
+  return { kept: true, removed: await enforceStorageLimit() }
+}
+
+/** Keep ciphertext exactly as it arrived, together with its key. No re-encryption. */
+export async function keepCipher(id: string, cipher: Blob, meta: FileCipherMeta, size: number): Promise<{ kept: boolean; removed: string[] }> {
+  if (!fitsBudget(size)) return { kept: false, removed: [] }
+  const userId = activeUserId()
+  if (opfsAvailable() && userId) {
+    const writer = await openWriter(userId, 'files', opfsName(id)).catch(() => null)
+    if (writer) {
+      try {
+        const step = 4 * 1024 * 1024
+        for (let offset = 0; offset < cipher.size; offset += step) {
+          await writer.write(new Uint8Array(await cipher.slice(offset, Math.min(cipher.size, offset + step)).arrayBuffer()))
+        }
+        await writer.close()
+        await putFileRow(id, size, { opfs: true, ...meta })
+        return { kept: true, removed: await enforceStorageLimit() }
+      } catch {
+        await writer.abort()
+      }
+    }
+  }
+  if (size > IDB_FALLBACK_BYTES) return { kept: false, removed: [] }
+  const parts = await decryptParts(cipher, meta)
+  const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
+  let cursor = 0
+  for (const part of parts) {
+    bytes.set(part, cursor)
+    cursor += part.length
+  }
+  await putFileRow(id, size, { data: b64(bytes) })
+  return { kept: true, removed: await enforceStorageLimit() }
+}
+
+/** Streaming sink for ciphertext chunks as they arrive from a peer. Returns null when nothing can be kept. */
+export async function beginCipherFile(id: string, size: number) {
+  const userId = activeUserId()
+  if (!fitsBudget(size) || !opfsAvailable() || !userId) return null
+  const writer = await openWriter(userId, 'files', opfsName(id)).catch(() => null)
+  if (!writer) return null
+  return {
+    write: (chunk: Uint8Array) => writer.write(chunk),
+    finish: async (meta: FileCipherMeta) => {
+      await writer.close()
+      await putFileRow(id, size, { opfs: true, ...meta })
+      return enforceStorageLimit()
+    },
+    abort: () => writer.abort(),
+  }
+}
+
+export type StoredFile = { kind: 'opfs'; meta: FileCipherMeta; cipher: File; size: number } | { kind: 'bytes'; bytes: Uint8Array; size: number }
+
+/** Open what this device keeps for a file id, in whatever form it was kept. */
+export async function openStored(id: string): Promise<StoredFile | undefined> {
+  const row = await activeDatabase().files.get(id)
+  if (!row) return
+  const meta = readMeta(id, row)
+  if (!meta) return
+  if (meta.opfs && meta.key && meta.header && meta.lengths) {
+    const cipher = await openNamed(activeUserId(), 'files', opfsName(id))
+    if (!cipher) {
+      await activeDatabase().files.delete(id)
+      return
+    }
+    return { kind: 'opfs', meta: { key: meta.key, header: meta.header, lengths: meta.lengths }, cipher, size: row.size }
+  }
+  if (meta.data) return { kind: 'bytes', bytes: unb64(meta.data), size: row.size }
+  return
+}
+
+/** Plaintext blob for viewing, saving, or sharing. */
+export async function readBlob(id: string, mime = 'application/octet-stream'): Promise<Blob | undefined> {
+  const stored = await openStored(id)
+  if (!stored) return
+  if (stored.kind === 'bytes') return new Blob([stored.bytes as BlobPart], { type: mime })
+  const parts = await decryptParts(stored.cipher, stored.meta)
+  return new Blob(parts as BlobPart[], { type: mime })
+}
+
+export async function readBytes(id: string) {
+  const blob = await readBlob(id)
+  return blob ? new Uint8Array(await blob.arrayBuffer()) : undefined
+}
+
+export async function hasStored(id: string) {
+  return Boolean(await activeDatabase().files.get(id))
+}
+
+/** Ids of every file this device keeps for the active account. */
+export async function storedIds() {
+  return new Set((await activeDatabase().files.toCollection().primaryKeys()).map(String))
+}
+
+export async function forgetFile(id: string) {
+  await activeDatabase().files.delete(id)
+  const userId = activeUserId()
+  if (userId && opfsAvailable()) await removeNamed(userId, 'files', opfsName(id))
+}
+
+/** Remove OPFS blobs that no longer have a row, plus scratch directories from older builds. */
+export async function reconcileFiles() {
+  const userId = activeUserId()
+  if (!userId || !opfsAvailable()) return
+  const rows = new Set((await activeDatabase().files.toCollection().primaryKeys()).map((key) => opfsName(String(key))))
+  for (const name of await listNamed(userId, 'files')) {
+    if (!rows.has(name)) await removeNamed(userId, 'files', name)
+  }
+  await removeKind(userId, 'attachments')
+  await removeKind(userId, 'pending')
+  await removeKind(userId, 'sync-temp')
+}
+
 export async function storageUsage() {
-  const [files, records] = await Promise.all([activeDatabase().files.toArray(), activeDatabase().records.toArray()])
+  const [files, records, outbox] = await Promise.all([activeDatabase().files.toArray(), activeDatabase().records.toArray(), activeDatabase().outbox.toArray()])
   const fileBytes = files.reduce((sum, row) => sum + row.size, 0)
   const chatBytes = records.reduce((sum, row) => sum + row.ciphertext.length, 0)
+  const queueBytes = outbox.reduce((sum, row) => sum + row.ciphertext.length, 0)
   return {
     fileBytes,
     chatBytes,
-    total: fileBytes + chatBytes,
+    queueBytes,
+    total: fileBytes + chatBytes + queueBytes,
     files: files.length,
     messages: records.filter((row) => row.id !== 'identity').length,
   }
@@ -229,7 +379,7 @@ export async function enforceStorageLimit() {
   const files = await activeDatabase().files.orderBy('savedAt').toArray()
   for (const file of files) {
     if (used <= limit) break
-    await activeDatabase().files.delete(file.id)
+    await forgetFile(file.id)
     used -= file.size
   }
   if (used <= limit) return removed
@@ -253,7 +403,7 @@ export async function enforceStorageLimit() {
     for (const fileId of message.fileIds) {
       const file = await activeDatabase().files.get(fileId)
       if (!file) continue
-      await activeDatabase().files.delete(fileId)
+      await forgetFile(fileId)
       used -= file.size
     }
   }
@@ -263,7 +413,7 @@ export async function enforceStorageLimit() {
 export async function cleanOldFiles(days = 7) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
   const old = await activeDatabase().files.where('savedAt').below(cutoff).toArray()
-  await activeDatabase().files.bulkDelete(old.map((row) => row.id))
+  for (const row of old) await forgetFile(row.id)
   const messageIds = await enforceStorageLimit()
   return {
     fileCount: old.length,

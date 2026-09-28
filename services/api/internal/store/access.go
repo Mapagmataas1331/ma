@@ -13,6 +13,10 @@ var (
 	ErrForbidden   = errors.New("forbidden")
 	ErrLastTrusted = errors.New("last_trusted_device")
 	ErrRevoked     = errors.New("device_revoked")
+	// Group membership errors; handlers map them to distinct API codes so the client can explain them.
+	ErrGroupFull         = errors.New("group_full")
+	ErrNotContact        = errors.New("not_contact")
+	ErrOwnerMustTransfer = errors.New("owner_must_transfer")
 )
 
 type DeliveryAuth struct {

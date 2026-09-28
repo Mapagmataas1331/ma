@@ -77,13 +77,13 @@ export function AccountSettings() {
       }
       const res = await authApi.loginAccount({ username, password })
       if (res.status === '2fa_required') {
-        setError('2fa')
+        setError(t('signInInChatFor2fa'))
         return
       }
       window.dispatchEvent(new Event('ma-auth'))
       await load()
     } catch (err) {
-      setError(err instanceof ApiError && err.code === 'server_overloaded' ? t('registerOverloaded') : err instanceof Error ? err.message : 'error')
+      setError(err instanceof ApiError && err.code === 'server_overloaded' ? t('registerOverloaded') : err instanceof Error ? err.message : t('somethingWentWrong'))
     }
   }
 
@@ -103,21 +103,24 @@ export function AccountSettings() {
 
   if (!account) {
     return (
-      <SettingsSection title={t('account')} description={t('signInToSee')}>
-        <form className="space-y-3 px-4 py-3" onSubmit={onSubmit}>
-          {mode === 'up' ? <Input placeholder={t('inviteCode')} value={invite} onChange={(e) => setInvite(e.target.value)} required /> : null}
-          <Input placeholder={t('username')} value={username} onChange={(e) => setUsername(e.target.value)} required />
-          {mode === 'up' ? <Input placeholder={t('displayName')} value={display} onChange={(e) => setDisplay(e.target.value)} /> : null}
-          <Input type="password" placeholder={t('password')} value={password} onChange={(e) => setPassword(e.target.value)} required />
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit">{mode === 'up' ? t('register') : t('signIn')}</Button>
-          {mode === 'in' ? (
-            <button type="button" className="block text-sm text-muted" onClick={() => setMode('up')}>
-              {t('haveInvite')}
-            </button>
-          ) : null}
-        </form>
-      </SettingsSection>
+      <div className="flex min-h-full flex-1 flex-col">
+        <SettingsSection title={t('account')} description={t('signInToSee')}>
+          <form className="space-y-3 px-4 py-3" onSubmit={onSubmit}>
+            {mode === 'up' ? <Input placeholder={t('inviteCode')} aria-label={t('inviteCode')} value={invite} onChange={(e) => setInvite(e.target.value)} required /> : null}
+            <Input placeholder={t('username')} aria-label={t('username')} autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+            {mode === 'up' ? <Input placeholder={t('displayName')} aria-label={t('displayName')} value={display} onChange={(e) => setDisplay(e.target.value)} /> : null}
+            <Input type="password" placeholder={t('accountPassword')} aria-label={t('accountPassword')} autoComplete={mode === 'up' ? 'new-password' : 'current-password'} value={password} onChange={(e) => setPassword(e.target.value)} required />
+            {error ? <p className="text-sm text-danger">{error}</p> : null}
+            <Button type="submit">{mode === 'up' ? t('register') : t('signIn')}</Button>
+            {mode === 'in' ? (
+              <button type="button" className="block text-sm text-muted" onClick={() => setMode('up')}>
+                {t('haveInvite')}
+              </button>
+            ) : null}
+          </form>
+        </SettingsSection>
+        <div ref={setSlot} />
+      </div>
     )
   }
 

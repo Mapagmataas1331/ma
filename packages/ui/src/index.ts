@@ -15,7 +15,8 @@ export {
   TransferProgress,
   TypingIndicator,
 } from './components/chat'
-export type { ChatFile } from './components/chat'
+export { availabilityLabel } from './components/chat'
+export type { ChatFile, FileAvailability } from './components/chat'
 export {
   Avatar,
   Badge,
