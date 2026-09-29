@@ -150,7 +150,15 @@ export function ChatApp() {
   const [enterToSend, setEnterToSend] = useState(() => localStorage.getItem('ma.chat.enterToSend') !== '0')
   const [relay, setRelay] = useState(() => localStorage.getItem('ma.chat.relayOnly') === '1')
   const [directOnly, setDirectOnly] = useState(() => localStorage.getItem('ma.chat.directOnly') === '1')
-  const [showNames, setShowNames] = useState(() => localStorage.getItem('ma.chat.showSenderNames') === '1')
+  const [hideSenderNames, setHideSenderNames] = useState(() => {
+    const hide = localStorage.getItem('ma.chat.hideSenderNames')
+    if (hide === '1' || hide === '0') return hide === '1'
+    const legacy = localStorage.getItem('ma.chat.showSenderNames')
+    if (legacy === '1') return false
+    if (legacy === '0') return true
+    return false
+  })
+  const [hideNotifyBody, setHideNotifyBody] = useState(() => localStorage.getItem('ma.chat.hideNotifyBody') === '1')
   const [notifyOn, setNotifyOn] = useState(() => notifyPrefOn())
   const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string } | null>(null)
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, queueBytes: 0, total: 0 })
@@ -221,8 +229,17 @@ export function ChatApp() {
   const notifyReady = useRef(false)
   const activeRef = useRef(active)
   activeRef.current = active
-  const showNamesRef = useRef(showNames)
-  showNamesRef.current = showNames
+  const hideSenderNamesRef = useRef(hideSenderNames)
+  hideSenderNamesRef.current = hideSenderNames
+  const hideNotifyBodyRef = useRef(hideNotifyBody)
+  hideNotifyBodyRef.current = hideNotifyBody
+  const syncNotifyPref = () => {
+    void navigator.serviceWorker?.controller?.postMessage({
+      type: 'notify-pref',
+      hideSender: hideSenderNamesRef.current,
+      hideBody: hideNotifyBodyRef.current,
+    })
+  }
   const conversationsRef = useRef(conversations)
   conversationsRef.current = conversations
   const liveShares = useRef(new Map<string, LiveShare>())
@@ -519,8 +536,11 @@ export function ChatApp() {
       }
     })
     sync()
+    syncNotifyPref()
     const onVisible = () => {
-      if (document.visibilityState === 'visible') sync()
+      if (document.visibilityState !== 'visible') return
+      sync()
+      if (notifyPrefOn()) void enablePush().then((on) => setNotifyOn(on)).catch(() => undefined)
     }
     document.addEventListener('visibilitychange', onVisible)
     const timer = window.setInterval(sync, 20000)
@@ -756,8 +776,13 @@ export function ChatApp() {
         if (!conv || !prefs[conv.id]?.muted) {
           const watching = activeRef.current === message.conversationId && !document.hidden && document.hasFocus()
           if (!watching) {
-            const who = showNamesRef.current ? (memberName(conv, senderId) || t('notifyNewMessage')) : t('notifyNewMessage')
-            notifyHere(who, t('notifyOpenChat'), message.conversationId, true)
+            const who = hideSenderNamesRef.current
+              ? t('notifyNewMessage')
+              : (memberName(conv, senderId) || t('notifyNewMessage'))
+            const preview = hideNotifyBodyRef.current
+              ? t('notifyOpenChat')
+              : (message.body.trim() || (files.length ? t('notifyAttachment') : t('notifyOpenChat')))
+            notifyHere(who, preview, message.conversationId, true)
           }
         }
       }
@@ -2117,15 +2142,28 @@ export function ChatApp() {
             label={t('notifications')}
           />
         </SettingsRow>
-        <SettingsRow label={t('showSenderNames')} hint={t('showSenderNamesHint')}>
+        <SettingsRow label={t('hideSenderNames')} hint={t('hideSenderNamesHint')}>
           <Switch
-            checked={showNames}
+            checked={hideSenderNames}
             onCheckedChange={(on) => {
-              setShowNames(on)
-              localStorage.setItem('ma.chat.showSenderNames', on ? '1' : '0')
-              void navigator.serviceWorker?.controller?.postMessage({ type: 'notify-pref', show: on })
+              setHideSenderNames(on)
+              localStorage.setItem('ma.chat.hideSenderNames', on ? '1' : '0')
+              hideSenderNamesRef.current = on
+              syncNotifyPref()
             }}
-            label={t('showNames')}
+            label={t('hideSenderNames')}
+          />
+        </SettingsRow>
+        <SettingsRow label={t('hideNotifyBody')} hint={t('hideNotifyBodyHint')}>
+          <Switch
+            checked={hideNotifyBody}
+            onCheckedChange={(on) => {
+              setHideNotifyBody(on)
+              localStorage.setItem('ma.chat.hideNotifyBody', on ? '1' : '0')
+              hideNotifyBodyRef.current = on
+              syncNotifyPref()
+            }}
+            label={t('hideNotifyBody')}
           />
         </SettingsRow>
         <SettingsRow label={t('relayOnly')} hint={t('relayOnlyHint')}>

@@ -1597,6 +1597,12 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"error","id":"`+frame.ID+`","p":{"code":"offline"}}`))
 		} else if frame.T == "chat.envelope" {
 			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"chat.envelope.ok","id":"`+frame.ID+`","p":{}}`))
+			// Wake suspended clients (especially iOS Home Screen). They still need a mailbox copy if the live frame was missed.
+			if frame.To != nil {
+				if uid, err := uuid.Parse(frame.To.User); err == nil {
+					a.pushMailbox(r.Context(), uid, 1)
+				}
+			}
 		}
 	}
 }

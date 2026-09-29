@@ -10,6 +10,14 @@ function urlBase64ToUint8Array(value: string) {
 
 const NOTIFY_KEY = 'ma.chat.notify'
 
+function isIOSHomeScreenLike() {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent || ''
+  if (/iPad|iPhone|iPod/.test(ua)) return true
+  // iPadOS desktop UA
+  return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+}
+
 export function notifyPrefOn() {
   if (typeof localStorage === 'undefined') return false
   const stored = localStorage.getItem(NOTIFY_KEY)
@@ -34,7 +42,10 @@ export async function enablePush() {
   }
   const reg = await navigator.serviceWorker.ready
   const existing = await reg.pushManager.getSubscription()
-  const sub = existing ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) })
+  // Prefer a fresh subscribe when missing; otherwise refresh the server copy (Apple endpoints rotate).
+  const sub =
+    existing ??
+    (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) }))
   const json = sub.toJSON()
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false
   await api('/v1/push/subscriptions', {
@@ -49,9 +60,15 @@ export function notifyHere(title: string, body: string, tag: string, force = fal
   if (!notifyPrefOn()) return
   if (!('Notification' in window) || Notification.permission !== 'granted') return
   if (!force && !document.hidden && document.hasFocus()) return
+  const opts: NotificationOptions = { body, tag, icon: '/web-app-manifest-192x192.png' }
+  // iOS Home Screen freezes page JS quickly; SW showNotification is more reliable while still warm.
+  if (isIOSHomeScreenLike() && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts)).catch(() => undefined)
+    return
+  }
   try {
-    new Notification(title, { body, tag, icon: '/web-app-manifest-192x192.png' })
+    new Notification(title, opts)
   } catch {
-    void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, { body, tag, icon: '/web-app-manifest-192x192.png' })).catch(() => undefined)
+    void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, opts)).catch(() => undefined)
   }
 }

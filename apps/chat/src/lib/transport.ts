@@ -368,6 +368,22 @@ export class Transport {
         })
         row.state = 'stored'
       }
+    } else if (!this.directOnly && row.recipientUserId !== this.localUser) {
+      // Best-effort mailbox copy after live/P2P so a suspended iOS Home Screen still gets Web Push
+      // and can drain if the live frame was dropped while JavaScript was frozen.
+      try {
+        await api('/v1/mailbox/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            conversation_id: row.conversationId,
+            recipient_user_id: row.recipientUserId,
+            message_id: row.id,
+            envelope: b64(new TextEncoder().encode(JSON.stringify(wire))),
+          }),
+        })
+      } catch {
+        /* live already delivered */
+      }
     }
     await sealRow('outbox', row.id, 'outbox', row)
     return via

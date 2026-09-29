@@ -29,7 +29,9 @@ func (a *App) pushMailbox(ctx context.Context, user uuid.UUID, count int) {
 			Subscriber:      a.Cfg.VAPIDSubject,
 			VAPIDPublicKey:  a.Cfg.VAPIDPublic,
 			VAPIDPrivateKey: a.Cfg.VAPIDPrivate,
-			TTL:             60,
+			TTL:             86400,
+			Urgency:         webpush.UrgencyHigh,
+			Topic:           "ma-mail",
 		})
 		if err != nil {
 			continue
