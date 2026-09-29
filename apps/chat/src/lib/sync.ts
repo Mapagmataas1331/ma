@@ -1,6 +1,8 @@
 import { activeDatabase } from './db'
 import { getDek, isUnlocked, sealRow } from './vault'
 
+export type MemberReceipt = { userId: string; at: string }
+
 export type SyncMessage = {
   id: string
   conversationId: string
@@ -13,6 +15,8 @@ export type SyncMessage = {
   deliveredAt?: string
   readAt?: string
   route?: 'direct' | 'server' | 'mixed'
+  /** Per-member delivery/read times for group chats. */
+  receipts?: { delivered?: MemberReceipt[]; read?: MemberReceipt[] }
 }
 
 const rank: Record<string, number> = {
@@ -47,11 +51,34 @@ function mergeFiles(left: SyncMessage['files'], right: SyncMessage['files']) {
   return [...map.values()]
 }
 
+function mergeReceipts(left?: MemberReceipt[], right?: MemberReceipt[]) {
+  const map = new Map<string, MemberReceipt>()
+  for (const row of [...(left ?? []), ...(right ?? [])]) {
+    if (!row?.userId) continue
+    const current = map.get(row.userId)
+    if (!current || row.at < current.at) map.set(row.userId, row)
+  }
+  return [...map.values()]
+}
+
 export function mergeMessage(local: SyncMessage | undefined, remote: SyncMessage): SyncMessage {
   if (!local) return withoutUrls(remote)
   const files = mergeFiles(local.files, remote.files)
-  if (messageRank(remote.status) > messageRank(local.status)) return withoutUrls({ ...local, ...remote, files })
-  return withoutUrls({ ...local, files })
+  const receipts = {
+    delivered: mergeReceipts(local.receipts?.delivered, remote.receipts?.delivered),
+    read: mergeReceipts(local.receipts?.read, remote.receipts?.read),
+  }
+  const mergedReceipts = receipts.delivered.length || receipts.read.length ? receipts : undefined
+  if (messageRank(remote.status) > messageRank(local.status)) {
+    return withoutUrls({ ...local, ...remote, files, receipts: mergedReceipts || remote.receipts || local.receipts })
+  }
+  return withoutUrls({
+    ...local,
+    files,
+    receipts: mergedReceipts || local.receipts,
+    deliveredAt: local.deliveredAt || remote.deliveredAt,
+    readAt: local.readAt || remote.readAt,
+  })
 }
 
 export function mergeHistories(local: SyncMessage[], remote: SyncMessage[]) {

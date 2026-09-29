@@ -74,7 +74,7 @@ export function wrapDek(kek: Uint8Array, dek: Uint8Array, kind: 'password' | 're
   return { kind, wrapped_dek: wrapped.ciphertext, nonce: wrapped.nonce, kdf }
 }
 
-/** Wrap a DEK with a 32-byte key from WebAuthn PRF (Face ID / Touch ID / platform passkey). */
+/** Wrap a DEK with a 32-byte key from WebAuthn PRF (device passkey). */
 export function wrapDekWebAuthn(kek: Uint8Array, dek: Uint8Array, credentialId: string, prfSalt: string): Extract<WrappedSlot, { kind: 'webauthn' }> {
   const wrapped = aeadEncrypt(kek, dek)
   return { kind: 'webauthn', wrapped_dek: wrapped.ciphertext, nonce: wrapped.nonce, credentialId, prfSalt }

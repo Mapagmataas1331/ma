@@ -33,7 +33,7 @@ import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDevi
 import { blobParts, ciphertextSize, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
-import { enablePush, notifyHere, notifyPrefOn, setNotifyPref } from '../lib/push'
+import { enablePush, notifyHere, notifyPrefOn, setAppBadge, setNotifyPref } from '../lib/push'
 import { openNamed, openWriter, opfsAvailable, removeNamed } from '../lib/opfs'
 import { resetChatRuntime } from '../lib/runtime'
 import { chunkMessages, exportHistory, storeHistory, type SyncMessage } from '../lib/sync'
@@ -97,6 +97,7 @@ type LocalMessage = {
   deliveredAt?: string
   readAt?: string
   route?: 'direct' | 'server' | 'mixed'
+  receipts?: { delivered?: { userId: string; at: string }[]; read?: { userId: string; at: string }[] }
 }
 
 type ChatPref = { pinned?: boolean; muted?: boolean }
@@ -200,6 +201,9 @@ export function ChatApp() {
   const transferAbort = useRef<AbortController | null>(null)
   const abortFile = useRef('')
   const transferLock = useRef<string | null>(null)
+  /** Peer uploads in flight: file id → peer user ids. Lets several group members pull the same file at once. */
+  const peerUploads = useRef(new Map<string, Set<string>>())
+  const MAX_PEER_UPLOADS = 3
   const cancelledFiles = useRef(new Set<string>())
   const pull = useRef<Pull | null>(null)
   const probed = useRef(new Map<string, number>())
@@ -249,6 +253,8 @@ export function ChatApp() {
   }
   const conversationsRef = useRef(conversations)
   conversationsRef.current = conversations
+  const prefsRef = useRef(prefs)
+  prefsRef.current = prefs
   const liveShares = useRef(new Map<string, LiveShare>())
   const busyRetry = useRef(new Map<string, number>())
   const offerLateRef = useRef<(userId: string) => void>(() => {})
@@ -402,15 +408,36 @@ export function ChatApp() {
         const ids = Array.isArray(frame.p.message_ids) ? frame.p.message_ids.map(String) : []
         const status = frame.t === 'chat.read' ? 'read' : 'delivered'
         const now = new Date().toISOString()
+        const from = frame.from?.user || ''
         setMessages((prev) => prev.map((m) => {
           if (!m.mine || !ids.includes(m.id)) return m
-          if (m.status === 'read' || m.status === status) return m
-          const next = {
-            ...m,
-            status,
-            deliveredAt: status === 'delivered' || status === 'read' ? m.deliveredAt || now : m.deliveredAt,
-            readAt: status === 'read' ? m.readAt || now : m.readAt,
+          const conv = conversationsRef.current.find((item) => item.id === m.conversationId)
+          const group = conv?.kind === 'group'
+          let next = m
+          if (group && from && from !== meRef.current) {
+            const delivered = [...(m.receipts?.delivered ?? [])]
+            const read = [...(m.receipts?.read ?? [])]
+            if (!delivered.some((row) => row.userId === from)) delivered.push({ userId: from, at: now })
+            if (status === 'read' && !read.some((row) => row.userId === from)) read.push({ userId: from, at: now })
+            const recipients = (conv?.members ?? []).filter((member) => member.id && member.id !== meRef.current).length
+            const aggregate = read.length >= Math.max(1, recipients) ? 'read' : delivered.length ? (read.length ? 'read' : 'delivered') : m.status
+            next = {
+              ...m,
+              status: m.status === 'read' ? 'read' : aggregate === 'read' || status === 'read' ? 'read' : aggregate === 'delivered' || status === 'delivered' ? 'delivered' : m.status,
+              deliveredAt: m.deliveredAt || now,
+              readAt: status === 'read' || read.length ? m.readAt || now : m.readAt,
+              receipts: { delivered, read },
+            }
+          } else {
+            if (m.status === 'read' || m.status === status) return m
+            next = {
+              ...m,
+              status,
+              deliveredAt: status === 'delivered' || status === 'read' ? m.deliveredAt || now : m.deliveredAt,
+              readAt: status === 'read' ? m.readAt || now : m.readAt,
+            }
           }
+          if (next === m) return m
           void sealRow('records', m.id, 'messages', withoutUrls(next))
           return next
         }))
@@ -809,16 +836,25 @@ export function ChatApp() {
       await sealRow('records', message.id, 'messages', withoutUrls(message))
       if (!message.mine && notifyReady.current && notifyPrefOn()) {
         const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
-        if (!conv || !prefs[conv.id]?.muted) {
+        if (!conv || !prefsRef.current[conv.id]?.muted) {
           const watching = activeRef.current === message.conversationId && !document.hidden && document.hasFocus()
           if (!watching) {
-            const who = hideSenderNamesRef.current
-              ? t('notifyNewMessage')
-              : (memberName(conv, senderId) || t('notifyNewMessage'))
-            const preview = hideNotifyBodyRef.current
-              ? t('notifyOpenChat')
-              : (message.body.trim() || (files.length ? t('notifyAttachment') : t('notifyOpenChat')))
-            notifyHere(who, preview, message.conversationId, true)
+            const sender = memberName(conv, senderId) || t('notifyNewMessage')
+            const textPreview = message.body.trim() || (files.length ? t('notifyAttachment') : t('notifyOpenChat'))
+            if (conv?.kind === 'group') {
+              const group = convTitle(conv)
+              const title = group || t('notifyNewMessage')
+              const preview = hideNotifyBodyRef.current
+                ? t('notifyOpenChat')
+                : hideSenderNamesRef.current
+                  ? textPreview
+                  : `${sender}: ${textPreview}`
+              notifyHere(title, preview, message.conversationId, true)
+            } else {
+              const who = hideSenderNamesRef.current ? t('notifyNewMessage') : sender
+              const preview = hideNotifyBodyRef.current ? t('notifyOpenChat') : textPreview
+              notifyHere(who, preview, message.conversationId, true)
+            }
           }
         }
       }
@@ -1008,7 +1044,10 @@ export function ChatApp() {
 
   /** A quiet upload can outlast the tail. Keep the offer while this device is still sending or receiving it, or the message has not been posted yet. */
   function shareStillCurrent(share: LiveShare) {
-    const moving = share.files.some((file) => transferLock.current === file.id || pull.current?.fileId === file.id)
+    const moving = share.files.some((file) => {
+      if (transferLock.current === file.id || pull.current?.fileId === file.id) return true
+      return (peerUploads.current.get(file.id)?.size ?? 0) > 0
+    })
     const posting = !messagesRef.current.some((message) => message.id === share.id) && share.files.some((file) => outgoing.current.has(file.id))
     if (moving || posting) {
       share.until = Date.now() + SHARE_TAIL
@@ -1033,6 +1072,44 @@ export function ChatApp() {
       share.until = Date.now() + SHARE_TAIL
       for (const userId of onlineRef.current) void offerShare(share, userId)
     }
+  }
+
+  /** Tell online peers in every chat that holds this file that we can serve it. */
+  function announceFileHave(fileId: string) {
+    const peers = new Set<string>()
+    for (const message of messagesRef.current) {
+      if (!message.files?.some((file) => file.id === fileId)) continue
+      for (const userId of onlinePeers(message.conversationId, message.senderId)) peers.add(userId)
+    }
+    for (const userId of peers) {
+      transport.sendFrame(newFrame('chat.file.have', { file_id: fileId }, { user: userId }))
+    }
+    announceHolders(fileId)
+    noteHave(fileId, meRef.current || '')
+  }
+
+  function peerUploadCount() {
+    let total = 0
+    for (const set of peerUploads.current.values()) total += set.size
+    return total
+  }
+
+  function beginPeerUpload(fileId: string, userId: string) {
+    if (pull.current?.fileId === fileId) return false
+    const existing = peerUploads.current.get(fileId)
+    if (existing?.has(userId)) return true
+    if (peerUploadCount() >= MAX_PEER_UPLOADS) return false
+    const set = existing ?? new Set<string>()
+    set.add(userId)
+    peerUploads.current.set(fileId, set)
+    return true
+  }
+
+  function endPeerUpload(fileId: string, userId: string) {
+    const set = peerUploads.current.get(fileId)
+    if (!set) return
+    set.delete(userId)
+    if (!set.size) peerUploads.current.delete(fileId)
   }
 
   async function send(sendMode: 'auto' | 'direct' = 'auto') {
@@ -1560,7 +1637,9 @@ export function ChatApp() {
   async function rankHolders(found: Map<string, number>) {
     const ranked = await Promise.all([...found].map(async ([userId, probeRtt]) => {
       const live = await transport.rtt(userId)
-      return { userId, rtt: live ?? probeRtt }
+      // Prefer holders who are not already serving us / busy locally when we know.
+      const servingUs = [...peerUploads.current.values()].some((set) => set.has(userId)) ? 50 : 0
+      return { userId, rtt: (live ?? probeRtt) + servingUs }
     }))
     ranked.sort((a, b) => a.rtt - b.rtt)
     return ranked.map((row) => row.userId)
@@ -1601,15 +1680,19 @@ export function ChatApp() {
       cancelledFiles.current.delete(fileId)
       const source = await sourceFor(fileId)
       if (cancelledFiles.current.has(fileId)) return
-      if (transferLock.current && transferLock.current !== fileId) {
-        if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
-        return
-      }
       if (!source || !userId) {
         if (userId) transport.sendFrame(newFrame('chat.file.missing', { file_id: fileId }, { user: userId }))
         return
       }
-      await sendFileChunks(source, fileId, userId)
+      if (!beginPeerUpload(fileId, userId)) {
+        transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
+        return
+      }
+      try {
+        await sendFileChunks(source, fileId, userId)
+      } finally {
+        endPeerUpload(fileId, userId)
+      }
     })()
   }
   fileApi.current.probe = (fileId, userId) => {
@@ -1674,16 +1757,10 @@ export function ChatApp() {
 
   /** Stream a file to one peer over the data channel with back-pressure. Stored ciphertext is sent as is. */
   async function sendFileChunks(source: File | Blob | StoredFile, fileId: string, userId: string) {
-    if (transferLock.current && transferLock.current !== fileId) {
-      if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
-      return
-    }
-    transferLock.current = fileId
     const devices = await api<{ id: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
     const deviceId = devices[0]?.id || ''
     const channel = deviceId ? await transport.ensurePeer(userId, deviceId, 8000) : null
     if (!channel || channel.readyState !== 'open') {
-      if (transferLock.current === fileId) transferLock.current = null
       if (userId) transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
       return
     }
@@ -1723,8 +1800,7 @@ export function ChatApp() {
       if (!(err instanceof DOMException && err.name === 'AbortError')) toast(explain(err))
     }
     window.setTimeout(() => {
-      setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
-      if (transferLock.current === fileId) transferLock.current = null
+      setTransfer((cur) => (cur?.fileId === fileId && cur.peerId === userId ? null : cur))
     }, 600)
   }
 
@@ -1772,7 +1848,7 @@ export function ChatApp() {
     const blob = new Blob(slot.parts as BlobPart[], { type: slot.mime })
     slot.parts = []
     sessionFiles.current.set(fileId, blob)
-    announceHolders(fileId)
+    announceFileHave(fileId)
     const url = URL.createObjectURL(blob)
     const kept = slot.sink ? slot.sink.finish(slot.meta).then((removed) => ({ kept: true, removed })) : keepFile(fileId, blob)
     void kept.then(({ kept: ok, removed }) => {
@@ -1926,6 +2002,36 @@ export function ChatApp() {
       return next
     }))
   }, [active, activeConv, messages, selfChat, me])
+
+  // Home-screen / taskbar badge: unread in unmuted conversations.
+  useEffect(() => {
+    if (!unlocked) {
+      setAppBadge(0)
+      return
+    }
+    const count = messages.filter((m) => {
+      if (m.mine || m.status === 'read' || m.status === 'expired' || m.status === 'failed') return false
+      if (prefs[m.conversationId]?.muted) return false
+      if (active === m.conversationId && !document.hidden) return false
+      return true
+    }).length
+    setAppBadge(count)
+  }, [messages, prefs, active, unlocked])
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return
+      const count = messagesRef.current.filter((m) => {
+        if (m.mine || m.status === 'read' || m.status === 'expired' || m.status === 'failed') return false
+        if (prefsRef.current[m.conversationId]?.muted) return false
+        if (activeRef.current === m.conversationId) return false
+        return true
+      }).length
+      setAppBadge(count)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [])
 
   // Ask every online member whether they still have a peer file, so the status is right before a tap.
   useEffect(() => {
@@ -2558,7 +2664,7 @@ export function ChatApp() {
                     mine={m.mine}
                     grouped={sameSender && !dayChanged}
                     time={localTime(m.at, hourCycle)}
-                    status={m.mine ? statusLabel(t, m.status, m.route) : undefined}
+                    status={m.mine ? messageStatusLabel(t, m, isGroup ? activeConv : undefined, me) : undefined}
                     sender={isGroup && !m.mine ? memberName(activeConv, m.senderId) || t('unknownMember') : undefined}
                     menu={{
                       label: t('message'),
@@ -2648,8 +2754,40 @@ export function ChatApp() {
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-4"><dt>{t('statusSent')}</dt><dd>{stamp(statusMessage.at, hourCycle)}</dd></div>
           {statusMessage.route ? <div className="flex justify-between gap-4"><dt>{t('sentHow')}</dt><dd>{t(statusMessage.route === 'server' ? 'viaServer' : statusMessage.route === 'mixed' ? 'viaMixed' : 'viaDirect')}</dd></div> : null}
-          <div className="flex justify-between gap-4"><dt>{t('statusDelivered')}</dt><dd>{statusMessage.deliveredAt ? stamp(statusMessage.deliveredAt, hourCycle) : statusMessage.status === 'delivered' || statusMessage.status === 'read' ? t('statusDelivered') : t('pending')}</dd></div>
-          <div className="flex justify-between gap-4"><dt>{t('statusRead')}</dt><dd>{statusMessage.readAt ? stamp(statusMessage.readAt, hourCycle) : statusMessage.status === 'read' ? t('statusRead') : t('pending')}</dd></div>
+          {(() => {
+            const conv = conversations.find((item) => item.id === statusMessage.conversationId)
+            const group = conv?.kind === 'group'
+            const members = (conv?.members ?? []).filter((member) => member.id && member.id !== me)
+            if (group && members.length) {
+              const delivered = new Map((statusMessage.receipts?.delivered ?? []).map((row) => [row.userId, row.at]))
+              const read = new Map((statusMessage.receipts?.read ?? []).map((row) => [row.userId, row.at]))
+              return (
+                <div className="space-y-2 border-t border-line pt-3">
+                  <p className="text-xs text-muted">{t('seenBy', { count: read.size, total: members.length })}</p>
+                  <ul className="space-y-2">
+                    {members.map((member) => {
+                      const seenAt = read.get(member.id)
+                      const deliveredAt = delivered.get(member.id)
+                      return (
+                        <li key={member.id} className="flex items-center justify-between gap-3">
+                          <span className="truncate">{member.display_name || member.username}</span>
+                          <span className="shrink-0 text-xs text-muted">
+                            {seenAt ? stamp(seenAt, hourCycle) : deliveredAt ? t('statusDelivered') : t('pending')}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )
+            }
+            return (
+              <>
+                <div className="flex justify-between gap-4"><dt>{t('statusDelivered')}</dt><dd>{statusMessage.deliveredAt ? stamp(statusMessage.deliveredAt, hourCycle) : statusMessage.status === 'delivered' || statusMessage.status === 'read' ? t('statusDelivered') : t('pending')}</dd></div>
+                <div className="flex justify-between gap-4"><dt>{t('statusRead')}</dt><dd>{statusMessage.readAt ? stamp(statusMessage.readAt, hourCycle) : statusMessage.status === 'read' ? t('statusRead') : t('pending')}</dd></div>
+              </>
+            )
+          })()}
         </dl>
       ) : null}
     </Dialog>
@@ -2720,6 +2858,29 @@ function dayLabel(iso: string, translate: (key: string) => string) {
 
 function withoutUrls(message: LocalMessage): LocalMessage {
   return { ...message, files: message.files?.map(({ url: _url, ...file }) => file) }
+}
+
+function messageStatusLabel(
+  translate: (key: string, opts?: Record<string, unknown>) => string,
+  message: LocalMessage,
+  conv: { kind?: string; members?: { id: string }[] } | undefined,
+  me: string | undefined,
+) {
+  if (conv?.kind === 'group') {
+    const total = (conv.members ?? []).filter((member) => member.id && member.id !== me).length
+    const read = message.receipts?.read?.length ?? 0
+    const delivered = message.receipts?.delivered?.length ?? 0
+    if (total > 0 && (read > 0 || delivered > 0 || message.status === 'delivered' || message.status === 'read')) {
+      const count = read > 0 ? read : delivered
+      const key = read > 0 ? 'seenBy' : 'deliveredTo'
+      const base = translate(key, { count, total })
+      if (message.route === 'direct') return `${base} · ${translate('viaDirect')}`
+      if (message.route === 'server') return `${base} · ${translate('viaServer')}`
+      if (message.route === 'mixed') return `${base} · ${translate('viaMixed')}`
+      return base
+    }
+  }
+  return statusLabel(translate, message.status, message.route)
 }
 
 function statusLabel(translate: (key: string) => string, status: string, route?: string) {

@@ -1,6 +1,6 @@
 import { vaultPasswordError } from '@ma/protocol'
 import { Button, Input, PageHeader } from '@ma/ui'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function VaultExplainer({ defaultOpen = false }: { defaultOpen?: boolean }) {
@@ -30,7 +30,7 @@ export function UnlockScreen({
   mode: 'create' | 'unlock'
   onUnlock: (password: string) => Promise<void>
   onUnlockWebAuthn?: () => Promise<void>
-  /** True when this vault already has a Face ID / passkey unlock slot. */
+  /** True when this vault already has a passkey unlock slot. */
   webAuthnReady?: boolean
   /** This device cannot open chats until it transfers from a trusted device or starts fresh. */
   pending?: boolean
@@ -43,10 +43,12 @@ export function UnlockScreen({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const creating = mode === 'create'
+  const autoTried = useRef(false)
 
   useEffect(() => {
-    if (creating || !webAuthnReady || !onUnlockWebAuthn) return
-    // Offer the platform prompt soon after paint so Face ID feels primary.
+    if (creating || !webAuthnReady || !onUnlockWebAuthn || autoTried.current) return
+    autoTried.current = true
+    // Offer the platform prompt soon after paint; keep the button clickable (do not gray it out).
     const timer = window.setTimeout(() => {
       setBusy(true)
       void onUnlockWebAuthn()
@@ -82,8 +84,9 @@ export function UnlockScreen({
         {!creating && webAuthnReady && onUnlockWebAuthn ? (
           <Button
             type="button"
-            disabled={busy}
+            aria-busy={busy}
             onClick={() => {
+              if (busy) return
               setError('')
               setBusy(true)
               void onUnlockWebAuthn()

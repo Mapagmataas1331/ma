@@ -72,3 +72,11 @@ export function notifyHere(title: string, body: string, tag: string, force = fal
     void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, opts)).catch(() => undefined)
   }
 }
+
+/** Unread count on the home-screen / taskbar icon when the Badging API exists. */
+export function setAppBadge(count: number) {
+  const nav = typeof navigator !== 'undefined' ? (navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }) : null
+  if (!nav?.setAppBadge) return
+  if (count > 0) void nav.setAppBadge(count).catch(() => undefined)
+  else void nav.clearAppBadge?.().catch(() => undefined)
+}

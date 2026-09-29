@@ -149,31 +149,41 @@ export function AccountSettings() {
         </SettingsRow>
         {code ? <p className="px-4 py-2 font-mono text-sm">{code}<span className="mt-1 block font-sans text-xs text-muted">{t('inviteOnce')}</span></p> : null}
         <SettingsRow label={t('openInvites')}>
-          <span className="flex flex-col items-end gap-2 text-sm">
-            {account.open_invites?.length
-              ? account.open_invites.map((item) => (
-                  <span key={item.id} className="inline-flex items-center gap-2">
-                    <span className="text-xs text-muted">{new Date(item.expires_at).toLocaleDateString()}</span>
-                    <Button variant="ghost" onClick={() => void revokeInvite(item.id)}>{t('revokeInvite')}</Button>
-                  </span>
-                ))
-              : t('noOpenInvites')}
-          </span>
+          {account.open_invites?.length ? (
+            <span className="text-xs text-muted">{account.open_invites.length}</span>
+          ) : (
+            <span className="text-sm text-muted">{t('noOpenInvites')}</span>
+          )}
         </SettingsRow>
-        <SettingsRow label={t('peopleInvited')}>
-          <span className="flex flex-col items-end gap-1 text-sm">
-            {account.invitees.length
-              ? account.invitees.map((p) => (
-                  <ProfileButton key={p.username} username={p.username} displayName={p.display_name}>
-                    <span className="inline-flex items-center gap-2">
+        {account.open_invites?.length ? (
+          <ul className="space-y-2 border-t border-line px-4 py-3">
+            {account.open_invites.map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-xs text-muted">{new Date(item.expires_at).toLocaleDateString()}</span>
+                <Button variant="ghost" onClick={() => void revokeInvite(item.id)}>{t('revokeInvite')}</Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="space-y-2 border-t border-line px-4 py-3">
+          <p className="text-sm font-medium">{t('peopleInvited')}</p>
+          {account.invitees.length ? (
+            <ul className="flex flex-col gap-2">
+              {account.invitees.map((p) => (
+                <li key={p.username}>
+                  <ProfileButton username={p.username} displayName={p.display_name}>
+                    <span className="inline-flex items-center gap-2 text-sm">
                       <UserAvatar username={p.username} className="size-6" />
                       {p.display_name || p.username}
                     </span>
                   </ProfileButton>
-                ))
-              : t('noInvitesYet')}
-          </span>
-        </SettingsRow>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted">{t('noInvitesYet')}</p>
+          )}
+        </div>
         <SettingsRow label={t('signOut')}>
           <Button
             variant="ghost"

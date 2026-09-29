@@ -180,7 +180,7 @@ export async function unlockVaultWithWebAuthn() {
   }
 }
 
-/** Register Face ID / Touch ID / platform passkey as an extra unlock path. Vault must already be unlocked. */
+/** Register a device passkey as an extra unlock path. Vault must already be unlocked. */
 export async function enableWebAuthnUnlock(opts: { userName: string; displayName: string }) {
   await ready()
   if (!secrets) throw new Error('locked')
