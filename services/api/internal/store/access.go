@@ -158,6 +158,20 @@ func (s *Store) RevokeOwnedDevice(ctx context.Context, userID, deviceID uuid.UUI
 	return tx.Commit(ctx)
 }
 
+// TrustSelf marks the signed-in pending device trusted. The account owner chose
+// "start fresh" instead of copying chats from another device.
+func (s *Store) TrustSelf(ctx context.Context, userID, deviceID uuid.UUID) error {
+	tag, err := s.Pool.Exec(ctx, `UPDATE devices SET trust_state='trusted', trusted_by_device_id=$1
+		WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND trust_state='pending'`, deviceID, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) TrustOwnedDevice(ctx context.Context, userID, targetID, byID uuid.UUID) error {
 	tag, err := s.Pool.Exec(ctx, `UPDATE devices SET trust_state='trusted', trusted_by_device_id=$3
 		WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL AND trust_state='pending'

@@ -30,7 +30,7 @@ export function UnlockScreen({
   /** This device cannot open chats until it transfers from a trusted device or starts fresh. */
   pending?: boolean
   onTransfer?: () => void
-  onFresh?: () => void
+  onFresh?: (password: string) => void
 }) {
   const { t } = useTranslation('common')
   const [password, setPassword] = useState('')
@@ -79,7 +79,6 @@ export function UnlockScreen({
           <p className="text-sm">{t('deviceUntrusted')}</p>
           <Button type="button" onClick={onTransfer}>{t('transferChats')}</Button>
           <Button type="button" variant="outline" onClick={() => {
-            onFresh()
             const problem = vaultPasswordError(password)
             if (problem) {
               setError(problem)
@@ -90,7 +89,7 @@ export function UnlockScreen({
               return
             }
             setError('')
-            void onUnlock(password)
+            void onFresh(password)
           }}>{t('startFresh')}</Button>
         </div>
       ) : null}

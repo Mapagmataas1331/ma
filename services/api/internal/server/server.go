@@ -92,6 +92,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/devices", a.devices)
 	mux.HandleFunc("POST /v1/devices/{id}/revoke", a.revokeDevice)
 	mux.HandleFunc("POST /v1/devices/{id}/trust", a.trustDevice)
+	mux.HandleFunc("POST /v1/devices/fresh", a.startFresh)
 	mux.HandleFunc("POST /v1/devices/pairing", a.pairStart)
 	mux.HandleFunc("GET /v1/devices/pairing/{id}", a.pairStatus)
 	mux.HandleFunc("POST /v1/devices/pairing/{id}/claim", a.pairClaim)
@@ -598,6 +599,31 @@ func (a *App) revokeDevice(w http.ResponseWriter, r *http.Request) {
 	a.Hub.Close(p.User.ID, id)
 	a.event(r, &p.User.ID, "device_revoked")
 	a.Hub.Notify(r.Context(), p.User.ID, signaling.Frame{V: 1, T: "device.revoked", ID: uuid.NewString(), P: map[string]any{"id": id.String()}})
+	w.WriteHeader(204)
+}
+
+func (a *App) startFresh(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	if p.Device == nil {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+		return
+	}
+	if p.Trust == "trusted" {
+		w.WriteHeader(204)
+		return
+	}
+	if p.Trust != "pending" {
+		httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+		return
+	}
+	if err := a.DB.TrustSelf(r.Context(), p.User.ID, *p.Device); err != nil {
+		httpx.WriteError(w, 404, "not_found", "device")
+		return
+	}
+	a.event(r, &p.User.ID, "device_trusted")
 	w.WriteHeader(204)
 }
 

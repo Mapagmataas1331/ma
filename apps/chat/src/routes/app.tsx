@@ -157,7 +157,6 @@ export function ChatApp() {
   const [pairFingerprint, setPairFingerprint] = useState('')
   const [pendingSync, setPendingSync] = useState(false)
   const [askTransfer, setAskTransfer] = useState(false)
-  const allowFreshRef = useRef(false)
   const [vaultDialog, setVaultDialog] = useState(false)
   const [currentVaultPassword, setCurrentVaultPassword] = useState('')
   const [nextVaultPassword, setNextVaultPassword] = useState('')
@@ -572,39 +571,31 @@ export function ChatApp() {
     }
   }
 
-  async function publishIdentityIfEmpty() {
+  async function publishIdentityIfEmpty(force = false) {
     const pubs = { ed25519: getIdentity().identitySign.publicKey, x25519: getIdentity().identityBox.publicKey }
-    if (!session.user?.id) return
-    const existing = await api<{ x25519: string }>(`/v1/contacts/${session.user.id}/keys`).catch(() => null)
-    if (existing?.x25519 && existing.x25519 !== pubs.x25519) {
+    const userId = useSession.getState().user?.id
+    if (!userId) return
+    const existing = await api<{ x25519: string }>(`/v1/contacts/${userId}/keys`).catch(() => null)
+    if (!force && existing?.x25519 && existing.x25519 !== pubs.x25519) {
       toast(t('identityMismatch'))
       return
     }
-    if (!existing?.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
+    if (!existing?.x25519 || existing.x25519 !== pubs.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
   }
 
-  function chooseFreshVault() {
-    allowFreshRef.current = true
-    setAskTransfer(false)
-  }
-
-  async function onUnlock(password: string) {
+  async function beginFresh(password: string) {
     const passError = vaultPasswordError(password)
     if (passError) {
       toast(passError)
       return
     }
-    const trust = useSession.getState().trust
+    setAskTransfer(false)
     try {
       if (session.user?.id) await openAccount(session.user.id)
-      if (!(await hasVault())) {
-        if (trust === 'pending' && !allowFreshRef.current) {
-          setAskTransfer(true)
-          return
-        }
+      const created = !(await hasVault())
+      if (created) {
         await createVault(password)
         setVaultExists(true)
-        if (trust !== 'pending') await publishIdentityIfEmpty()
       } else {
         const owner = await vaultOwner()
         if (owner && session.user?.id && owner !== session.user.id) {
@@ -617,13 +608,54 @@ export function ChatApp() {
           toast(t('wrongVaultPassword'))
           return
         }
-        if (trust !== 'pending') await publishIdentityIfEmpty()
+      }
+      if (useSession.getState().trust === 'pending') {
+        await api('/v1/devices/fresh', { method: 'POST' })
+        const current = useSession.getState()
+        current.setSession(current.user, current.deviceId, 'trusted')
+      }
+      await publishIdentityIfEmpty(created)
+      setUnlocked(true)
+      syncRef.current()
+    } catch (err) {
+      toast(explain(err))
+    }
+  }
+
+  async function onUnlock(password: string) {
+    if (useSession.getState().trust === 'pending') {
+      await beginFresh(password)
+      return
+    }
+    const passError = vaultPasswordError(password)
+    if (passError) {
+      toast(passError)
+      return
+    }
+    try {
+      if (session.user?.id) await openAccount(session.user.id)
+      if (!(await hasVault())) {
+        await createVault(password)
+        setVaultExists(true)
+        await publishIdentityIfEmpty()
+      } else {
+        const owner = await vaultOwner()
+        if (owner && session.user?.id && owner !== session.user.id) {
+          toast(t('wrongVaultAccount'))
+          return
+        }
+        try {
+          await unlockVault(password)
+        } catch {
+          toast(t('wrongVaultPassword'))
+          return
+        }
+        await publishIdentityIfEmpty()
       }
       setUnlocked(true)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'device_untrusted') {
         setAskTransfer(true)
-        if (await hasVault().catch(() => false)) setUnlocked(true)
         return
       }
       toast(explain(err))
@@ -2031,7 +2063,7 @@ export function ChatApp() {
           onUnlock={onUnlock}
           pending={session.trust === 'pending'}
           onTransfer={() => setAskTransfer(true)}
-          onFresh={chooseFreshVault}
+          onFresh={(password) => { void beginFresh(password) }}
         />
         <TransferPrompt
           open={askTransfer}
@@ -2039,7 +2071,7 @@ export function ChatApp() {
             if (session.user?.id) dismissTransfer(session.user.id)
             setAskTransfer(false)
           }}
-          onFresh={chooseFreshVault}
+          onFresh={(password) => { void beginFresh(password) }}
           onTransfer={async (pairingId, code, nextPassword) => {
             transferPassword.current = nextPassword
             await claimPair(pairingId, code)
@@ -2113,10 +2145,7 @@ export function ChatApp() {
         if (session.user?.id) dismissTransfer(session.user.id)
         setAskTransfer(false)
       }}
-      onFresh={() => {
-        if (session.user?.id) dismissTransfer(session.user.id)
-        setAskTransfer(false)
-      }}
+      onFresh={(password) => { void beginFresh(password) }}
       onTransfer={async (pairingId, code, nextPassword) => {
         transferPassword.current = nextPassword
         await claimPair(pairingId, code)
