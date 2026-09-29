@@ -182,6 +182,7 @@
   "sessionExpired": "Your session ended. Sign in again.",
   "networkError": "No connection. Check your network and try again.",
   "fileGone": "This file is no longer on the server.",
+  "recipientNoVault": "This person has not created a vault yet, so the message cannot be encrypted to them.",
   "fileTooLarge": "This file is too large to store on the server.",
   "fileOfflineLarge": "{name} is offline. Files over {size} go directly between devices, so keep this page open until they come online.",
   "cloudStorage": "Cloud storage",

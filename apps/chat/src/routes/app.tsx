@@ -1013,10 +1013,12 @@ export function ChatApp() {
             return { file_id: file.id, name: file.name, mime: file.mime, size: file.size, ...(onCloud ? { key: file.key, header: file.header, lengths: file.lengths } : {}) }
           }),
         })
-        const recipientKeys = await api<{ x25519: string }>(`/v1/contacts/${recipientId}/keys`)
+        const recipientKey = recipientId === me
+          ? getIdentity().identityBox.publicKey
+          : (await api<{ x25519: string }>(`/v1/contacts/${recipientId}/keys`)).x25519
         const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${recipientId}/devices`).catch(() => [])
         const deviceId = live.has(recipientId) || recipientId === me ? devices[0]?.id || '' : ''
-        await transport.deliverText({ id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, recipientKeys.x25519, deviceId)
+        await transport.deliverText({ id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, recipientKey, deviceId)
         const omitted = share?.files.some((file) => !visible.some((item) => item.id === file.id))
         if (!omitted) {
           share?.offered.add(recipientId)
@@ -1108,7 +1110,9 @@ export function ChatApp() {
   function explain(err: unknown) {
     if (err instanceof ApiError) {
       if (err.code === 'server_overloaded') return t('serverOverloaded')
-      if (err.code === 'not_found' || err.status === 404) return t('fileGone')
+      if (err.code === 'keys_missing' || err.message === 'keys') return t('recipientNoVault')
+      if ((err.code === 'not_found' || err.status === 404) && /file/i.test(err.message)) return t('fileGone')
+      if (err.code === 'not_found' || err.status === 404) return t('couldNotSend')
       if (err.code === 'too_large') return t('fileTooLarge')
       if (err.code === 'rate_limited') return t('tooManyRequests')
       if (err.code === 'device_untrusted') return t('deviceUntrusted')

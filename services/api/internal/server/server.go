@@ -914,7 +914,7 @@ func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := a.DB.UserByID(r.Context(), id)
 	if err != nil || len(user.X25519) != 32 {
-		httpx.WriteError(w, 404, "not_found", "keys")
+		httpx.WriteError(w, 404, "keys_missing", "this person has not created a vault yet")
 		return
 	}
 	httpx.WriteJSON(w, 200, map[string]string{
