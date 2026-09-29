@@ -21,7 +21,16 @@ On a fresh Ubuntu 24.04 ARM64 host:
 sudo bash infra/oracle/bootstrap.sh
 ```
 
-Edit `/etc/macyou/api.env` from `infra/oracle/api.env.example`. Generate `SERVER_KEK` with `openssl rand -base64 32` and a TURN secret the same way. DNS for `api.ma.cyou` and `turn.ma.cyou` must be grey-cloud so TLS-ALPN/HTTP-01 and TURN see the real client.
+Edit `/etc/macyou/api.env` from `infra/oracle/api.env.example`. Generate `SERVER_KEK` and `TURN_SECRET` with `openssl rand -base64 32`. Generate VAPID keys with `npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` for browser push. DNS for `api.ma.cyou` and `turn.ma.cyou` must be grey-cloud (DNS only) so TLS-ALPN/HTTP-01 and TURN see the real client.
+
+Open on the Oracle security list (or NSG): TCP 22, 80, 443; TCP+UDP 3478; TCP 5349; UDP 49160–49400. Do not expose API port 8080 publicly.
+
+After DNS for `turn.ma.cyou` points at the host:
+
+```bash
+sudo bash infra/oracle/coturn/install-coturn.sh   # STUN/TURN on 3478
+sudo bash infra/oracle/coturn/setup-turns.sh      # Let's Encrypt + TURNS on 5349, updates TURN_URLS
+```
 
 GitHub Actions `api-deploy.yml` builds `linux/arm64` and restarts `macyou-api` when `ORACLE_HOST` and `ORACLE_SSH_KEY` are set.
 
