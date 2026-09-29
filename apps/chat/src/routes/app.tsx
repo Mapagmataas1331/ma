@@ -2114,10 +2114,34 @@ export function ChatApp() {
           />
         </SettingsRow>
         <SettingsRow label={t('relayOnly')} hint={t('relayOnlyHint')}>
-          <Switch checked={relay} onCheckedChange={(on) => { setRelay(on); localStorage.setItem('ma.chat.relayOnly', on ? '1' : '0') }} label={t('relayOnly')} />
+          <Switch
+            checked={relay}
+            onCheckedChange={(on) => {
+              setRelay(on)
+              localStorage.setItem('ma.chat.relayOnly', on ? '1' : '0')
+              if (on && directOnly) {
+                setDirectOnly(false)
+                transport.directOnly = false
+                localStorage.setItem('ma.chat.directOnly', '0')
+              }
+            }}
+            label={t('relayOnly')}
+          />
         </SettingsRow>
         <SettingsRow label={t('directOnly')} hint={t('directOnlyHint')}>
-          <Switch checked={directOnly} onCheckedChange={(on) => { setDirectOnly(on); transport.directOnly = on; localStorage.setItem('ma.chat.directOnly', on ? '1' : '0') }} label={t('directOnly')} />
+          <Switch
+            checked={directOnly}
+            onCheckedChange={(on) => {
+              setDirectOnly(on)
+              transport.directOnly = on
+              localStorage.setItem('ma.chat.directOnly', on ? '1' : '0')
+              if (on && relay) {
+                setRelay(false)
+                localStorage.setItem('ma.chat.relayOnly', '0')
+              }
+            }}
+            label={t('directOnly')}
+          />
         </SettingsRow>
       </SettingsSection>
       <SettingsSection title={t('security')} description={t('securityLead')}>
