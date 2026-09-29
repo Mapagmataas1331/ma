@@ -157,7 +157,7 @@ export function ChatApp() {
   const [pairFingerprint, setPairFingerprint] = useState('')
   const [pendingSync, setPendingSync] = useState(false)
   const [askTransfer, setAskTransfer] = useState(false)
-  const [allowFresh, setAllowFresh] = useState(false)
+  const allowFreshRef = useRef(false)
   const [vaultDialog, setVaultDialog] = useState(false)
   const [currentVaultPassword, setCurrentVaultPassword] = useState('')
   const [nextVaultPassword, setNextVaultPassword] = useState('')
@@ -285,6 +285,7 @@ export function ChatApp() {
         if (current.user && current.user.id !== me.id) resetChatRuntime()
         useSession.getState().setSession(me, me.device_id || null, me.trust_state || null)
         if (me.id) await adoptAccount(me.id, me)
+        if (me.trust_state === 'pending' && !isUnlocked() && me.id && !transferDismissed(me.id)) setAskTransfer(true)
         setMode('app')
       }).catch(() => {
         resetChatRuntime()
@@ -582,22 +583,28 @@ export function ChatApp() {
     if (!existing?.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
   }
 
+  function chooseFreshVault() {
+    allowFreshRef.current = true
+    setAskTransfer(false)
+  }
+
   async function onUnlock(password: string) {
     const passError = vaultPasswordError(password)
     if (passError) {
       toast(passError)
       return
     }
+    const trust = useSession.getState().trust
     try {
       if (session.user?.id) await openAccount(session.user.id)
       if (!(await hasVault())) {
-        if (session.trust === 'pending' && !allowFresh) {
+        if (trust === 'pending' && !allowFreshRef.current) {
           setAskTransfer(true)
           return
         }
         await createVault(password)
         setVaultExists(true)
-        if (session.trust !== 'pending') await publishIdentityIfEmpty()
+        if (trust !== 'pending') await publishIdentityIfEmpty()
       } else {
         const owner = await vaultOwner()
         if (owner && session.user?.id && owner !== session.user.id) {
@@ -610,10 +617,15 @@ export function ChatApp() {
           toast(t('wrongVaultPassword'))
           return
         }
-        await publishIdentityIfEmpty()
+        if (trust !== 'pending') await publishIdentityIfEmpty()
       }
       setUnlocked(true)
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'device_untrusted') {
+        setAskTransfer(true)
+        if (await hasVault().catch(() => false)) setUnlocked(true)
+        return
+      }
       toast(explain(err))
     }
   }
@@ -2014,17 +2026,20 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
-        <UnlockScreen mode={vaultExists === false ? 'create' : 'unlock'} onUnlock={onUnlock} />
+        <UnlockScreen
+          mode={vaultExists === false ? 'create' : 'unlock'}
+          onUnlock={onUnlock}
+          pending={session.trust === 'pending'}
+          onTransfer={() => setAskTransfer(true)}
+          onFresh={chooseFreshVault}
+        />
         <TransferPrompt
           open={askTransfer}
           onLater={() => {
             if (session.user?.id) dismissTransfer(session.user.id)
             setAskTransfer(false)
           }}
-          onFresh={() => {
-            setAllowFresh(true)
-            setAskTransfer(false)
-          }}
+          onFresh={chooseFreshVault}
           onTransfer={async (pairingId, code, nextPassword) => {
             transferPassword.current = nextPassword
             await claimPair(pairingId, code)
@@ -2128,7 +2143,7 @@ export function ChatApp() {
             }
           }} />
         </form>
-        {session.user && transferDismissed(session.user.id) ? <Button type="button" variant="ghost" className="mx-3 mt-2" onClick={() => setAskTransfer(true)}>{t('transferChats')}</Button> : null}
+        {session.trust === 'pending' ? <Button type="button" variant="ghost" className="mx-3 mt-2" onClick={() => setAskTransfer(true)}>{t('transferChats')}</Button> : null}
         {pendingSync ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('syncHint')}</p> : null}
         {!wsOnline ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('reconnecting')}</p> : null}
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">

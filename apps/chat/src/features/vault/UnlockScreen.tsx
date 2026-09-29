@@ -20,10 +20,17 @@ export function VaultExplainer({ defaultOpen = false }: { defaultOpen?: boolean 
 export function UnlockScreen({
   mode,
   onUnlock,
+  pending = false,
+  onTransfer,
+  onFresh,
 }: {
   /** `create` when this account has no vault on this device yet. */
   mode: 'create' | 'unlock'
   onUnlock: (password: string) => Promise<void>
+  /** This device cannot open chats until it transfers from a trusted device or starts fresh. */
+  pending?: boolean
+  onTransfer?: () => void
+  onFresh?: () => void
 }) {
   const { t } = useTranslation('common')
   const [password, setPassword] = useState('')
@@ -67,6 +74,26 @@ export function UnlockScreen({
         <Button type="submit">{creating ? t('createVaultButton') : t('unlock')}</Button>
         {creating ? <p className="text-xs text-muted">{t('vaultNotAccountPassword')}</p> : null}
       </form>
+      {pending && onTransfer && onFresh ? (
+        <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-1 px-4 py-3">
+          <p className="text-sm">{t('deviceUntrusted')}</p>
+          <Button type="button" onClick={onTransfer}>{t('transferChats')}</Button>
+          <Button type="button" variant="outline" onClick={() => {
+            onFresh()
+            const problem = vaultPasswordError(password)
+            if (problem) {
+              setError(problem)
+              return
+            }
+            if (creating && password !== confirm) {
+              setError(t('vaultPasswordsDiffer'))
+              return
+            }
+            setError('')
+            void onUnlock(password)
+          }}>{t('startFresh')}</Button>
+        </div>
+      ) : null}
       <VaultExplainer defaultOpen={creating} />
     </div>
   )
