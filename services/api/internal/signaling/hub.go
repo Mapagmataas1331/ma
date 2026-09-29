@@ -58,6 +58,19 @@ func (h *Hub) Remove(user, device uuid.UUID) {
 	}
 }
 
+func (h *Hub) DeviceIDs(user uuid.UUID) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]string, 0, len(h.conns[user]))
+	for id := range h.conns[user] {
+		if id == uuid.Nil {
+			continue
+		}
+		out = append(out, id.String())
+	}
+	return out
+}
+
 func (h *Hub) Online(user uuid.UUID) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()

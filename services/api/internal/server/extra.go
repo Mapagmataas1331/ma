@@ -66,7 +66,7 @@ func conversationJSON(c store.Conversation, members []store.Member) map[string]a
 }
 
 func (a *App) contactDevices(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.requireChat(w, r)
+	p, ok := a.auth(w, r)
 	if !ok {
 		return
 	}
@@ -75,10 +75,20 @@ func (a *App) contactDevices(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "id")
 		return
 	}
-	allowed, err := a.DB.CanReadIdentity(r.Context(), p.User.ID, id)
-	if err != nil || !allowed {
-		httpx.WriteError(w, 404, "not_found", "devices")
-		return
+	if id != p.User.ID {
+		if err := authz.AllowChat(authz.DeviceAccess{HasDevice: p.Device != nil, Trust: p.Trust}); err != nil {
+			httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+			return
+		}
+		allowed, err := a.DB.CanReadIdentity(r.Context(), p.User.ID, id)
+		if err != nil {
+			httpx.WriteError(w, 500, "internal", "devices")
+			return
+		}
+		if !allowed {
+			httpx.WriteError(w, 403, "forbidden", "devices")
+			return
+		}
 	}
 	list, err := a.DB.PublicDevices(r.Context(), id)
 	if err != nil {
@@ -121,7 +131,7 @@ func (a *App) publishPresence(ctx context.Context, user uuid.UUID, online bool) 
 	if err != nil {
 		return
 	}
-	a.Hub.NotifyMany(ctx, peers, signaling.Frame{V: 1, T: "presence.update", ID: uuid.NewString(), P: map[string]any{"user": user.String(), "online": online}})
+	a.Hub.NotifyMany(ctx, peers, signaling.Frame{V: 1, T: "presence.update", ID: uuid.NewString(), P: map[string]any{"user": user.String(), "online": online, "devices": a.Hub.DeviceIDs(user)}})
 }
 
 func (a *App) authorizeSignal(ctx context.Context, p principal, frame signaling.Frame) error {

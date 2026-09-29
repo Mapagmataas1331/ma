@@ -33,6 +33,7 @@ import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDevi
 import { blobParts, ciphertextSize, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
+import { enablePush, notifyHere, notifyPrefOn, setNotifyPref } from '../lib/push'
 import { openNamed, openWriter, opfsAvailable, removeNamed } from '../lib/opfs'
 import { resetChatRuntime } from '../lib/runtime'
 import { chunkMessages, exportHistory, storeHistory, type SyncMessage } from '../lib/sync'
@@ -150,6 +151,7 @@ export function ChatApp() {
   const [relay, setRelay] = useState(() => localStorage.getItem('ma.chat.relayOnly') === '1')
   const [directOnly, setDirectOnly] = useState(() => localStorage.getItem('ma.chat.directOnly') === '1')
   const [showNames, setShowNames] = useState(() => localStorage.getItem('ma.chat.showSenderNames') === '1')
+  const [notifyOn, setNotifyOn] = useState(() => notifyPrefOn())
   const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string } | null>(null)
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, queueBytes: 0, total: 0 })
   const [limitGb, setLimitGb] = useState(() => loadStorageGb(''))
@@ -215,6 +217,8 @@ export function ChatApp() {
   messagesRef.current = messages
   const onlineRef = useRef(online)
   onlineRef.current = online
+  const onlineDevicesRef = useRef(new Map<string, string[]>())
+  const notifyReady = useRef(false)
   const conversationsRef = useRef(conversations)
   conversationsRef.current = conversations
   const liveShares = useRef(new Map<string, LiveShare>())
@@ -251,6 +255,7 @@ export function ChatApp() {
 
   useEffect(() => {
     if (!unlocked) {
+      notifyReady.current = false
       setMessages([])
       setStored(new Set())
       return
@@ -311,26 +316,47 @@ export function ChatApp() {
       if (frame.t === 'session.ready') {
         setWsOnline(true)
         deviceSyncRef.current()
+        window.setTimeout(() => { notifyReady.current = true }, 1500)
+        if (notifyPrefOn()) void enablePush().then((on) => setNotifyOn(on)).catch(() => undefined)
       }
       if (frame.t === 'session.closed') setWsOnline(false)
       if (frame.t === 'session.ready' || frame.t === 'mailbox.new' || frame.t === 'contacts.updated' || frame.t === 'conversations.updated') sync()
       if (frame.t === 'presence.snapshot') {
         const users = Array.isArray(frame.p.users) ? frame.p.users.map(String) : []
+        const listed = frame.p.devices
+        const nextDevices = new Map<string, string[]>()
+        if (listed && typeof listed === 'object' && !Array.isArray(listed)) {
+          for (const [id, ids] of Object.entries(listed as Record<string, unknown>)) {
+            if (Array.isArray(ids)) nextDevices.set(id, ids.map(String).filter(Boolean))
+          }
+        }
+        for (const id of users) if (!nextDevices.has(id)) nextDevices.set(id, [])
+        onlineDevicesRef.current = nextDevices
         const next = new Set(users)
         onlineRef.current = next
         setOnline(next)
         probed.current.clear()
-        for (const id of users) offerLateRef.current(id)
+        for (const id of users) {
+          transport.warmPeer(id, nextDevices.get(id) ?? [])
+          offerLateRef.current(id)
+        }
         replayRef.current()
       }
       if (frame.t === 'presence.update') {
         const id = String(frame.p.user ?? '')
         const next = new Set(onlineRef.current)
-        if (frame.p.online) next.add(id)
-        else next.delete(id)
+        const ids = Array.isArray(frame.p.devices) ? frame.p.devices.map(String).filter(Boolean) : []
+        if (frame.p.online) {
+          next.add(id)
+          onlineDevicesRef.current.set(id, ids)
+        } else {
+          next.delete(id)
+          onlineDevicesRef.current.delete(id)
+        }
         onlineRef.current = next
         if (frame.p.online) {
           probed.current.clear()
+          transport.warmPeer(id, ids)
           offerLateRef.current(id)
           replayRef.current()
         }
@@ -713,6 +739,13 @@ export function ChatApp() {
       messagesRef.current = [...messagesRef.current, message]
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]))
       await sealRow('records', message.id, 'messages', withoutUrls(message))
+      if (!message.mine && notifyReady.current && notifyPrefOn()) {
+        const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
+        if (!conv || !prefs[conv.id]?.muted) {
+          const who = showNames ? (memberName(conv, senderId) || t('notifyNewMessage')) : t('notifyNewMessage')
+          notifyHere(who, t('notifyOpenChat'), message.conversationId)
+        }
+      }
       const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
       if (conv?.kind === 'group' && files.length) {
         const mineId = meRef.current
@@ -873,7 +906,11 @@ export function ChatApp() {
         attachments,
       })
       const recipientKeys = { x25519: await recipientBoxKey(userId, conv) }
-      const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
+      let deviceIds = onlineDevicesRef.current.get(userId) ?? []
+      if (!deviceIds.length) {
+        const devices = await api<{ id: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
+        deviceIds = devices.map((item) => item.id)
+      }
       await transport.deliverText({
         id: crypto.randomUUID(),
         conversationId: share.conversationId,
@@ -882,7 +919,7 @@ export function ChatApp() {
         envelope: payload,
         size: payload.length,
         attempts: 0,
-      }, recipientKeys.x25519, devices[0]?.id || '')
+      }, recipientKeys.x25519, deviceIds[0] || '', deviceIds)
       share.offered.add(userId)
       if (sentKey) share.keyed.add(userId)
       share.until = Date.now() + SHARE_TAIL
@@ -1063,11 +1100,14 @@ export function ChatApp() {
           }),
         })
         const recipientKey = await recipientBoxKey(recipientId, conv)
-        const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${recipientId}/devices`).catch(() => [])
-        const deviceId = live.has(recipientId) || recipientId === me ? devices[0]?.id || '' : ''
+        let deviceIds = onlineDevicesRef.current.get(recipientId) ?? []
+        if ((live.has(recipientId) || recipientId === me) && !deviceIds.length) {
+          const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${recipientId}/devices`).catch(() => [])
+          deviceIds = devices.map((item) => item.id)
+        }
         const delivery = { id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued' as const, envelope: payload, size: payload.length, attempts: 0 }
         try {
-          routes.add(await transport.deliverText(delivery, recipientKey, deviceId))
+          routes.add(await transport.deliverText(delivery, recipientKey, deviceIds[0] || '', deviceIds))
         } catch (err) {
           if (err instanceof Error && err.message === 'direct_only') {
             missedDirect = true
@@ -2043,6 +2083,23 @@ export function ChatApp() {
               localStorage.setItem('ma.time', next)
             }}
             label={t('hour24')}
+          />
+        </SettingsRow>
+        <SettingsRow label={t('notifications')} hint={t('notificationsHint')}>
+          <Switch
+            checked={notifyOn}
+            onCheckedChange={(on) => {
+              if (!on) {
+                setNotifyPref(false)
+                setNotifyOn(false)
+                return
+              }
+              void enablePush().then((ok) => setNotifyOn(ok)).catch(() => {
+                setNotifyPref(false)
+                setNotifyOn(false)
+              })
+            }}
+            label={t('notifications')}
           />
         </SettingsRow>
         <SettingsRow label={t('showSenderNames')} hint={t('showSenderNamesHint')}>

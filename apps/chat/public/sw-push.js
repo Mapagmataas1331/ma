@@ -13,13 +13,9 @@ self.addEventListener('push', (event) => {
   } catch {
     count = 1
   }
-  event.waitUntil((async () => {
-    const cached = await caches.open('ma-prefs').then((cache) => cache.match('/notify-pref')).catch(() => undefined)
-    const show = cached ? (await cached.text()) === '1' : false
-    const title = show ? (count > 1 ? (ru ? `Новые сообщения (${count})` : `New messages (${count})`) : (ru ? 'Новое сообщение' : 'New message')) : 'ma.cyou'
-    const body = ru ? 'Откройте чат, чтобы прочитать.' : 'Open chat to read it.'
-    await self.registration.showNotification(title, { body: show ? body : '', data: { url: '/' } })
-  })())
+  const title = count > 1 ? (ru ? `Новые сообщения (${count})` : `New messages (${count})`) : (ru ? 'Новое сообщение' : 'New message')
+  const body = ru ? 'Откройте чат, чтобы прочитать.' : 'Open chat to read it.'
+  event.waitUntil(self.registration.showNotification(title, { body, data: { url: '/' } }))
 })
 
 self.addEventListener('notificationclick', (event) => {

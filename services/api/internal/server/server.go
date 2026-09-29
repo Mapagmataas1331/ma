@@ -1561,12 +1561,14 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 	if p.Trust == "trusted" {
 		peers, _ := a.DB.PresencePeerIDs(r.Context(), p.User.ID)
 		online := []string{}
+		devices := map[string][]string{}
 		for _, id := range peers {
 			if a.Hub.Online(id) {
 				online = append(online, id.String())
+				devices[id.String()] = a.Hub.DeviceIDs(id)
 			}
 		}
-		snap, _ := json.Marshal(signaling.Frame{V: 1, T: "presence.snapshot", ID: uuid.NewString(), P: map[string]any{"users": online}})
+		snap, _ := json.Marshal(signaling.Frame{V: 1, T: "presence.snapshot", ID: uuid.NewString(), P: map[string]any{"users": online, "devices": devices}})
 		_ = conn.Write(r.Context(), websocket.MessageText, snap)
 		a.publishPresence(r.Context(), p.User.ID, true)
 	}

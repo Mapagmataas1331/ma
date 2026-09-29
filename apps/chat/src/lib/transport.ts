@@ -93,10 +93,14 @@ export class Transport {
 
   private async iceServers() {
     if (this.ice && this.ice.until > Date.now()) return this.ice.servers
-    const creds = await api<{ urls: string[]; username: string; credential: string }>('/v1/turn/credentials')
-    const servers = [{ urls: creds.urls, username: creds.username, credential: creds.credential }]
-    this.ice = { servers, until: Date.now() + 60 * 60 * 1000 }
-    return servers
+    try {
+      const creds = await api<{ urls: string[]; username: string; credential: string }>('/v1/turn/credentials')
+      const servers: RTCIceServer[] = [{ urls: creds.urls, username: creds.username, credential: creds.credential }]
+      this.ice = { servers, until: Date.now() + 60 * 60 * 1000 }
+      return servers
+    } catch {
+      return [{ urls: 'stun:stun.cloudflare.com:3478' }]
+    }
   }
 
   /** Resolve once the channel's send buffer has drained below the threshold. */
@@ -164,10 +168,45 @@ export class Transport {
     return best
   }
 
-  async ensurePeer(userId: string, deviceId: string, timeoutMs = 4000) {
+  private waitOpen(key: string, timeoutMs: number) {
+    const open = this.channels.get(key)
+    if (open?.readyState === 'open') return Promise.resolve(open)
+    return new Promise<RTCDataChannel | null>((resolve) => {
+      const started = Date.now()
+      const poll = window.setInterval(() => {
+        const ch = this.channels.get(key)
+        if (ch?.readyState === 'open') {
+          window.clearInterval(poll)
+          resolve(ch)
+          return
+        }
+        const pc = this.peers.get(key)
+        const dead = !pc || pc.connectionState === 'failed' || pc.connectionState === 'closed'
+        if (dead || Date.now() - started >= timeoutMs) {
+          window.clearInterval(poll)
+          resolve(null)
+        }
+      }, 150)
+    })
+  }
+
+  /** Start ICE early when presence says they are online, so the first message need not wait. */
+  warmPeer(userId: string, deviceIds: string[]) {
+    for (const deviceId of deviceIds) {
+      if (!deviceId || this.peerOpen(userId, deviceId)) continue
+      void this.ensurePeer(userId, deviceId, 12_000).catch(() => undefined)
+    }
+  }
+
+  async ensurePeer(userId: string, deviceId: string, timeoutMs = 8000) {
+    if (!userId || !deviceId) return null
     const key = `${userId}:${deviceId}`
     const existing = this.channels.get(key)
-    if (existing && existing.readyState === 'open') return existing
+    if (existing?.readyState === 'open') return existing
+    const pcExisting = this.peers.get(key)
+    if (pcExisting && pcExisting.signalingState !== 'closed' && pcExisting.connectionState !== 'failed') {
+      return this.waitOpen(key, timeoutMs)
+    }
     const pc = new RTCPeerConnection({
       iceServers: await this.iceServers(),
       iceTransportPolicy: this.relayOnly ? 'relay' : 'all',
@@ -183,13 +222,7 @@ export class Transport {
     const offer = await pc.createOffer()
     await pc.setLocalDescription(offer)
     this.sendFrame(newFrame('rtc.offer', { sdp: offer.sdp }, { user: userId, device: deviceId }))
-    return await new Promise<RTCDataChannel | null>((resolve) => {
-      const timer = window.setTimeout(() => resolve(channel.readyState === 'open' ? channel : null), timeoutMs)
-      channel.onopen = () => {
-        window.clearTimeout(timer)
-        resolve(channel)
-      }
-    })
+    return this.waitOpen(key, timeoutMs)
   }
 
   private async answer(frame: SignalFrame) {
@@ -241,7 +274,7 @@ export class Transport {
     }
   }
 
-  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = ''): Promise<'direct' | 'server'> {
+  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = '', extraIds: string[] = []): Promise<'direct' | 'server'> {
     row.recipientPk = recipientPk
     row.deviceId = deviceId
     row.state = 'queued'
@@ -249,18 +282,23 @@ export class Transport {
     const id = getIdentity()
     const sealed = sealBox(new TextEncoder().encode(row.envelope), unb64(recipientPk), id.identityBox.privateKey)
     const wire: Envelope = { v: 1, alg: 'x25519-xchacha20poly1305', sender_identity_pk: id.identityBox.publicKey, nonce: sealed.nonce, ciphertext: sealed.ciphertext }
-    let via: 'direct' | 'server' = 'direct'
+    const deviceIds = [...new Set([deviceId, ...extraIds].filter(Boolean))]
+    let via: 'direct' | 'server' = 'server'
     row.state = 'sending_p2p'
-    if (deviceId) {
-      const channel = await this.ensurePeer(row.recipientUserId, deviceId)
-      if (channel && channel.readyState === 'open') {
-        channel.send(JSON.stringify(wire))
+    if (deviceIds.length) {
+      const opened = await Promise.any(
+        deviceIds.map(async (peerDevice) => {
+          const channel = await this.ensurePeer(row.recipientUserId, peerDevice)
+          if (!channel || channel.readyState !== 'open') throw new Error('closed')
+          return { channel, peerDevice }
+        }),
+      ).catch(() => null)
+      if (opened) {
+        opened.channel.send(JSON.stringify(wire))
         row.state = 'sent'
-      } else {
-        via = 'server'
+        row.deviceId = opened.peerDevice
+        via = 'direct'
       }
-    } else {
-      via = 'server'
     }
     if (via === 'server') {
       if (this.directOnly && row.recipientUserId !== this.localUser) {

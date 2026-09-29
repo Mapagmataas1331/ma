@@ -1,0 +1,57 @@
+import { api } from '@ma/api-client'
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4)
+  const raw = atob((value + padding).replace(/-/g, '+').replace(/_/g, '/'))
+  const out = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
+  return out
+}
+
+const NOTIFY_KEY = 'ma.chat.notify'
+
+export function notifyPrefOn() {
+  if (typeof localStorage === 'undefined') return false
+  const stored = localStorage.getItem(NOTIFY_KEY)
+  if (stored === '0') return false
+  if (stored === '1') return true
+  return typeof Notification !== 'undefined' && Notification.permission === 'granted'
+}
+
+export function setNotifyPref(on: boolean) {
+  localStorage.setItem(NOTIFY_KEY, on ? '1' : '0')
+}
+
+export async function enablePush() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return false
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
+  if (permission !== 'granted') return false
+  const { public_key: key } = await api<{ public_key: string }>('/v1/push/vapid-public-key').catch(() => ({ public_key: '' }))
+  // Local alerts still work without VAPID; push when the tab is closed needs server keys.
+  if (!key) {
+    setNotifyPref(true)
+    return true
+  }
+  const reg = await navigator.serviceWorker.ready
+  const existing = await reg.pushManager.getSubscription()
+  const sub = existing ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) })
+  const json = sub.toJSON()
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false
+  await api('/v1/push/subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth }),
+  })
+  setNotifyPref(true)
+  return true
+}
+
+export function notifyHere(title: string, body: string, tag: string) {
+  if (!notifyPrefOn()) return
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+  if (!document.hidden && document.hasFocus()) return
+  try {
+    new Notification(title, { body, tag, icon: '/web-app-manifest-192x192.png' })
+  } catch {
+    void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, { body, tag, icon: '/web-app-manifest-192x192.png' })).catch(() => undefined)
+  }
+}
