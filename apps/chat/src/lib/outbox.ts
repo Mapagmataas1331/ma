@@ -27,7 +27,7 @@ export async function replayOutbox(): Promise<{ id: string; route: 'direct' | 's
         deviceId = devices[0]?.id || ''
         plain.deviceId = deviceId
       }
-      const route = await transport.deliverText(plain, plain.recipientPk, deviceId)
+      const route = await transport.deliverText(plain, plain.recipientPk, deviceId, deviceId ? [deviceId] : [], !!deviceId)
       sent.push({ id: plain.id, route })
     } catch (err) {
       if (err instanceof Error && err.message === 'direct_only') {

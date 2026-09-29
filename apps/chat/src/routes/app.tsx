@@ -219,6 +219,10 @@ export function ChatApp() {
   onlineRef.current = online
   const onlineDevicesRef = useRef(new Map<string, string[]>())
   const notifyReady = useRef(false)
+  const activeRef = useRef(active)
+  activeRef.current = active
+  const showNamesRef = useRef(showNames)
+  showNamesRef.current = showNames
   const conversationsRef = useRef(conversations)
   conversationsRef.current = conversations
   const liveShares = useRef(new Map<string, LiveShare>())
@@ -395,6 +399,14 @@ export function ChatApp() {
           void sealRow('records', m.id, 'messages', withoutUrls(next))
           return next
         }))
+      }
+      if (frame.t === 'chat.envelope') {
+        const raw = frame.p.envelope
+        if (raw) {
+          void ingestEnvelope(raw, frame.id).then((fresh) => {
+            if (fresh) void refreshUsage()
+          }).catch(() => undefined)
+        }
       }
       if (frame.t === 'p2p.message') {
         try {
@@ -742,8 +754,11 @@ export function ChatApp() {
       if (!message.mine && notifyReady.current && notifyPrefOn()) {
         const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
         if (!conv || !prefs[conv.id]?.muted) {
-          const who = showNames ? (memberName(conv, senderId) || t('notifyNewMessage')) : t('notifyNewMessage')
-          notifyHere(who, t('notifyOpenChat'), message.conversationId)
+          const watching = activeRef.current === message.conversationId && !document.hidden && document.hasFocus()
+          if (!watching) {
+            const who = showNamesRef.current ? (memberName(conv, senderId) || t('notifyNewMessage')) : t('notifyNewMessage')
+            notifyHere(who, t('notifyOpenChat'), message.conversationId, true)
+          }
         }
       }
       const conv = conversationsRef.current.find((item) => item.id === message.conversationId)
@@ -919,7 +934,7 @@ export function ChatApp() {
         envelope: payload,
         size: payload.length,
         attempts: 0,
-      }, recipientKeys.x25519, deviceIds[0] || '', deviceIds)
+      }, recipientKeys.x25519, deviceIds[0] || '', deviceIds, onlineRef.current.has(userId))
       share.offered.add(userId)
       if (sentKey) share.keyed.add(userId)
       share.until = Date.now() + SHARE_TAIL
@@ -1107,7 +1122,7 @@ export function ChatApp() {
         }
         const delivery = { id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued' as const, envelope: payload, size: payload.length, attempts: 0 }
         try {
-          routes.add(await transport.deliverText(delivery, recipientKey, deviceIds[0] || '', deviceIds))
+          routes.add(await transport.deliverText(delivery, recipientKey, deviceIds[0] || '', deviceIds, live.has(recipientId) || recipientId === me))
         } catch (err) {
           if (err instanceof Error && err.message === 'direct_only') {
             missedDirect = true

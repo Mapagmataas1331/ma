@@ -11,6 +11,8 @@ export class Transport {
   private peers = new Map<string, RTCPeerConnection>()
   private channels = new Map<string, RTCDataChannel>()
   private iceWait = new Map<string, RTCIceCandidateInit[]>()
+  private connecting = new Map<string, Promise<RTCDataChannel | null>>()
+  private liveWait = new Map<string, { ok: () => void; fail: (err: Error) => void }>()
   private handlers = new Set<Handler>()
   private stopped = false
   private reconnectTimer = 0
@@ -50,6 +52,17 @@ export class Transport {
       const parsed = signalFrameSchema.safeParse(JSON.parse(String(ev.data)))
       if (!parsed.success) return
       const frame = parsed.data
+      if (frame.t === 'chat.envelope.ok') {
+        this.liveWait.get(frame.id)?.ok()
+        this.liveWait.delete(frame.id)
+      }
+      if (frame.t === 'error') {
+        const pending = this.liveWait.get(frame.id)
+        if (pending) {
+          pending.fail(new Error(String(frame.p.code ?? 'error')))
+          this.liveWait.delete(frame.id)
+        }
+      }
       if (frame.t === 'rtc.offer') void this.answer(frame)
       if (frame.t === 'rtc.answer' || frame.t === 'rtc.ice') void this.applySignal(frame)
       this.emit(frame)
@@ -203,6 +216,19 @@ export class Transport {
     const key = `${userId}:${deviceId}`
     const existing = this.channels.get(key)
     if (existing?.readyState === 'open') return existing
+    const inflight = this.connecting.get(key)
+    if (inflight) return inflight
+    const work = this.openPeer(userId, deviceId, timeoutMs).finally(() => {
+      if (this.connecting.get(key) === work) this.connecting.delete(key)
+    })
+    this.connecting.set(key, work)
+    return work
+  }
+
+  private async openPeer(userId: string, deviceId: string, timeoutMs: number) {
+    const key = `${userId}:${deviceId}`
+    const existing = this.channels.get(key)
+    if (existing?.readyState === 'open') return existing
     const pcExisting = this.peers.get(key)
     if (pcExisting && pcExisting.signalingState !== 'closed' && pcExisting.connectionState !== 'failed') {
       return this.waitOpen(key, timeoutMs)
@@ -274,7 +300,7 @@ export class Transport {
     }
   }
 
-  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = '', extraIds: string[] = []): Promise<'direct' | 'server'> {
+  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = '', extraIds: string[] = [], online = false): Promise<'direct' | 'server'> {
     row.recipientPk = recipientPk
     row.deviceId = deviceId
     row.state = 'queued'
@@ -283,12 +309,32 @@ export class Transport {
     const sealed = sealBox(new TextEncoder().encode(row.envelope), unb64(recipientPk), id.identityBox.privateKey)
     const wire: Envelope = { v: 1, alg: 'x25519-xchacha20poly1305', sender_identity_pk: id.identityBox.publicKey, nonce: sealed.nonce, ciphertext: sealed.ciphertext }
     const deviceIds = [...new Set([deviceId, ...extraIds].filter(Boolean))]
+    const peerOnline = online || deviceIds.length > 0 || row.recipientUserId === this.localUser
     let via: 'direct' | 'server' = 'server'
     row.state = 'sending_p2p'
-    if (deviceIds.length) {
+    for (const peerDevice of deviceIds) {
+      if (!this.peerOpen(row.recipientUserId, peerDevice)) continue
+      const channel = this.channels.get(`${row.recipientUserId}:${peerDevice}`)
+      if (!channel) continue
+      channel.send(JSON.stringify(wire))
+      row.state = 'sent'
+      row.deviceId = peerDevice
+      via = 'direct'
+      break
+    }
+    // Live websocket delivery while they are online: encrypted, not stored in the mailbox.
+    // Coturn is often down, so waiting for WebRTC first would make every chat look "via server".
+    if (via === 'server' && peerOnline) {
+      const live = await this.deliverLive(wire, row.recipientUserId, deviceIds[0] || '')
+      if (live) {
+        row.state = 'sent'
+        via = 'direct'
+      }
+    }
+    if (via === 'server' && deviceIds.length) {
       const opened = await Promise.any(
         deviceIds.map(async (peerDevice) => {
-          const channel = await this.ensurePeer(row.recipientUserId, peerDevice)
+          const channel = await this.ensurePeer(row.recipientUserId, peerDevice, 2500)
           if (!channel || channel.readyState !== 'open') throw new Error('closed')
           return { channel, peerDevice }
         }),
@@ -325,6 +371,28 @@ export class Transport {
     }
     await sealRow('outbox', row.id, 'outbox', row)
     return via
+  }
+
+  private deliverLive(wire: Envelope, recipientUserId: string, deviceId: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return Promise.resolve(false)
+    const frame = newFrame('chat.envelope', { envelope: wire }, deviceId ? { user: recipientUserId, device: deviceId } : { user: recipientUserId })
+    return new Promise<boolean>((resolve) => {
+      const timer = window.setTimeout(() => {
+        this.liveWait.delete(frame.id)
+        resolve(false)
+      }, 2500)
+      this.liveWait.set(frame.id, {
+        ok: () => {
+          window.clearTimeout(timer)
+          resolve(true)
+        },
+        fail: () => {
+          window.clearTimeout(timer)
+          resolve(false)
+        },
+      })
+      this.sendFrame(frame)
+    })
   }
 
   decryptEnvelope(envelope: Envelope) {

@@ -45,10 +45,10 @@ export async function enablePush() {
   return true
 }
 
-export function notifyHere(title: string, body: string, tag: string) {
+export function notifyHere(title: string, body: string, tag: string, force = false) {
   if (!notifyPrefOn()) return
   if (!('Notification' in window) || Notification.permission !== 'granted') return
-  if (!document.hidden && document.hasFocus()) return
+  if (!force && !document.hidden && document.hasFocus()) return
   try {
     new Notification(title, { body, tag, icon: '/web-app-manifest-192x192.png' })
   } catch {

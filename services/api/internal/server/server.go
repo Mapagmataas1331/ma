@@ -1595,6 +1595,8 @@ func (a *App) ws(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := a.Hub.Relay(r.Context(), p.User.ID, dev, frame); err != nil && signaling.IsOffline(err) {
 			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"error","id":"`+frame.ID+`","p":{"code":"offline"}}`))
+		} else if frame.T == "chat.envelope" {
+			_ = conn.Write(r.Context(), websocket.MessageText, []byte(`{"v":1,"t":"chat.envelope.ok","id":"`+frame.ID+`","p":{}}`))
 		}
 	}
 }
