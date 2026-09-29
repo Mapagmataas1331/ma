@@ -32,6 +32,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Take control immediately so iOS can subscribe to push on first launch (Discourse hit).
+        skipWaiting: true,
+        clientsClaim: true,
         navigateFallbackDenylist: [/^\//],
         runtimeCaching: [],
         importScripts: ['sw-push.js'],

@@ -23,6 +23,7 @@ self.addEventListener('push', (event) => {
     count = 1
   }
   // iOS shows "title / from App / body". Put everything in the title; leave body empty.
+  // Apple revokes the subscription if a push completes without showNotification — always show one.
   const title =
     count > 1
       ? ru
@@ -32,17 +33,12 @@ self.addEventListener('push', (event) => {
         ? 'Новое сообщение'
         : 'New message'
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const focused = windows.some((client) => client.visibilityState === 'visible' && 'focused' in client && client.focused)
-      // App is in the foreground and can show a local alert (or the user is looking at Chat).
-      if (focused) return undefined
-      return self.registration.showNotification(title, {
-        body: '',
-        tag: 'ma-mail',
-        renotify: true,
-        icon: '/web-app-manifest-192x192.png',
-        data: { url: '/' },
-      })
+    self.registration.showNotification(title, {
+      body: '',
+      tag: 'ma-mail',
+      renotify: true,
+      icon: '/web-app-manifest-192x192.png',
+      data: { url: '/' },
     }),
   )
 })

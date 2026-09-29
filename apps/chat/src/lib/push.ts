@@ -32,6 +32,10 @@ export function setNotifyPref(on: boolean) {
 
 export async function enablePush() {
   if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) return false
+  // iOS only exposes Push for Home Screen apps.
+  const ios = isIOSHomeScreenLike()
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true
+  if (ios && !standalone) return false
   const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission()
   if (permission !== 'granted') return false
   const { public_key: key } = await api<{ public_key: string }>('/v1/push/vapid-public-key').catch(() => ({ public_key: '' }))
@@ -41,8 +45,14 @@ export async function enablePush() {
     return true
   }
   const reg = await navigator.serviceWorker.ready
+  // Fresh install: SW may be active but not controlling yet — wait briefly (iOS silent-fail case).
+  if (!navigator.serviceWorker.controller) {
+    await Promise.race([
+      new Promise<void>((resolve) => navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true })),
+      new Promise<void>((resolve) => window.setTimeout(resolve, 2500)),
+    ])
+  }
   const existing = await reg.pushManager.getSubscription()
-  // Prefer a fresh subscribe when missing; otherwise refresh the server copy (Apple endpoints rotate).
   const sub =
     existing ??
     (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) }))
