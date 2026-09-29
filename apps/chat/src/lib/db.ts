@@ -120,14 +120,6 @@ export async function databaseNames() {
   return rows.map((row) => row.name || '').filter(Boolean)
 }
 
-export async function hasLegacyVault() {
-  return (await databaseNames()).includes('ma-chat')
-}
-
-export function legacyDatabase() {
-  return new ChatDB('ma-chat')
-}
-
 export function accountKey(userId: string, name: string) {
   return `ma.chat.${userId}.${name}`
 }

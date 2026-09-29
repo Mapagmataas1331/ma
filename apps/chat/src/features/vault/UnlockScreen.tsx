@@ -1,4 +1,4 @@
-import { passwordError } from '@ma/protocol'
+import { vaultPasswordError } from '@ma/protocol'
 import { Button, Input, PageHeader } from '@ma/ui'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,19 +20,14 @@ export function VaultExplainer({ defaultOpen = false }: { defaultOpen?: boolean 
 export function UnlockScreen({
   mode,
   onUnlock,
-  onImport,
-  showImport,
 }: {
   /** `create` when this account has no vault on this device yet. */
   mode: 'create' | 'unlock'
   onUnlock: (password: string) => Promise<void>
-  onImport: (password: string) => Promise<void>
-  showImport: boolean
 }) {
   const { t } = useTranslation('common')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [legacy, setLegacy] = useState('')
   const [error, setError] = useState('')
   const creating = mode === 'create'
   return (
@@ -41,7 +36,7 @@ export function UnlockScreen({
         className="flex flex-col gap-3"
         onSubmit={(e) => {
           e.preventDefault()
-          const problem = passwordError(password)
+          const problem = vaultPasswordError(password)
           if (problem) {
             setError(problem)
             return
@@ -73,19 +68,6 @@ export function UnlockScreen({
         {creating ? <p className="text-xs text-muted">{t('vaultNotAccountPassword')}</p> : null}
       </form>
       <VaultExplainer defaultOpen={creating} />
-      {showImport ? (
-        <form
-          className="flex flex-col gap-2 rounded-md border border-line bg-surface-1 px-4 py-3"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void onImport(legacy)
-          }}
-        >
-          <p className="text-sm">{t('legacyVault')}</p>
-          <Input type="password" placeholder={t('legacyVaultPassword')} aria-label={t('legacyVaultPassword')} value={legacy} onChange={(e) => setLegacy(e.target.value)} />
-          <Button type="submit" variant="outline">{t('importVault')}</Button>
-        </form>
-      ) : null}
     </div>
   )
 }

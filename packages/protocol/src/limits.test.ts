@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canonicalDisplayName, displayNameError, groupNameError, passwordError, usernameError } from './limits'
+import { canonicalDisplayName, displayNameError, groupNameError, passwordError, usernameError, vaultPasswordError } from './limits'
 
 describe('account field limits', () => {
   it('accepts a short username and rejects underscores at the ends', () => {
@@ -18,10 +18,17 @@ describe('account field limits', () => {
   })
 
   it('checks password length without trimming', () => {
-    expect(passwordError('short')).not.toBe('')
+    expect(passwordError('1234567')).not.toBe('')
+    expect(passwordError('12345678')).toBe('')
     expect(passwordError('correct horse')).toBe('')
-    expect(passwordError(` ${'x'.repeat(10)}`)).toBe('')
+    expect(passwordError(` ${'x'.repeat(7)}`)).toBe('')
     expect(passwordError('x'.repeat(129))).not.toBe('')
+  })
+
+  it('allows a 4-character vault password', () => {
+    expect(vaultPasswordError('abc')).not.toBe('')
+    expect(vaultPasswordError('abcd')).toBe('')
+    expect(vaultPasswordError('x'.repeat(129))).not.toBe('')
   })
 
   it('bounds group names', () => {

@@ -3,8 +3,11 @@ package auth
 import "testing"
 
 func TestHashAndVerify(t *testing.T) {
-	if err := ValidatePassword("short"); err == nil {
-		t.Fatal("expected short password to fail")
+	if err := ValidatePassword("1234567"); err == nil {
+		t.Fatal("expected 7-character password to fail")
+	}
+	if err := ValidatePassword("12345678"); err != nil {
+		t.Fatal(err)
 	}
 	if err := ValidatePassword("password123"); err == nil {
 		t.Fatal("expected common password to fail")

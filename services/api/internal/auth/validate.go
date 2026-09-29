@@ -14,7 +14,7 @@ const (
 	UsernameMax   = 12
 	DisplayMin    = 1
 	DisplayMax    = 32
-	PasswordMin   = 10
+	PasswordMin   = 8
 	PasswordMax   = 128
 	PasswordBytes = 512
 	DeviceNameMax = 64

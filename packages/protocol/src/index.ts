@@ -70,7 +70,7 @@ export const plaintextMessageSchema = z.object({
 
 export type PlaintextMessage = z.infer<typeof plaintextMessageSchema>
 
-export { canonicalDisplayName, canonicalUsername, deviceNameError, displayNameError, graphemeLength, groupNameError, passwordError, usernameError } from './limits'
+export { canonicalDisplayName, canonicalUsername, deviceNameError, displayNameError, graphemeLength, groupNameError, passwordError, usernameError, vaultPasswordError } from './limits'
 
 /** One queued file may use the whole cloud budget. The budget itself is what stops the next file. */
 export const MAILBOX_MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024

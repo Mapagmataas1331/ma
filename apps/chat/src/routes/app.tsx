@@ -1,6 +1,6 @@
 import { ApiError, api, apiBlobProgress, apiUpload, authApi } from '@ma/api-client'
 import { b64, pairingConfirm, ready, unb64 } from '@ma/crypto'
-import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError } from '@ma/protocol'
+import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError, vaultPasswordError } from '@ma/protocol'
 import {
   AppSettings,
   Button,
@@ -28,10 +28,9 @@ import {
 import QRCode from 'qrcode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { activeDatabase, hasLegacyVault, openAccount } from '../lib/db'
+import { activeDatabase, openAccount } from '../lib/db'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
 import { blobParts, ciphertextSize, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
-import { copyLegacyVault } from '../lib/legacy'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
 import { openNamed, openWriter, opfsAvailable, removeNamed } from '../lib/opfs'
@@ -159,7 +158,6 @@ export function ChatApp() {
   const [pendingSync, setPendingSync] = useState(false)
   const [askTransfer, setAskTransfer] = useState(false)
   const [allowFresh, setAllowFresh] = useState(false)
-  const [legacyAvailable, setLegacyAvailable] = useState(false)
   const [vaultDialog, setVaultDialog] = useState(false)
   const [currentVaultPassword, setCurrentVaultPassword] = useState('')
   const [nextVaultPassword, setNextVaultPassword] = useState('')
@@ -276,7 +274,6 @@ export function ChatApp() {
     await openAccount(userId)
     setPrefs(loadPrefs(userId))
     setLimitGb(loadStorageGb(userId))
-    setLegacyAvailable(await hasLegacyVault())
     setVaultExists(await hasVault())
     if (me) setTotpEnabled(!!me.totp_enabled)
   }
@@ -586,14 +583,13 @@ export function ChatApp() {
   }
 
   async function onUnlock(password: string) {
-    const passError = passwordError(password)
+    const passError = vaultPasswordError(password)
     if (passError) {
       toast(passError)
       return
     }
     try {
       if (session.user?.id) await openAccount(session.user.id)
-      setLegacyAvailable(await hasLegacyVault())
       if (!(await hasVault())) {
         if (session.trust === 'pending' && !allowFresh) {
           setAskTransfer(true)
@@ -620,20 +616,6 @@ export function ChatApp() {
     } catch (err) {
       toast(explain(err))
     }
-  }
-
-  async function onImportLegacy(password: string) {
-    if (!session.user?.id) return
-    await openAccount(session.user.id)
-    const server = await api<{ x25519: string }>(`/v1/contacts/${session.user.id}/keys`).catch(() => ({ x25519: '' }))
-    const copied = await copyLegacyVault(password, session.user.id, server.x25519 || '')
-    if (!copied) {
-      toast(t('legacyMismatch'))
-      return
-    }
-    await unlockVault(password)
-    setVaultExists(true)
-    setUnlocked(true)
   }
 
   /** Decrypt one text envelope (from the mailbox or straight off a data channel), store it, and confirm delivery. */
@@ -2032,7 +2014,7 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
-        <UnlockScreen mode={vaultExists === false ? 'create' : 'unlock'} onUnlock={onUnlock} onImport={onImportLegacy} showImport={legacyAvailable} />
+        <UnlockScreen mode={vaultExists === false ? 'create' : 'unlock'} onUnlock={onUnlock} />
         <TransferPrompt
           open={askTransfer}
           onLater={() => {
@@ -2089,7 +2071,7 @@ export function ChatApp() {
     <Dialog open={vaultDialog} onOpenChange={setVaultDialog} title={t('changeVaultPassword')} description={t('changeVaultPasswordLead')}>
       <form className="flex flex-col gap-3" onSubmit={(e) => {
         e.preventDefault()
-        const problem = passwordError(nextVaultPassword)
+        const problem = vaultPasswordError(nextVaultPassword)
         if (problem) {
           toast(problem)
           return

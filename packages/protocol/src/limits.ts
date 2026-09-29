@@ -37,11 +37,21 @@ export function displayNameError(value: string) {
   return ''
 }
 
-export function passwordError(value: string) {
+function passwordLengthError(value: string, min: number) {
   const length = [...value].length
-  if (length < 10) return 'password must be at least 10 characters'
+  if (length < min) return `password must be at least ${min} characters`
   if (length > 128 || new TextEncoder().encode(value).length > 512) return 'password must be at most 128 characters'
   return ''
+}
+
+/** Account password. Checked by the server. */
+export function passwordError(value: string) {
+  return passwordLengthError(value, 8)
+}
+
+/** Vault password. Stays on this device and is never sent to the server. */
+export function vaultPasswordError(value: string) {
+  return passwordLengthError(value, 4)
 }
 
 export function deviceNameError(value: string) {
