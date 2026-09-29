@@ -60,16 +60,24 @@ export function notifyHere(title: string, body: string, tag: string, force = fal
   if (!notifyPrefOn()) return
   if (!('Notification' in window) || Notification.permission !== 'granted') return
   if (!force && !document.hidden && document.hasFocus()) return
-  const opts: NotificationOptions = { body, tag, icon: '/web-app-manifest-192x192.png' }
-  // iOS Home Screen freezes page JS quickly; SW showNotification is more reliable while still warm.
-  if (isIOSHomeScreenLike() && 'serviceWorker' in navigator) {
-    void navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, opts)).catch(() => undefined)
+  const ios = isIOSHomeScreenLike()
+  // Prefer a single title line. iOS always inserts "from {app}" under the title; an empty body
+  // avoids the "name / from Chat / message" sandwich.
+  const shownTitle = title || body || 'Chat'
+  const shownBody = ios || !body || body === title ? '' : body
+  const opts: NotificationOptions = {
+    body: shownBody,
+    tag,
+    icon: '/web-app-manifest-192x192.png',
+  }
+  if ((ios || !shownBody) && 'serviceWorker' in navigator) {
+    void navigator.serviceWorker.ready.then((reg) => reg.showNotification(shownTitle, opts)).catch(() => undefined)
     return
   }
   try {
-    new Notification(title, opts)
+    new Notification(shownTitle, opts)
   } catch {
-    void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(title, opts)).catch(() => undefined)
+    void navigator.serviceWorker?.ready.then((reg) => reg.showNotification(shownTitle, opts)).catch(() => undefined)
   }
 }
 

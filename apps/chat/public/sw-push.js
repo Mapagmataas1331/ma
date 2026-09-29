@@ -22,15 +22,27 @@ self.addEventListener('push', (event) => {
   } catch {
     count = 1
   }
-  const title = count > 1 ? (ru ? `Новые сообщения (${count})` : `New messages (${count})`) : (ru ? 'Новое сообщение' : 'New message')
-  const body = ru ? 'Откройте чат, чтобы прочитать.' : 'Open chat to read it.'
+  // iOS shows "title / from App / body". Put everything in the title; leave body empty.
+  const title =
+    count > 1
+      ? ru
+        ? `Новые сообщения (${count})`
+        : `New messages (${count})`
+      : ru
+        ? 'Новое сообщение'
+        : 'New message'
   event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      tag: 'ma-mail',
-      renotify: true,
-      icon: '/web-app-manifest-192x192.png',
-      data: { url: '/' },
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
+      const focused = windows.some((client) => client.visibilityState === 'visible' && 'focused' in client && client.focused)
+      // App is in the foreground and can show a local alert (or the user is looking at Chat).
+      if (focused) return undefined
+      return self.registration.showNotification(title, {
+        body: '',
+        tag: 'ma-mail',
+        renotify: true,
+        icon: '/web-app-manifest-192x192.png',
+        data: { url: '/' },
+      })
     }),
   )
 })

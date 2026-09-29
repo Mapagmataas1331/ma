@@ -20,8 +20,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'script',
       manifest: {
-        name: 'ma.cyou chat',
-        short_name: 'chat',
+        name: 'Chat',
+        short_name: 'Chat',
         start_url: '/',
         display: 'standalone',
         background_color: '#12141c',

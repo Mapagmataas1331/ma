@@ -841,20 +841,17 @@ export function ChatApp() {
           if (!watching) {
             const sender = memberName(conv, senderId) || t('notifyNewMessage')
             const textPreview = message.body.trim() || (files.length ? t('notifyAttachment') : t('notifyOpenChat'))
-            if (conv?.kind === 'group') {
-              const group = convTitle(conv)
-              const title = group || t('notifyNewMessage')
-              const preview = hideNotifyBodyRef.current
-                ? t('notifyOpenChat')
-                : hideSenderNamesRef.current
-                  ? textPreview
+            const group = conv?.kind === 'group' ? convTitle(conv) : ''
+            // One-line title works on iOS (which inserts "from Chat" under the title). Desktop still gets title + body.
+            const line = hideNotifyBodyRef.current
+              ? (group || (hideSenderNamesRef.current ? t('notifyNewMessage') : sender))
+              : hideSenderNamesRef.current
+                ? (group ? `${group}: ${textPreview}` : textPreview)
+                : group
+                  ? `${group} · ${sender}: ${textPreview}`
                   : `${sender}: ${textPreview}`
-              notifyHere(title, preview, message.conversationId, true)
-            } else {
-              const who = hideSenderNamesRef.current ? t('notifyNewMessage') : sender
-              const preview = hideNotifyBodyRef.current ? t('notifyOpenChat') : textPreview
-              notifyHere(who, preview, message.conversationId, true)
-            }
+            // Single-line alert: iOS would otherwise show "name / from Chat / message".
+            notifyHere(line, '', message.conversationId, true)
           }
         }
       }
@@ -1979,28 +1976,38 @@ export function ChatApp() {
   const selfChat = !!me && activeConv?.peer_id === me && activeConv?.kind !== 'group'
   const isGroup = activeConv?.kind === 'group'
 
-  // Read receipts go to whoever sent each unread message.
+  // Read receipts only when this conversation is actually on screen — not while Chat is backgrounded on iOS.
   useEffect(() => {
-    if (!active || !activeConv) return
-    const unread = messages.filter((m) => m.conversationId === active && m.status !== 'read' && m.status !== 'expired' && m.status !== 'failed' && (selfChat ? m.mine : !m.mine))
-    if (!unread.length) return
-    const now = new Date().toISOString()
-    if (!selfChat) {
-      const bySender = new Map<string, string[]>()
-      for (const m of unread) {
-        const sender = m.senderId || activeConv.peer_id
-        if (!sender || sender === me) continue
-        bySender.set(sender, [...(bySender.get(sender) ?? []), m.id])
+    function markVisibleRead() {
+      if (!active || !activeConv) return
+      if (document.hidden || (typeof document.hasFocus === 'function' && !document.hasFocus())) return
+      const unread = messagesRef.current.filter((m) => m.conversationId === active && m.status !== 'read' && m.status !== 'expired' && m.status !== 'failed' && (selfChat ? m.mine : !m.mine))
+      if (!unread.length) return
+      const now = new Date().toISOString()
+      if (!selfChat) {
+        const bySender = new Map<string, string[]>()
+        for (const m of unread) {
+          const sender = m.senderId || activeConv.peer_id
+          if (!sender || sender === me) continue
+          bySender.set(sender, [...(bySender.get(sender) ?? []), m.id])
+        }
+        for (const [sender, ids] of bySender) transport.sendFrame(newFrame('chat.read', { message_ids: ids }, { user: sender }))
       }
-      for (const [sender, ids] of bySender) transport.sendFrame(newFrame('chat.read', { message_ids: ids }, { user: sender }))
+      const ids = unread.map((m) => m.id)
+      setMessages((prev) => prev.map((m) => {
+        if (!ids.includes(m.id)) return m
+        const next = { ...m, status: 'read', readAt: m.readAt || now, deliveredAt: m.deliveredAt || now }
+        void sealRow('records', m.id, 'messages', withoutUrls(next))
+        return next
+      }))
     }
-    const ids = unread.map((m) => m.id)
-    setMessages((prev) => prev.map((m) => {
-      if (!ids.includes(m.id)) return m
-      const next = { ...m, status: 'read', readAt: m.readAt || now, deliveredAt: m.deliveredAt || now }
-      void sealRow('records', m.id, 'messages', withoutUrls(next))
-      return next
-    }))
+    markVisibleRead()
+    document.addEventListener('visibilitychange', markVisibleRead)
+    window.addEventListener('focus', markVisibleRead)
+    return () => {
+      document.removeEventListener('visibilitychange', markVisibleRead)
+      window.removeEventListener('focus', markVisibleRead)
+    }
   }, [active, activeConv, messages, selfChat, me])
 
   // Home-screen / taskbar badge: unread in unmuted conversations.
@@ -2874,10 +2881,9 @@ function messageStatusLabel(
       const count = read > 0 ? read : delivered
       const key = read > 0 ? 'seenBy' : 'deliveredTo'
       const base = translate(key, { count, total })
-      if (message.route === 'direct') return `${base} · ${translate('viaDirect')}`
-      if (message.route === 'server') return `${base} · ${translate('viaServer')}`
-      if (message.route === 'mixed') return `${base} · ${translate('viaMixed')}`
-      return base
+      const routeBit =
+        message.route === 'direct' ? translate('viaDirect') : message.route === 'server' ? translate('viaServer') : message.route === 'mixed' ? translate('viaMixed') : ''
+      return routeBit ? `${routeBit} · ${base}` : base
     }
   }
   return statusLabel(translate, message.status, message.route)
@@ -2893,11 +2899,12 @@ function statusLabel(translate: (key: string) => string, status: string, route?:
   else if (status === 'failed') base = translate('statusFailed')
   else if (status === 'expired') base = translate('statusExpired')
   else if (status === 'cancelled') base = translate('cancelled')
-  const showRoute = status === 'sent' || status === 'stored' || status === 'delivered' || status === 'read'
-  if (!showRoute) return base
-  if (route === 'direct') return `${base} · ${translate('viaDirect')}`
-  if (route === 'server') return `${base} · ${translate('viaServer')}`
-  if (route === 'mixed') return `${base} · ${translate('viaMixed')}`
+  const routeBit =
+    route === 'direct' ? translate('viaDirect') : route === 'server' ? translate('viaServer') : route === 'mixed' ? translate('viaMixed') : ''
+  // Put how it was sent first so "direct · seen" is obvious on the bubble.
+  if (routeBit && (status === 'sent' || status === 'stored' || status === 'delivered' || status === 'read' || status === 'waiting_peer')) {
+    return `${routeBit} · ${base}`
+  }
   return base
 }
 
