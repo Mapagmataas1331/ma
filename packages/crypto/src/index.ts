@@ -2,7 +2,11 @@
 import sodium from 'libsodium-wrappers-sumo'
 
 export type KdfParams = { alg: 'argon2id'; mem: number; ops: number; salt: string }
-export type WrappedSlot = { kind: 'password' | 'recovery'; wrapped_dek: string; nonce: string; kdf: KdfParams }
+/** Password/recovery slots use Argon2id; webauthn slots wrap the DEK with a WebAuthn PRF output. */
+export type WrappedSlot =
+  | { kind: 'password'; wrapped_dek: string; nonce: string; kdf: KdfParams }
+  | { kind: 'recovery'; wrapped_dek: string; nonce: string; kdf: KdfParams }
+  | { kind: 'webauthn'; wrapped_dek: string; nonce: string; credentialId: string; prfSalt: string }
 export type KeyPair = { publicKey: Uint8Array; privateKey: Uint8Array }
 
 const text = new TextEncoder()
@@ -65,13 +69,24 @@ function aeadDecrypt(key: Uint8Array, nonce: string, ciphertext: string, aad?: U
   return opened
 }
 
-export function wrapDek(kek: Uint8Array, dek: Uint8Array, kind: WrappedSlot['kind'], kdf: KdfParams): WrappedSlot {
+export function wrapDek(kek: Uint8Array, dek: Uint8Array, kind: 'password' | 'recovery', kdf: KdfParams): Extract<WrappedSlot, { kind: 'password' }> | Extract<WrappedSlot, { kind: 'recovery' }> {
   const wrapped = aeadEncrypt(kek, dek)
   return { kind, wrapped_dek: wrapped.ciphertext, nonce: wrapped.nonce, kdf }
 }
 
+/** Wrap a DEK with a 32-byte key from WebAuthn PRF (Face ID / Touch ID / platform passkey). */
+export function wrapDekWebAuthn(kek: Uint8Array, dek: Uint8Array, credentialId: string, prfSalt: string): Extract<WrappedSlot, { kind: 'webauthn' }> {
+  const wrapped = aeadEncrypt(kek, dek)
+  return { kind: 'webauthn', wrapped_dek: wrapped.ciphertext, nonce: wrapped.nonce, credentialId, prfSalt }
+}
+
 export function unwrapDek(kek: Uint8Array, slot: WrappedSlot) {
   return aeadDecrypt(kek, slot.nonce, slot.wrapped_dek)
+}
+
+/** Normalize PRF output to a 32-byte KEK. */
+export function kekFromPrf(prf: Uint8Array) {
+  return sodium.crypto_generichash(32, prf)
 }
 
 export function encryptRecord(dek: Uint8Array, recordId: string, table: string, plaintext: unknown) {

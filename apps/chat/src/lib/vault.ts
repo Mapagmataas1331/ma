@@ -5,18 +5,22 @@ import {
   deriveKek,
   encryptRecord,
   interactiveKdf,
+  kekFromPrf,
+  randomBytes,
   randomDek,
   ready,
   signKeyPair,
   unb64,
   unwrapDek,
   wrapDek,
+  wrapDekWebAuthn,
   zero,
   type WrappedSlot,
 } from '@ma/crypto'
 import { accountKey, activeDatabase, activeUserId } from './db'
 import { decryptParts, encryptStream, type FileCipherMeta } from './files'
 import { listNamed, openNamed, openWriter, opfsAvailable, removeKind, removeNamed } from './opfs'
+import { createPrfCredential, evaluatePrf, platformAuthenticatorAvailable } from './webauthn'
 
 type Secrets = {
   dek: Uint8Array
@@ -115,9 +119,28 @@ export async function vaultOwner() {
 export async function unlockVault(password: string) {
   await ready()
   const slots = await readSlots()
-  const slot = slots.find((s) => s.kind === 'password')
-  if (!slot) throw new Error('no vault')
-  const dek = unwrapDek(deriveKek(password, slot.kdf), slot)
+  const passwordSlot = slots.find((s): s is Extract<WrappedSlot, { kind: 'password' }> => s.kind === 'password')
+  const recoverySlot = slots.find((s): s is Extract<WrappedSlot, { kind: 'recovery' }> => s.kind === 'recovery')
+  let dek: Uint8Array | null = null
+  if (passwordSlot) {
+    try {
+      dek = unwrapDek(deriveKek(password, passwordSlot.kdf), passwordSlot)
+    } catch {
+      dek = null
+    }
+  }
+  if (!dek && recoverySlot) {
+    try {
+      dek = unwrapDek(deriveKek(password, recoverySlot.kdf), recoverySlot)
+    } catch {
+      dek = null
+    }
+  }
+  if (!dek) throw new Error('wrong_password')
+  await openWithDek(dek)
+}
+
+async function openWithDek(dek: Uint8Array) {
   const owner = await vaultOwner()
   if (owner && owner !== activeUserId()) throw new Error('vault_owner')
   const row = await activeDatabase().records.get('identity')
@@ -131,11 +154,66 @@ export async function unlockVault(password: string) {
   armLock()
 }
 
+export async function hasWebAuthnUnlock() {
+  const slots = await readSlots()
+  return slots.some((s) => s.kind === 'webauthn')
+}
+
+export async function webAuthnUnlockAvailable() {
+  return platformAuthenticatorAvailable()
+}
+
+export async function unlockVaultWithWebAuthn() {
+  await ready()
+  const slots = await readSlots()
+  const slot = slots.find((s) => s.kind === 'webauthn')
+  if (!slot || slot.kind !== 'webauthn') throw new Error('no_webauthn')
+  const prf = await evaluatePrf(slot.credentialId, unb64(slot.prfSalt))
+  if (!prf) throw new Error('webauthn_prf_unsupported')
+  const kek = kekFromPrf(prf)
+  try {
+    const dek = unwrapDek(kek, slot)
+    await openWithDek(dek)
+  } finally {
+    zero(kek)
+    zero(prf)
+  }
+}
+
+/** Register Face ID / Touch ID / platform passkey as an extra unlock path. Vault must already be unlocked. */
+export async function enableWebAuthnUnlock(opts: { userName: string; displayName: string }) {
+  await ready()
+  if (!secrets) throw new Error('locked')
+  if (!(await platformAuthenticatorAvailable())) throw new Error('webauthn_unavailable')
+  const prfSalt = randomBytes(32)
+  const { credentialId, prf } = await createPrfCredential({
+    userId: activeUserId() || 'local',
+    userName: opts.userName,
+    displayName: opts.displayName,
+    prfSalt,
+  })
+  const kek = kekFromPrf(prf)
+  try {
+    const slot = wrapDekWebAuthn(kek, secrets.dek, credentialId, b64(prfSalt))
+    const slots = await readSlots()
+    await activeDatabase().vault.update('main', { slots: [...slots.filter((s) => s.kind !== 'webauthn'), slot] })
+  } finally {
+    zero(kek)
+    zero(prf)
+  }
+}
+
+export async function disableWebAuthnUnlock() {
+  const slots = await readSlots()
+  if (!slots.some((s) => s.kind === 'webauthn')) return
+  await activeDatabase().vault.update('main', { slots: slots.filter((s) => s.kind !== 'webauthn') })
+}
+
 export async function changeVaultPassword(current: string, next: string) {
   await ready()
   const slots = await readSlots()
   const slot = slots.find((s) => s.kind === 'password')
-  if (!slot) throw new Error('no vault')
+  if (!slot || slot.kind !== 'password') throw new Error('no vault')
   const dek = unwrapDek(deriveKek(current, slot.kdf), slot)
   const kdf = interactiveKdf()
   const wrapped = wrapDek(deriveKek(next, kdf), dek, 'password', kdf)

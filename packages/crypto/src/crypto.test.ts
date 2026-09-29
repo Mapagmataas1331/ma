@@ -5,6 +5,7 @@ import {
   decryptRecord,
   encryptRecord,
   interactiveKdf,
+  kekFromPrf,
   openBox,
   pairingConfirm,
   randomDek,
@@ -17,7 +18,9 @@ import {
   unwrapDek,
   verifyPairing,
   wrapDek,
+  wrapDekWebAuthn,
   deriveKek,
+  b64,
 } from './index'
 
 describe('vault key hierarchy', () => {
@@ -55,5 +58,16 @@ describe('vault key hierarchy', () => {
     const pullState = secretstreamPullInit(push.header, fileKey)
     const pulled = secretstreamPull(pullState, chunk)
     expect(new TextDecoder().decode(pulled.message)).toBe('abcdef')
+  })
+
+  it('wraps a DEK with a WebAuthn-style PRF key', async () => {
+    await ready()
+    const dek = randomDek()
+    const prf = randomDek()
+    const kek = kekFromPrf(prf)
+    const slot = wrapDekWebAuthn(kek, dek, 'cred', b64(randomDek().slice(0, 16)))
+    expect(slot.kind).toBe('webauthn')
+    expect(Array.from(unwrapDek(kek, slot))).toEqual(Array.from(dek))
+    expect(() => unwrapDek(kekFromPrf(randomDek()), slot)).toThrow()
   })
 })

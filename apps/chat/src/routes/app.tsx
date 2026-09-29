@@ -1,6 +1,6 @@
 import { ApiError, api, apiBlobProgress, apiUpload, authApi } from '@ma/api-client'
 import { b64, pairingConfirm, ready, unb64 } from '@ma/crypto'
-import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError, vaultPasswordError } from '@ma/protocol'
+import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, MAILBOX_USER_QUOTA_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError, vaultPasswordError } from '@ma/protocol'
 import {
   AppSettings,
   Button,
@@ -26,7 +26,7 @@ import {
   toast,
 } from '@ma/ui'
 import QRCode from 'qrcode'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { activeDatabase, openAccount } from '../lib/db'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
@@ -55,10 +55,13 @@ import {
   changeVaultPassword,
   cleanOldFiles,
   createVault,
+  disableWebAuthnUnlock,
+  enableWebAuthnUnlock,
   enforceStorageLimit,
   forgetFile,
   getIdentity,
   hasVault,
+  hasWebAuthnUnlock,
   importTransferredIdentity,
   isUnlocked,
   keepCipher,
@@ -72,7 +75,9 @@ import {
   storageUsage,
   storedIds,
   unlockVault,
+  unlockVaultWithWebAuthn,
   vaultOwner,
+  webAuthnUnlockAvailable,
   type StoredFile,
 } from '../lib/vault'
 
@@ -138,6 +143,8 @@ export function ChatApp() {
   const [challenge, setChallenge] = useState('')
   const [unlocked, setUnlocked] = useState(isUnlocked())
   const [vaultExists, setVaultExists] = useState<boolean | null>(null)
+  const [webAuthnReady, setWebAuthnReady] = useState(false)
+  const [webAuthnCapable, setWebAuthnCapable] = useState(false)
   const [contacts, setContacts] = useState<Contact[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [active, setActive] = useState<string | null>(null)
@@ -302,6 +309,8 @@ export function ChatApp() {
     setPrefs(loadPrefs(userId))
     setLimitGb(loadStorageGb(userId))
     setVaultExists(await hasVault())
+    setWebAuthnReady(await hasWebAuthnUnlock().catch(() => false))
+    setWebAuthnCapable(await webAuthnUnlockAvailable().catch(() => false))
     if (me) setTotpEnabled(!!me.totp_enabled)
   }
 
@@ -729,6 +738,7 @@ export function ChatApp() {
         }
         await publishIdentityIfEmpty()
       }
+      setWebAuthnReady(await hasWebAuthnUnlock().catch(() => false))
       setUnlocked(true)
     } catch (err) {
       if (err instanceof ApiError && err.code === 'device_untrusted') {
@@ -738,6 +748,32 @@ export function ChatApp() {
       toast(explain(err))
     }
   }
+
+  const onUnlockWebAuthn = useCallback(async () => {
+    try {
+      if (session.user?.id) await openAccount(session.user.id)
+      const owner = await vaultOwner()
+      if (owner && session.user?.id && owner !== session.user.id) {
+        toast(t('wrongVaultAccount'))
+        throw new Error('vault_owner')
+      }
+      await unlockVaultWithWebAuthn()
+      await publishIdentityIfEmpty()
+      setUnlocked(true)
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'device_untrusted') {
+        setAskTransfer(true)
+        throw err
+      }
+      const code = err instanceof Error ? err.message : ''
+      if (code === 'wrong_password' || code === 'no_webauthn') toast(t('webauthnFailed'))
+      else if (code === 'webauthn_prf_unsupported') toast(t('webauthnPrfUnsupported'))
+      else if (code === 'vault_owner') { /* toasted above */ }
+      else if (code !== 'NotAllowedError' && !/cancel|abort/i.test(code)) toast(explain(err))
+      throw err
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.user?.id, t])
 
   /** Decrypt one text envelope (from the mailbox or straight off a data channel), store it, and confirm delivery. */
   async function ingestEnvelope(raw: unknown, fallbackId: string) {
@@ -2201,6 +2237,48 @@ export function ChatApp() {
         <SettingsRow label={t('vaultPassword')} hint={t('vaultPasswordSeparate')}>
           <Button variant="outline" onClick={() => setVaultDialog(true)}>{t('change')}</Button>
         </SettingsRow>
+        <SettingsRow label={t('webauthnUnlock')} hint={t('webauthnUnlockHint')}>
+          {webAuthnReady ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                void disableWebAuthnUnlock()
+                  .then(() => {
+                    setWebAuthnReady(false)
+                    toast(t('webauthnDisabled'))
+                  })
+                  .catch((err) => toast(explain(err)))
+              }}
+            >
+              {t('webauthnDisable')}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              disabled={!webAuthnCapable}
+              onClick={() => {
+                const me = session.user
+                void enableWebAuthnUnlock({
+                  userName: me?.username || 'chat',
+                  displayName: me?.display_name || me?.username || 'Chat',
+                })
+                  .then(() => {
+                    setWebAuthnReady(true)
+                    toast(t('webauthnEnabled'))
+                  })
+                  .catch((err) => {
+                    const code = err instanceof Error ? err.message : ''
+                    if (code === 'webauthn_unavailable') toast(t('webauthnUnavailable'))
+                    else if (code === 'webauthn_prf_unsupported') toast(t('webauthnPrfUnsupported'))
+                    else if (code === 'webauthn_cancelled' || /NotAllowed|Abort/i.test(code)) toast(t('webauthnCancelled'))
+                    else toast(explain(err))
+                  })
+              }}
+            >
+              {t('webauthnEnable')}
+            </Button>
+          )}
+        </SettingsRow>
         <SettingsRow label={t('recoveryKey')} hint={t('recoveryKeyHint')}>
           <Button variant="outline" onClick={() => void addRecoverySlot().then(setRecoveryKey).catch((err) => toast(explain(err)))}>{t('create')}</Button>
         </SettingsRow>
@@ -2233,7 +2311,7 @@ export function ChatApp() {
           </div>
         ) : null}
       </SettingsSection>
-      <SettingsSection title={t('cloudStorage')} description={t('cloudStorageLead', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) })}>
+      <SettingsSection title={t('cloudStorage')} description={t('cloudStorageLead', { limit: formatBytes(MAILBOX_USER_QUOTA_BYTES) })}>
         <SettingsRow label={t('cloudUsedLabel')} hint={t('cloudExpires')}>
           <Button variant="outline" onClick={() => void api<CloudUsage>('/v1/mailbox/cloud').then((row) => {
             const usage = cloudUsage(row)
@@ -2261,6 +2339,8 @@ export function ChatApp() {
         <UnlockScreen
           mode={vaultExists === false ? 'create' : 'unlock'}
           onUnlock={onUnlock}
+          onUnlockWebAuthn={webAuthnReady ? onUnlockWebAuthn : undefined}
+          webAuthnReady={webAuthnReady}
           pending={session.trust === 'pending'}
           onTransfer={() => setAskTransfer(true)}
           onFresh={(password) => { void beginFresh(password) }}
