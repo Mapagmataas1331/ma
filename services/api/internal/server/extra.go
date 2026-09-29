@@ -39,15 +39,30 @@ func bytesEqual(a, b []byte) bool {
 	return true
 }
 
+func publicKeyB64(raw []byte) string {
+	if len(raw) != 32 {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
 func conversationJSON(c store.Conversation, members []store.Member) map[string]any {
 	people := []map[string]string{}
 	for _, member := range members {
-		people = append(people, map[string]string{"id": member.ID.String(), "username": member.Username, "display_name": member.DisplayName, "role": member.Role})
+		row := map[string]string{"id": member.ID.String(), "username": member.Username, "display_name": member.DisplayName, "role": member.Role}
+		if key := publicKeyB64(member.X25519); key != "" {
+			row["x25519"] = key
+		}
+		people = append(people, row)
 	}
-	return map[string]any{
+	out := map[string]any{
 		"id": c.ID, "kind": c.Kind, "title": c.Title, "membership_version": c.Version,
 		"peer_id": c.PeerID, "peer_name": c.Peer, "peer_username": c.Username, "members": people,
 	}
+	if key := publicKeyB64(c.PeerX); key != "" {
+		out["peer_x25519"] = key
+	}
+	return out
 }
 
 func (a *App) contactDevices(w http.ResponseWriter, r *http.Request) {

@@ -352,10 +352,11 @@ type Contact struct {
 	Username    string
 	DisplayName string
 	State       string
+	X25519      []byte
 }
 
 func (s *Store) Contacts(ctx context.Context, owner uuid.UUID) ([]Contact, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT u.id, u.username, u.display_name, c.state FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1`, owner)
+	rows, err := s.Pool.Query(ctx, `SELECT u.id, u.username, u.display_name, c.state, u.identity_pk_x25519 FROM contacts c JOIN users u ON u.id=c.contact_id WHERE c.owner_id=$1`, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -363,7 +364,7 @@ func (s *Store) Contacts(ctx context.Context, owner uuid.UUID) ([]Contact, error
 	var out []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.State); err != nil {
+		if err := rows.Scan(&c.ID, &c.Username, &c.DisplayName, &c.State, &c.X25519); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -400,6 +401,7 @@ type Conversation struct {
 	PeerID   uuid.UUID
 	Peer     string
 	Username string
+	PeerX    []byte
 }
 
 func pairKey(a, b uuid.UUID) string {
@@ -439,15 +441,17 @@ func (s *Store) DirectConversation(ctx context.Context, a, b uuid.UUID) (Convers
 		return Conversation{}, err
 	}
 	name, username := "", ""
-	_ = s.Pool.QueryRow(ctx, `SELECT display_name, username FROM users WHERE id=$1`, b).Scan(&name, &username)
-	return Conversation{ID: id, Kind: "direct", PeerID: b, Peer: name, Username: username, Version: 1}, nil
+	var peerX []byte
+	_ = s.Pool.QueryRow(ctx, `SELECT display_name, username, identity_pk_x25519 FROM users WHERE id=$1`, b).Scan(&name, &username, &peerX)
+	return Conversation{ID: id, Kind: "direct", PeerID: b, Peer: name, Username: username, Version: 1, PeerX: peerX}, nil
 }
 
 func (s *Store) Conversations(ctx context.Context, user uuid.UUID) ([]Conversation, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT DISTINCT ON (c.id) c.id, c.kind, COALESCE(c.title, ''), c.membership_version,
 		COALESCE(other_user.id, self.id),
 		COALESCE(other_user.display_name, self.display_name),
-		COALESCE(other_user.username, self.username)
+		COALESCE(other_user.username, self.username),
+		other_user.identity_pk_x25519
 		FROM conversations c
 		JOIN conversation_members me ON me.conversation_id=c.id AND me.user_id=$1 AND me.left_at IS NULL
 		JOIN users self ON self.id=$1
@@ -464,7 +468,7 @@ func (s *Store) Conversations(ctx context.Context, user uuid.UUID) ([]Conversati
 	var out []Conversation
 	for rows.Next() {
 		var c Conversation
-		if err := rows.Scan(&c.ID, &c.Kind, &c.Title, &c.Version, &c.PeerID, &c.Peer, &c.Username); err != nil {
+		if err := rows.Scan(&c.ID, &c.Kind, &c.Title, &c.Version, &c.PeerID, &c.Peer, &c.Username, &c.PeerX); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

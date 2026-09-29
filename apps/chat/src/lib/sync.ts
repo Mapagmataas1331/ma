@@ -12,6 +12,7 @@ export type SyncMessage = {
   files?: { id: string; name?: string; mime?: string; size?: number; url?: string; via?: string; key?: string; header?: string; lengths?: number[]; gone?: boolean }[]
   deliveredAt?: string
   readAt?: string
+  route?: 'direct' | 'server' | 'mixed'
 }
 
 const rank: Record<string, number> = {

@@ -14,10 +14,11 @@ type Member struct {
 	Username    string
 	DisplayName string
 	Role        string
+	X25519      []byte
 }
 
 func (s *Store) Members(ctx context.Context, conversation, viewer uuid.UUID) ([]Member, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT u.id, u.username, u.display_name, m.role
+	rows, err := s.Pool.Query(ctx, `SELECT u.id, u.username, u.display_name, m.role, u.identity_pk_x25519
 		FROM conversation_members m
 		JOIN users u ON u.id=m.user_id
 		WHERE m.conversation_id=$1 AND m.left_at IS NULL
@@ -30,7 +31,7 @@ func (s *Store) Members(ctx context.Context, conversation, viewer uuid.UUID) ([]
 	var out []Member
 	for rows.Next() {
 		var m Member
-		if err := rows.Scan(&m.ID, &m.Username, &m.DisplayName, &m.Role); err != nil {
+		if err := rows.Scan(&m.ID, &m.Username, &m.DisplayName, &m.Role, &m.X25519); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

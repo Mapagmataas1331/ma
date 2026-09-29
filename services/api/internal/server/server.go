@@ -21,6 +21,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/mapagmataas1331/ma/services/api/internal/auth"
 	"github.com/mapagmataas1331/ma/services/api/internal/authz"
 	"github.com/mapagmataas1331/ma/services/api/internal/config"
@@ -88,6 +89,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/account", a.account)
 	mux.HandleFunc("POST /v1/invites", a.createInvite)
 	mux.HandleFunc("DELETE /v1/invites/{id}", a.revokeInvite)
+	mux.HandleFunc("GET /v1/users/me/identity-keys", a.myIdentity)
 	mux.HandleFunc("PUT /v1/users/me/identity-keys", a.identity)
 	mux.HandleFunc("GET /v1/devices", a.devices)
 	mux.HandleFunc("POST /v1/devices/{id}/revoke", a.revokeDevice)
@@ -429,7 +431,7 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	if p.Device != nil {
 		deviceID = p.Device.String()
 	}
-	httpx.WriteJSON(w, 200, map[string]any{"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName, "email": p.User.Email, "totp_enabled": p.User.TOTP, "device_id": deviceID, "trust_state": p.Trust})
+	httpx.WriteJSON(w, 200, map[string]any{"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName, "email": p.User.Email, "totp_enabled": p.User.TOTP, "device_id": deviceID, "trust_state": p.Trust, "has_identity": len(p.User.X25519) == 32 && len(p.User.Ed25519) == 32})
 }
 
 func (a *App) profile(w http.ResponseWriter, r *http.Request) {
@@ -519,8 +521,25 @@ func (a *App) revokeInvite(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func (a *App) myIdentity(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.auth(w, r)
+	if !ok {
+		return
+	}
+	if len(p.User.X25519) != 32 || len(p.User.Ed25519) != 32 {
+		httpx.WriteError(w, 404, "keys_missing", "vault key is not published")
+		return
+	}
+	httpx.WriteJSON(w, 200, map[string]string{
+		"ed25519": base64.RawURLEncoding.EncodeToString(p.User.Ed25519),
+		"x25519":  base64.RawURLEncoding.EncodeToString(p.User.X25519),
+	})
+}
+
 func (a *App) identity(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.requireChat(w, r)
+	// A vault's public key is not a chat action. A device that is still pending can publish it
+	// so other people can encrypt to this account.
+	p, ok := a.auth(w, r)
 	if !ok {
 		return
 	}
@@ -819,7 +838,11 @@ func (a *App) contacts(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []map[string]any{}
 	for _, c := range list {
-		out = append(out, map[string]any{"id": c.ID, "username": c.Username, "display_name": c.DisplayName, "state": c.State})
+		row := map[string]any{"id": c.ID, "username": c.Username, "display_name": c.DisplayName, "state": c.State}
+		if key := publicKeyB64(c.X25519); key != "" {
+			row["x25519"] = key
+		}
+		out = append(out, row)
 	}
 	httpx.WriteJSON(w, 200, out)
 }
@@ -898,7 +921,7 @@ func (a *App) unblockContact(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
-	p, ok := a.requireChat(w, r)
+	p, ok := a.auth(w, r)
 	if !ok {
 		return
 	}
@@ -907,14 +930,35 @@ func (a *App) contactKeys(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 400, "bad_request", "id")
 		return
 	}
-	allowed, err := a.DB.CanReadIdentity(r.Context(), p.User.ID, id)
-	if err != nil || !allowed {
-		httpx.WriteError(w, 404, "not_found", "keys")
-		return
+	if id != p.User.ID {
+		if err := authz.AllowChat(authz.DeviceAccess{HasDevice: p.Device != nil, Trust: p.Trust}); err != nil {
+			httpx.WriteError(w, 403, "device_untrusted", "this device is not trusted")
+			return
+		}
+		allowed, err := a.DB.CanReadIdentity(r.Context(), p.User.ID, id)
+		if err != nil {
+			httpx.WriteError(w, 500, "internal", "keys")
+			return
+		}
+		if !allowed {
+			httpx.WriteError(w, 403, "forbidden", "keys")
+			return
+		}
 	}
-	user, err := a.DB.UserByID(r.Context(), id)
-	if err != nil || len(user.X25519) != 32 {
-		httpx.WriteError(w, 404, "keys_missing", "this person has not created a vault yet")
+	user := p.User
+	if id != p.User.ID {
+		user, err = a.DB.UserByID(r.Context(), id)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.WriteError(w, 404, "not_found", "user")
+			return
+		}
+		if err != nil {
+			httpx.WriteError(w, 500, "internal", "keys")
+			return
+		}
+	}
+	if len(user.X25519) != 32 || len(user.Ed25519) != 32 {
+		httpx.WriteError(w, 404, "keys_missing", "vault key is not published")
 		return
 	}
 	httpx.WriteJSON(w, 200, map[string]string{

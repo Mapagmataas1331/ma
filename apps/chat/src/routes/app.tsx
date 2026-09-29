@@ -76,9 +76,9 @@ import {
 } from '../lib/vault'
 
 type Me = { id: string; username: string; display_name: string; totp_enabled?: boolean }
-type Contact = { id: string; username: string; display_name: string; state: string }
-type Member = { id: string; username: string; display_name: string; role: string }
-type Conversation = { id: string; kind?: string; title?: string; peer_id: string; peer_name: string; peer_username?: string; members?: Member[] }
+type Contact = { id: string; username: string; display_name: string; state: string; x25519?: string }
+type Member = { id: string; username: string; display_name: string; role: string; x25519?: string }
+type Conversation = { id: string; kind?: string; title?: string; peer_id: string; peer_name: string; peer_username?: string; peer_x25519?: string; members?: Member[] }
 type LocalMessage = {
   id: string
   conversationId: string
@@ -90,6 +90,7 @@ type LocalMessage = {
   files?: ChatFile[]
   deliveredAt?: string
   readAt?: string
+  route?: 'direct' | 'server' | 'mixed'
 }
 
 type ChatPref = { pinned?: boolean; muted?: boolean }
@@ -147,6 +148,7 @@ export function ChatApp() {
   const [lookup, setLookup] = useState('')
   const [enterToSend, setEnterToSend] = useState(() => localStorage.getItem('ma.chat.enterToSend') !== '0')
   const [relay, setRelay] = useState(() => localStorage.getItem('ma.chat.relayOnly') === '1')
+  const [directOnly, setDirectOnly] = useState(() => localStorage.getItem('ma.chat.directOnly') === '1')
   const [showNames, setShowNames] = useState(() => localStorage.getItem('ma.chat.showSenderNames') === '1')
   const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string } | null>(null)
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, queueBytes: 0, total: 0 })
@@ -155,7 +157,6 @@ export function ChatApp() {
   const [pairCode, setPairCode] = useState('')
   const [pairQr, setPairQr] = useState('')
   const [pairFingerprint, setPairFingerprint] = useState('')
-  const [pendingSync, setPendingSync] = useState(false)
   const [askTransfer, setAskTransfer] = useState(false)
   const [vaultDialog, setVaultDialog] = useState(false)
   const [currentVaultPassword, setCurrentVaultPassword] = useState('')
@@ -206,6 +207,7 @@ export function ChatApp() {
   const syncSnapshot = useRef<SyncMessage[]>([])
   const syncReady = useRef<Promise<void>>(Promise.resolve())
   const syncRef = useRef<() => void>(() => {})
+  const replayRef = useRef<() => void>(() => {})
   const deviceSyncRef = useRef<() => void>(() => {})
   const publishSyncRef = useRef<(messages: SyncMessage[]) => void>(() => {})
   const meRef = useRef(session.user?.id)
@@ -301,6 +303,7 @@ export function ChatApp() {
   useEffect(() => {
     if (mode !== 'app' || !unlocked) return
     transport.relayOnly = relay
+    transport.directOnly = directOnly
     transport.setLocalUser(session.user?.id || '')
     transport.connect()
     const sync = () => syncRef.current()
@@ -318,6 +321,7 @@ export function ChatApp() {
         setOnline(next)
         probed.current.clear()
         for (const id of users) offerLateRef.current(id)
+        replayRef.current()
       }
       if (frame.t === 'presence.update') {
         const id = String(frame.p.user ?? '')
@@ -328,6 +332,7 @@ export function ChatApp() {
         if (frame.p.online) {
           probed.current.clear()
           offerLateRef.current(id)
+          replayRef.current()
         }
         setOnline(next)
       }
@@ -487,7 +492,7 @@ export function ChatApp() {
       window.clearInterval(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, unlocked, relay, session.user?.id])
+  }, [mode, unlocked, relay, directOnly, session.user?.id])
 
   async function refresh() {
     const [c, conv] = await Promise.all([
@@ -498,8 +503,6 @@ export function ChatApp() {
     conversationsRef.current = conv
     setConversations(conv)
     for (const id of onlineRef.current) offerLateRef.current(id)
-    const devices = await api<{ id: string; trust_state: string; current?: boolean }[]>('/v1/devices')
-    setPendingSync(devices.some((d) => d.trust_state === 'trusted' && !d.current))
   }
 
   async function ensureDevice(userId: string) {
@@ -571,17 +574,33 @@ export function ChatApp() {
     }
   }
 
-  async function publishIdentityIfEmpty(force = false) {
+  async function publishIdentityIfEmpty(force = false, quiet = false) {
     const pubs = { ed25519: getIdentity().identitySign.publicKey, x25519: getIdentity().identityBox.publicKey }
-    const userId = useSession.getState().user?.id
-    if (!userId) return
-    const existing = await api<{ x25519: string }>(`/v1/contacts/${userId}/keys`).catch(() => null)
+    if (!useSession.getState().user?.id) return
+    let existing: { x25519: string } | null = null
+    try {
+      existing = await api<{ x25519: string }>('/v1/users/me/identity-keys')
+    } catch (err) {
+      const skip = err instanceof ApiError && (err.code === 'keys_missing' || err.code === 'not_found' || err.code === 'forbidden' || err.code === 'device_untrusted' || err.status === 404 || err.status === 403)
+      if (!skip) throw err
+    }
     if (!force && existing?.x25519 && existing.x25519 !== pubs.x25519) {
-      toast(t('identityMismatch'))
+      if (!quiet) toast(t('identityMismatch'))
       return
     }
     if (!existing?.x25519 || existing.x25519 !== pubs.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
   }
+
+  const identityPublished = useRef(false)
+  useEffect(() => {
+    if (!unlocked) {
+      identityPublished.current = false
+      return
+    }
+    if (identityPublished.current) return
+    identityPublished.current = true
+    void publishIdentityIfEmpty(false, true).catch(() => undefined)
+  }, [unlocked])
 
   async function beginFresh(password: string) {
     const passError = vaultPasswordError(password)
@@ -752,11 +771,26 @@ export function ChatApp() {
     }
   }
 
+  function noteDelivered(sent: { id: string; route: 'direct' | 'server' }[]) {
+    if (!sent.length) return
+    setMessages((prev) => prev.map((m) => {
+      const hit = sent.find((item) => item.id === m.id)
+      if (!hit || (m.status !== 'waiting_peer' && m.status !== 'sending' && m.status !== 'failed')) return m
+      const next = { ...m, status: 'sent', route: hit.route }
+      void sealRow('records', m.id, 'messages', withoutUrls(next))
+      publishSyncRef.current([withoutUrls(next)])
+      return next
+    }))
+  }
+
   syncRef.current = () => {
     if (useSession.getState().trust === 'pending') return
     void refresh().catch(() => undefined)
     void drainMailbox().catch(() => undefined)
-    void replayOutbox().catch(() => undefined)
+    void replayOutbox().then(noteDelivered).catch(() => undefined)
+  }
+  replayRef.current = () => {
+    void replayOutbox().then(noteDelivered).catch(() => undefined)
   }
 
   const me = session.user?.id
@@ -765,6 +799,15 @@ export function ChatApp() {
   function recipientsOf(conv: Conversation) {
     if (conv.kind === 'group') return (conv.members ?? []).map((member) => member.id).filter((id) => id && id !== me)
     return [conv.peer_id]
+  }
+
+  async function recipientBoxKey(userId: string, conv?: Conversation) {
+    if (userId === me) return getIdentity().identityBox.publicKey
+    const known = conv?.members?.find((member) => member.id === userId)?.x25519
+      || (conv?.peer_id === userId ? conv.peer_x25519 : undefined)
+      || contacts.find((person) => person.id === userId)?.x25519
+    if (known) return known
+    return (await api<{ x25519: string }>(`/v1/contacts/${userId}/keys`)).x25519
   }
 
   function memberName(conv: Conversation | undefined, userId: string | undefined) {
@@ -829,7 +872,7 @@ export function ChatApp() {
         sender_id: share.senderId,
         attachments,
       })
-      const recipientKeys = await api<{ x25519: string }>(`/v1/contacts/${userId}/keys`)
+      const recipientKeys = { x25519: await recipientBoxKey(userId, conv) }
       const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${userId}/devices`).catch(() => [])
       await transport.deliverText({
         id: crypto.randomUUID(),
@@ -880,6 +923,8 @@ export function ChatApp() {
   }
 
   async function send(sendMode: 'auto' | 'direct' = 'auto') {
+    transport.directOnly = directOnly
+    if (directOnly) sendMode = 'direct'
     const conv = conversations.find((c) => c.id === active)
     const text = draft.trim()
     const picked = pending
@@ -895,6 +940,7 @@ export function ChatApp() {
     const files: ChatFile[] = []
     let activeFile = ''
     let allowDirect = false
+    let postedLocal = false
     try {
       await ready()
       const recipients = recipientsOf(conv)
@@ -994,6 +1040,9 @@ export function ChatApp() {
       }
       const message: LocalMessage = { id, conversationId: conv.id, body: text, mine: true, at, status: 'sending', senderId: me, files }
       setMessages((prev) => [...prev, message])
+      postedLocal = true
+      const routes = new Set<'direct' | 'server'>()
+      let missedDirect = false
       for (const recipientId of recipients) {
         const live = onlineRef.current
         const visible = files.filter((file) => !directIds.has(file.id) || live.has(recipientId) || recipientId === me)
@@ -1013,12 +1062,19 @@ export function ChatApp() {
             return { file_id: file.id, name: file.name, mime: file.mime, size: file.size, ...(onCloud ? { key: file.key, header: file.header, lengths: file.lengths } : {}) }
           }),
         })
-        const recipientKey = recipientId === me
-          ? getIdentity().identityBox.publicKey
-          : (await api<{ x25519: string }>(`/v1/contacts/${recipientId}/keys`)).x25519
+        const recipientKey = await recipientBoxKey(recipientId, conv)
         const devices = await api<{ id: string; x25519: string }[]>(`/v1/contacts/${recipientId}/devices`).catch(() => [])
         const deviceId = live.has(recipientId) || recipientId === me ? devices[0]?.id || '' : ''
-        await transport.deliverText({ id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued', envelope: payload, size: payload.length, attempts: 0 }, recipientKey, deviceId)
+        const delivery = { id, conversationId: conv.id, recipientUserId: recipientId, state: 'queued' as const, envelope: payload, size: payload.length, attempts: 0 }
+        try {
+          routes.add(await transport.deliverText(delivery, recipientKey, deviceId))
+        } catch (err) {
+          if (err instanceof Error && err.message === 'direct_only') {
+            missedDirect = true
+            continue
+          }
+          throw err
+        }
         const omitted = share?.files.some((file) => !visible.some((item) => item.id === file.id))
         if (!omitted) {
           share?.offered.add(recipientId)
@@ -1026,10 +1082,13 @@ export function ChatApp() {
         }
         if (share) share.until = Date.now() + SHARE_TAIL
       }
+      const route: LocalMessage['route'] = routes.has('direct') && routes.has('server') ? 'mixed' : routes.has('server') ? 'server' : routes.has('direct') || missedDirect ? 'direct' : undefined
+      const status = routes.size === 0 && missedDirect ? 'waiting_peer' : 'sent'
+      if (missedDirect) toast(t('peerOfflineDirect'))
       setMessages((prev) => prev.map((m) => {
         if (m.id !== id) return m
         if (m.status !== 'sending' && m.status !== 'failed') return m
-        const sent = { ...m, status: 'sent' }
+        const sent = { ...m, status, route }
         void sealRow('records', id, 'messages', withoutUrls(sent))
         publishSyncRef.current([withoutUrls(sent)])
         return sent
@@ -1042,7 +1101,7 @@ export function ChatApp() {
     } catch (err) {
       if (transferLock.current === activeFile) transferLock.current = null
       setTransfer((cur) => (cur?.fileId === activeFile ? null : cur))
-      const posted = messagesRef.current.some((message) => message.id === id)
+      const posted = postedLocal || messagesRef.current.some((message) => message.id === id)
       if (!posted) {
         setDraft(text)
         setPending(picked)
@@ -1110,7 +1169,7 @@ export function ChatApp() {
   function explain(err: unknown) {
     if (err instanceof ApiError) {
       if (err.code === 'server_overloaded') return t('serverOverloaded')
-      if (err.code === 'keys_missing' || err.message === 'keys') return t('recipientNoVault')
+      if (err.code === 'keys_missing') return t('recipientNoVault')
       if ((err.code === 'not_found' || err.status === 404) && /file/i.test(err.message)) return t('fileGone')
       if (err.code === 'not_found' || err.status === 404) return t('couldNotSend')
       if (err.code === 'too_large') return t('fileTooLarge')
@@ -2000,6 +2059,9 @@ export function ChatApp() {
         <SettingsRow label={t('relayOnly')} hint={t('relayOnlyHint')}>
           <Switch checked={relay} onCheckedChange={(on) => { setRelay(on); localStorage.setItem('ma.chat.relayOnly', on ? '1' : '0') }} label={t('relayOnly')} />
         </SettingsRow>
+        <SettingsRow label={t('directOnly')} hint={t('directOnlyHint')}>
+          <Switch checked={directOnly} onCheckedChange={(on) => { setDirectOnly(on); transport.directOnly = on; localStorage.setItem('ma.chat.directOnly', on ? '1' : '0') }} label={t('directOnly')} />
+        </SettingsRow>
       </SettingsSection>
       <SettingsSection title={t('security')} description={t('securityLead')}>
         <SettingsRow label={t('vaultPassword')} hint={t('vaultPasswordSeparate')}>
@@ -2158,10 +2220,11 @@ export function ChatApp() {
     />
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 md:grid-cols-[18rem_minmax(0,1fr)]">
       <aside className={`${active ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col border-line md:flex md:border-r`}>
-        <form onSubmit={addContact} className="flex shrink-0 gap-2 border-b border-line p-3">
+        <form onSubmit={addContact} className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
           <Input placeholder={t('friendUsername')} aria-label={t('friendUsername')} autoComplete="off" value={lookup} onChange={(e) => setLookup(e.target.value)} />
-          <Button type="submit" variant="outline" className="shrink-0">{t('add')}</Button>
-          <CreateGroup contacts={contacts} onCreate={async (title, memberIds) => {
+          <div className="grid grid-cols-2 gap-2">
+          <Button type="submit" variant="outline" className="w-full">{t('add')}</Button>
+          <CreateGroup className="w-full" contacts={contacts} onCreate={async (title, memberIds) => {
             if (groupNameError(title)) {
               toast(groupNameError(title))
               return
@@ -2175,9 +2238,9 @@ export function ChatApp() {
               toast(explain(err))
             }
           }} />
+          </div>
         </form>
         {session.trust === 'pending' ? <Button type="button" variant="ghost" className="mx-3 mt-2" onClick={() => setAskTransfer(true)}>{t('transferChats')}</Button> : null}
-        {pendingSync ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('syncHint')}</p> : null}
         {!wsOnline ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('reconnecting')}</p> : null}
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {me && !conversations.some((c) => c.peer_id === me && c.kind !== 'group') ? (
@@ -2281,7 +2344,7 @@ export function ChatApp() {
                     mine={m.mine}
                     grouped={sameSender && !dayChanged}
                     time={localTime(m.at, hourCycle)}
-                    status={m.mine ? statusLabel(t, m.status) : undefined}
+                    status={m.mine ? statusLabel(t, m.status, m.route) : undefined}
                     sender={isGroup && !m.mine ? memberName(activeConv, m.senderId) || t('unknownMember') : undefined}
                     menu={{
                       label: t('message'),
@@ -2370,6 +2433,7 @@ export function ChatApp() {
       {statusMessage ? (
         <dl className="space-y-2 text-sm">
           <div className="flex justify-between gap-4"><dt>{t('statusSent')}</dt><dd>{stamp(statusMessage.at, hourCycle)}</dd></div>
+          {statusMessage.route ? <div className="flex justify-between gap-4"><dt>{t('sentHow')}</dt><dd>{t(statusMessage.route === 'server' ? 'viaServer' : statusMessage.route === 'mixed' ? 'viaMixed' : 'viaDirect')}</dd></div> : null}
           <div className="flex justify-between gap-4"><dt>{t('statusDelivered')}</dt><dd>{statusMessage.deliveredAt ? stamp(statusMessage.deliveredAt, hourCycle) : statusMessage.status === 'delivered' || statusMessage.status === 'read' ? t('statusDelivered') : t('pending')}</dd></div>
           <div className="flex justify-between gap-4"><dt>{t('statusRead')}</dt><dd>{statusMessage.readAt ? stamp(statusMessage.readAt, hourCycle) : statusMessage.status === 'read' ? t('statusRead') : t('pending')}</dd></div>
         </dl>
@@ -2444,16 +2508,22 @@ function withoutUrls(message: LocalMessage): LocalMessage {
   return { ...message, files: message.files?.map(({ url: _url, ...file }) => file) }
 }
 
-function statusLabel(translate: (key: string) => string, status: string) {
-  if (status === 'sending' || status === 'queued' || status === 'connecting') return translate('statusSending')
-  if (status === 'sent' || status === 'stored' || status === 'mailboxing' || status === 'sending_p2p') return translate('statusSent')
-  if (status === 'waiting_peer') return translate('waitingPeer')
-  if (status === 'delivered') return translate('statusDelivered')
-  if (status === 'read') return translate('statusRead')
-  if (status === 'failed') return translate('statusFailed')
-  if (status === 'expired') return translate('statusExpired')
-  if (status === 'cancelled') return translate('cancelled')
-  return status
+function statusLabel(translate: (key: string) => string, status: string, route?: string) {
+  let base = status
+  if (status === 'sending' || status === 'queued' || status === 'connecting') base = translate('statusSending')
+  else if (status === 'sent' || status === 'stored' || status === 'mailboxing' || status === 'sending_p2p') base = translate('statusSent')
+  else if (status === 'waiting_peer') base = translate('waitingPeer')
+  else if (status === 'delivered') base = translate('statusDelivered')
+  else if (status === 'read') base = translate('statusRead')
+  else if (status === 'failed') base = translate('statusFailed')
+  else if (status === 'expired') base = translate('statusExpired')
+  else if (status === 'cancelled') base = translate('cancelled')
+  const showRoute = status === 'sent' || status === 'stored' || status === 'delivered' || status === 'read'
+  if (!showRoute) return base
+  if (route === 'direct') return `${base} · ${translate('viaDirect')}`
+  if (route === 'server') return `${base} · ${translate('viaServer')}`
+  if (route === 'mixed') return `${base} · ${translate('viaMixed')}`
+  return base
 }
 
 const STAGE_MEMORY_BYTES = 32 * 1024 * 1024

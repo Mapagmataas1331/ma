@@ -8,9 +8,11 @@ type Person = { id: string; username: string; display_name: string; state: strin
 export function CreateGroup({
   contacts,
   onCreate,
+  className,
 }: {
   contacts: Person[]
   onCreate: (title: string, memberIds: string[]) => Promise<void>
+  className?: string
 }) {
   const { t } = useTranslation('common')
   const [open, setOpen] = useState(false)
@@ -19,7 +21,7 @@ export function CreateGroup({
   const accepted = contacts.filter((c) => c.state === 'accepted')
   return (
     <>
-      <Button type="button" variant="outline" onClick={() => setOpen(true)}>{t('newGroup')}</Button>
+      <Button type="button" variant="outline" className={className} onClick={() => setOpen(true)}>{t('newGroup')}</Button>
       <Dialog open={open} onOpenChange={setOpen} title={t('newGroup')} description={t('newGroupLead')}>
         <form
           className="flex flex-col gap-3"

@@ -52,15 +52,25 @@ func (s *Store) AuthorizeDelivery(ctx context.Context, conversation, sender, rec
 }
 
 func (s *Store) CanReadIdentity(ctx context.Context, viewer, target uuid.UUID) (bool, error) {
-	var ok bool
-	err := s.Pool.QueryRow(ctx, `SELECT $1=$2
-		OR EXISTS(SELECT 1 FROM contacts WHERE owner_id=$1 AND contact_id=$2 AND state='accepted')
-		OR EXISTS(
-			SELECT 1 FROM conversation_members a
-			JOIN conversation_members b ON b.conversation_id=a.conversation_id
-			WHERE a.user_id=$1 AND b.user_id=$2 AND a.left_at IS NULL AND b.left_at IS NULL
-		)`, viewer, target).Scan(&ok)
-	return ok, err
+	if viewer == target {
+		return true, nil
+	}
+	var contact bool
+	err := s.Pool.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM contacts
+		WHERE state IN ('accepted', 'requested')
+		  AND ((owner_id=$1 AND contact_id=$2) OR (owner_id=$2 AND contact_id=$1))
+	)`, viewer, target).Scan(&contact)
+	if err != nil || contact {
+		return contact, err
+	}
+	var shared bool
+	err = s.Pool.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM conversation_members a
+		JOIN conversation_members b ON b.conversation_id=a.conversation_id AND b.user_id=$2
+		WHERE a.user_id=$1 AND a.left_at IS NULL AND b.left_at IS NULL
+	)`, viewer, target).Scan(&shared)
+	return shared, err
 }
 
 func (s *Store) SignalRelated(ctx context.Context, a, b uuid.UUID) (related, blocked bool, err error) {

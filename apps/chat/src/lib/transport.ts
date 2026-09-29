@@ -16,6 +16,8 @@ export class Transport {
   private reconnectTimer = 0
   private localUser = ''
   relayOnly = false
+  /** When set, a message is handed to an open data channel and never stored in the mailbox. */
+  directOnly = false
   status: 'offline' | 'connecting' | 'online' = 'offline'
 
   setLocalUser(userId: string) {
@@ -239,7 +241,7 @@ export class Transport {
     }
   }
 
-  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = '') {
+  async deliverText(row: OutboxPlain, recipientPk: string, deviceId = ''): Promise<'direct' | 'server'> {
     row.recipientPk = recipientPk
     row.deviceId = deviceId
     row.state = 'queued'
@@ -247,31 +249,44 @@ export class Transport {
     const id = getIdentity()
     const sealed = sealBox(new TextEncoder().encode(row.envelope), unb64(recipientPk), id.identityBox.privateKey)
     const wire: Envelope = { v: 1, alg: 'x25519-xchacha20poly1305', sender_identity_pk: id.identityBox.publicKey, nonce: sealed.nonce, ciphertext: sealed.ciphertext }
-    let sent = false
+    let via: 'direct' | 'server' = 'direct'
     row.state = 'sending_p2p'
     if (deviceId) {
       const channel = await this.ensurePeer(row.recipientUserId, deviceId)
       if (channel && channel.readyState === 'open') {
         channel.send(JSON.stringify(wire))
         row.state = 'sent'
-        sent = true
+      } else {
+        via = 'server'
+      }
+    } else {
+      via = 'server'
+    }
+    if (via === 'server') {
+      if (this.directOnly && row.recipientUserId !== this.localUser) {
+        row.state = 'waiting_peer'
+        await sealRow('outbox', row.id, 'outbox', row)
+        throw new Error('direct_only')
+      }
+      if (this.directOnly) {
+        row.state = 'sent'
+        via = 'direct'
+      } else {
+        row.state = 'mailboxing'
+        await api('/v1/mailbox/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            conversation_id: row.conversationId,
+            recipient_user_id: row.recipientUserId,
+            message_id: row.id,
+            envelope: b64(new TextEncoder().encode(JSON.stringify(wire))),
+          }),
+        })
+        row.state = 'stored'
       }
     }
-    if (!sent) {
-      row.state = 'mailboxing'
-      await api('/v1/mailbox/messages', {
-        method: 'POST',
-        body: JSON.stringify({
-          conversation_id: row.conversationId,
-          recipient_user_id: row.recipientUserId,
-          message_id: row.id,
-          envelope: b64(new TextEncoder().encode(JSON.stringify(wire))),
-        }),
-      })
-      row.state = 'stored'
-    }
     await sealRow('outbox', row.id, 'outbox', row)
-    return wire
+    return via
   }
 
   decryptEnvelope(envelope: Envelope) {
