@@ -78,6 +78,7 @@ import {
   unlockVaultWithWebAuthn,
   vaultOwner,
   webAuthnUnlockAvailable,
+  touchVault,
   type StoredFile,
 } from '../lib/vault'
 
@@ -151,6 +152,8 @@ export function ChatApp() {
   const [active, setActive] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [pending, setPending] = useState<File[]>([])
+  const [fileRoute, setFileRoute] = useState<'auto' | 'direct' | 'server'>('auto')
+  const [dragOver, setDragOver] = useState(false)
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [openFiles, setOpenFiles] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -168,7 +171,7 @@ export function ChatApp() {
   })
   const [hideNotifyBody, setHideNotifyBody] = useState(() => localStorage.getItem('ma.chat.hideNotifyBody') === '1')
   const [notifyOn, setNotifyOn] = useState(() => notifyPrefOn())
-  const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string } | null>(null)
+  const [transfer, setTransfer] = useState<{ title: string; loaded: number; total: number; startedAt: number; fileId: string; peerId: string; kind: 'upload' | 'send' | 'receive' } | null>(null)
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, queueBytes: 0, total: 0 })
   const [limitGb, setLimitGb] = useState(() => loadStorageGb(''))
   const [pairId, setPairId] = useState('')
@@ -322,7 +325,23 @@ export function ChatApp() {
 
   useEffect(() => {
     const refreshSession = () => {
-      void authApi.me().then(async (me) => {
+      void authApi.session().then(async (row) => {
+        if (!row.authenticated || !row.id || !row.username || !row.display_name) {
+          resetChatRuntime()
+          setUnlocked(false)
+          setVaultExists(null)
+          setMode('login')
+          return
+        }
+        const me = {
+          id: row.id,
+          username: row.username,
+          display_name: row.display_name,
+          email: row.email,
+          totp_enabled: row.totp_enabled,
+          device_id: row.device_id,
+          trust_state: row.trust_state,
+        }
         const current = useSession.getState()
         if (current.user && current.user.id !== me.id) resetChatRuntime()
         useSession.getState().setSession(me, me.device_id || null, me.trust_state || null)
@@ -340,6 +359,22 @@ export function ChatApp() {
     window.addEventListener('ma-auth', refreshSession)
     return () => window.removeEventListener('ma-auth', refreshSession)
   }, [])
+
+  useEffect(() => {
+    const onLock = () => setUnlocked(false)
+    window.addEventListener('ma-vault-lock', onLock)
+    return () => window.removeEventListener('ma-vault-lock', onLock)
+  }, [])
+
+  useEffect(() => {
+    if (!unlocked) return
+    const bump = () => touchVault()
+    const events: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'touchstart']
+    for (const name of events) window.addEventListener(name, bump, { passive: true })
+    return () => {
+      for (const name of events) window.removeEventListener(name, bump)
+    }
+  }, [unlocked])
 
   useEffect(() => {
     if (mode !== 'app' || !unlocked) return
@@ -634,18 +669,19 @@ export function ChatApp() {
 
   async function onRegister(values: { username: string; password: string; display: string; invite: string }) {
     const nameError = usernameError(values.username)
-    const displayError = values.display ? displayNameError(values.display) : ''
+    const displayError = values.display ? displayNameError(values.display) : displayNameError(values.username)
     const passError = passwordError(values.password)
     if (nameError || displayError || passError) {
-      toast(nameError || displayError || passError)
-      return
+      const message = nameError ? t('usernameInvalid') : displayError ? t('displayNameInvalid') : t('passwordInvalid')
+      throw new Error(message)
     }
     try {
       await authApi.register({ invite_code: values.invite, username: values.username, password: values.password, display_name: canonicalDisplayName(values.display || values.username) })
       toast(t('accountCreated'))
       setMode('login')
     } catch (err) {
-      toast(err instanceof ApiError && err.code === 'server_overloaded' ? t('registerOverloaded') : explain(err))
+      const message = err instanceof ApiError && err.code === 'server_overloaded' ? t('registerOverloaded') : explain(err)
+      throw new Error(message)
     }
   }
 
@@ -776,7 +812,7 @@ export function ChatApp() {
     }
   }
 
-  const onUnlockWebAuthn = useCallback(async () => {
+  const onUnlockWebAuthn = useCallback(async (signal?: AbortSignal) => {
     try {
       if (session.user?.id) await openAccount(session.user.id)
       const owner = await vaultOwner()
@@ -784,10 +820,11 @@ export function ChatApp() {
         toast(t('wrongVaultAccount'))
         throw new Error('vault_owner')
       }
-      await unlockVaultWithWebAuthn()
+      await unlockVaultWithWebAuthn(signal)
       await publishIdentityIfEmpty()
       setUnlocked(true)
     } catch (err) {
+      if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) throw err
       if (err instanceof ApiError && err.code === 'device_untrusted') {
         setAskTransfer(true)
         throw err
@@ -902,15 +939,19 @@ export function ChatApp() {
 
   async function drainMailbox() {
     const items = await api<{ id: string; envelope: string }[]>('/v1/mailbox/messages')
+    let failed = 0
     for (const item of items) {
       try {
         const raw = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(item.envelope), (c) => c.charCodeAt(0))))
         await ingestEnvelope(raw, item.id)
         await api(`/v1/mailbox/messages/${item.id}/ack`, { method: 'POST' })
       } catch {
-        continue
+        failed += 1
+        // Drop poison envelopes so they do not block the mailbox forever.
+        await api(`/v1/mailbox/messages/${item.id}/ack`, { method: 'POST' }).catch(() => undefined)
       }
     }
+    if (failed) toast(tRef.current('mailboxSomeSkipped', { count: failed }))
   }
 
   function noteDelivered(sent: { id: string; route: 'direct' | 'server' }[]) {
@@ -927,8 +968,19 @@ export function ChatApp() {
 
   syncRef.current = () => {
     if (useSession.getState().trust === 'pending') return
-    void refresh().catch(() => undefined)
-    void drainMailbox().catch(() => undefined)
+    void refresh().catch((err) => {
+      if (err instanceof ApiError && (err.code === 'unauthorized' || err.status === 401)) {
+        toast(tRef.current('sessionExpired'))
+        resetChatRuntime()
+        setUnlocked(false)
+        setMode('login')
+        return
+      }
+      if (err instanceof ApiError && err.code === 'network') toast(tRef.current('networkError'))
+    })
+    void drainMailbox().catch((err) => {
+      if (err instanceof ApiError && err.code === 'network') toast(tRef.current('networkError'))
+    })
     void replayOutbox().then(noteDelivered).catch(() => undefined)
   }
   replayRef.current = () => {
@@ -1109,9 +1161,10 @@ export function ChatApp() {
     if (!set.size) peerUploads.current.delete(fileId)
   }
 
-  async function send(sendMode: 'auto' | 'direct' = 'auto') {
+  async function send(sendMode: 'auto' | 'direct' | 'server' = 'auto') {
     transport.directOnly = directOnly
     if (directOnly) sendMode = 'direct'
+    else if (sendMode === 'auto' && fileRoute !== 'auto') sendMode = fileRoute
     const conv = conversations.find((c) => c.id === active)
     const text = draft.trim()
     const picked = pending
@@ -1138,8 +1191,13 @@ export function ChatApp() {
       const onlineRecipients = isSelf ? [] : recipients.filter((userId) => userId !== me && presence.has(userId))
       const startedOnline = new Set(presence)
       allowDirect = onlineRecipients.length > 0
+      const cloudTargets = sendMode === 'server'
+        ? (isSelf ? [] : recipients.filter((userId) => userId !== me))
+        : sendMode === 'direct'
+          ? []
+          : offline
       const oversized = picked.some((file) => file.size > MAILBOX_MAX_FILE_BYTES)
-      const cloudBytes = sendMode === 'direct' || !offline.length ? 0 : picked.reduce((sum, file) => file.size <= MAILBOX_MAX_FILE_BYTES ? sum + ciphertextSize(file.size) : sum, 0)
+      const cloudBytes = !cloudTargets.length ? 0 : picked.reduce((sum, file) => file.size <= MAILBOX_MAX_FILE_BYTES ? sum + ciphertextSize(file.size) : sum, 0)
       if (cloudBytes > 0) {
         const usage = cloudUsage(await api<CloudUsage>('/v1/mailbox/cloud').catch(() => null))
         if (usage && usage.used + cloudBytes > usage.limit) {
@@ -1149,7 +1207,7 @@ export function ChatApp() {
           return
         }
       }
-      if (offline.length && oversized) {
+      if (cloudTargets.length && oversized) {
         const onlyOversized = !text && picked.every((file) => file.size > MAILBOX_MAX_FILE_BYTES)
         if (!onlineRecipients.length && onlyOversized) {
           setDraft(text)
@@ -1180,10 +1238,10 @@ export function ChatApp() {
         const fileId = crypto.randomUUID()
         const name = file.name || 'file'
         const mime = file.type || 'application/octet-stream'
-        if (file.size > MAILBOX_MAX_FILE_BYTES && !onlineRecipients.length && offline.length) continue
+        if (file.size > MAILBOX_MAX_FILE_BYTES && !onlineRecipients.length && cloudTargets.length) continue
         const url = URL.createObjectURL(file)
-        const queue = sendMode !== 'direct' && offline.length > 0 && file.size <= MAILBOX_MAX_FILE_BYTES
-        if (!queue && offline.length) directIds.add(fileId)
+        const queue = cloudTargets.length > 0 && file.size <= MAILBOX_MAX_FILE_BYTES
+        if (!queue) directIds.add(fileId)
         outgoing.current.set(fileId, file)
         sessionFiles.current.set(fileId, file)
         if (!queue) {
@@ -1214,13 +1272,15 @@ export function ChatApp() {
         form.set('conversation_id', conv.id)
         form.set('file_id', fileId)
         form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...staged.meta }))))
-        for (const recipientId of offline) form.append('recipient_user_id', recipientId)
+        for (const recipientId of cloudTargets) form.append('recipient_user_id', recipientId)
+        const uploadTotal = staged.body.size || ciphertextSize(file.size)
+        bumpTransfer('upload', 0, uploadTotal, fileId, cloudTargets[0] || '')
         await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
           if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
-          bumpTransfer('send', loaded, total, fileId, offline[0] || '')
-        }, upload.signal)
+          bumpTransfer('upload', loaded, total || uploadTotal, fileId, cloudTargets[0] || '')
+        }, upload.signal, uploadTotal)
         await staged.cleanup?.()
-        cloudRecipients.set(fileId, new Set(offline))
+        cloudRecipients.set(fileId, new Set(cloudTargets))
         Object.assign(entry, { via: 'mailbox' as const, ...staged.meta })
         liveShares.current.get(id)?.cloudReady.add(fileId)
         announceNewcomers(id, startedOnline)
@@ -1324,21 +1384,38 @@ export function ChatApp() {
     return conv?.peer_name || contact?.display_name || conv?.peer_username || contact?.username || ''
   }
 
-  function transferTitle(role: 'send' | 'receive', peerId: string) {
-    if (role === 'receive') return t('received')
+  function transferTitle(kind: 'upload' | 'send' | 'receive', peerId: string) {
+    if (kind === 'upload') return t('uploadingToServer')
+    if (kind === 'receive') return t('received')
     const name = peerLabel(peerId)
-    return name ? t('receiverReceived', { name }) : t('received')
+    return name ? t('receiverReceived', { name }) : t('transferringFile')
   }
 
-  function bumpTransfer(role: 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string) {
+  function transferTracked(fileId: string) {
+    if (cancelledFiles.current.has(fileId)) return false
+    if (transferLock.current === fileId) return true
+    if (pull.current?.fileId === fileId) return true
+    return (peerUploads.current.get(fileId)?.size ?? 0) > 0
+  }
+
+  function claimTransfer(fileId: string) {
+    if (transferLock.current && transferLock.current !== fileId) return false
+    transferLock.current = fileId
+    return true
+  }
+
+  function bumpTransfer(kind: 'upload' | 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string) {
     for (const share of liveShares.current.values()) {
       if (share.files.some((file) => file.id === fileId)) share.until = Date.now() + SHARE_TAIL
     }
-    if (cancelledFiles.current.has(fileId) || transferLock.current !== fileId) return
-    const title = transferTitle(role, peerId)
+    if (!transferTracked(fileId) && transferLock.current !== fileId) return
+    if (cancelledFiles.current.has(fileId)) return
+    if (!transferLock.current) transferLock.current = fileId
+    if (transferLock.current !== fileId) return
+    const title = transferTitle(kind, peerId)
     setTransfer((prev) => {
       if (cancelledFiles.current.has(fileId) || transferLock.current !== fileId) return prev?.fileId === fileId ? null : prev
-      return { title, loaded, total, fileId, peerId, startedAt: prev?.fileId === fileId ? prev.startedAt : Date.now() }
+      return { title, loaded, total, fileId, peerId, kind, startedAt: prev?.fileId === fileId && prev.kind === kind ? prev.startedAt : Date.now() }
     })
   }
 
@@ -1360,7 +1437,7 @@ export function ChatApp() {
     if (err instanceof ApiError) {
       if (err.code === 'server_overloaded') return t('serverOverloaded')
       if (err.code === 'keys_missing') return t('recipientNoVault')
-      if ((err.code === 'not_found' || err.status === 404) && /file/i.test(err.message)) return t('fileGone')
+      if ((err.code === 'not_found' || err.status === 404) && /file/i.test(err.message)) return t('fileNotOnServer')
       if (err.code === 'not_found' || err.status === 404) return t('couldNotSend')
       if (err.code === 'too_large') return t('fileTooLarge')
       if (err.code === 'rate_limited') return t('tooManyRequests')
@@ -1391,9 +1468,13 @@ export function ChatApp() {
   }
 
   async function openDirect(userId: string, name: string) {
-    const conv = await api<Conversation>('/v1/conversations', { method: 'POST', body: JSON.stringify({ kind: 'direct', user_id: userId }) })
-    setConversations((prev) => (prev.some((c) => c.id === conv.id) ? prev : [...prev, { ...conv, peer_name: name }]))
-    setActive(conv.id)
+    try {
+      const conv = await api<Conversation>('/v1/conversations', { method: 'POST', body: JSON.stringify({ kind: 'direct', user_id: userId }) })
+      setConversations((prev) => (prev.some((c) => c.id === conv.id) ? prev : [...prev, { ...conv, peer_name: name }]))
+      setActive(conv.id)
+    } catch (err) {
+      toast(explain(err))
+    }
   }
 
   function attachFiles(list: File[]) {
@@ -1401,7 +1482,15 @@ export function ChatApp() {
       toast(t('pickConversation'))
       return
     }
+    if (!list.length) return
     setPending((prev) => [...prev, ...list])
+  }
+
+  function onDropFiles(e: React.DragEvent) {
+    e.preventDefault()
+    setDragOver(false)
+    const list = Array.from(e.dataTransfer.files ?? [])
+    if (list.length) attachFiles(list)
   }
 
   function setFileUrl(fileId: string, url: string) {
@@ -1440,7 +1529,7 @@ export function ChatApp() {
         return
       }
       if (file.gone) {
-        toast(t('fileMissing'))
+        toast(t('fileNotAvailableForTransfer'))
         return
       }
       const peers = onlinePeers(message.conversationId, senderId)
@@ -1449,13 +1538,17 @@ export function ChatApp() {
         return
       }
       cancelledFiles.current.delete(file.id)
+      claimTransfer(file.id)
       setDownloading(file.id)
+      bumpTransfer('receive', 0, file.size, file.id, senderId)
       const ranked = await chooseHolder(file.id, peers)
       if (cancelledFiles.current.has(file.id)) return
       if (!ranked.length) {
         setDownloading(null)
+        if (transferLock.current === file.id) transferLock.current = null
+        setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
         markGone(file.id)
-        toast(t('fileMissing'))
+        toast(t('fileNotAvailableForTransfer'))
         return
       }
       askOrder.current.set(file.id, ranked)
@@ -1465,6 +1558,10 @@ export function ChatApp() {
     if (!url) {
       if (transferLock.current && transferLock.current !== file.id) {
         toast(t('transferBusy'))
+        return
+      }
+      if (file.gone) {
+        toast(t('fileNotOnServer'))
         return
       }
       cancelledFiles.current.delete(file.id)
@@ -1512,6 +1609,12 @@ export function ChatApp() {
       const next = { ...message, status: 'expired' }
       setMessages((prev) => prev.map((m) => (m.id === message.id ? next : m)))
       void sealRow('records', message.id, 'messages', withoutUrls(next))
+    }
+    if (err instanceof ApiError && (err.code === 'not_found' || err.status === 404)) {
+      const file = message.files?.find((item) => item.id === downloading) ?? message.files?.[0]
+      if (file) markGone(file.id)
+      toast(file?.via === 'peer' ? t('fileNotAvailableForTransfer') : t('fileNotOnServer'))
+      return
     }
     toast(explain(err))
   }
@@ -1595,6 +1698,33 @@ export function ChatApp() {
     }
     markStored([], (message.files ?? []).map((file) => file.id))
     await refreshUsage()
+  }
+
+  /** Remove a file from this device and, when possible, from the server / peer swarm. */
+  async function revokeFile(message: LocalMessage, file: ChatFile) {
+    const fromServer = message.mine && file.via !== 'peer' && !!file.key
+    if (fromServer) {
+      try {
+        await api(`/v1/mailbox/cloud/${file.id}`, { method: 'DELETE' })
+      } catch (err) {
+        if (!(err instanceof ApiError && (err.code === 'not_found' || err.status === 404))) {
+          toast(explain(err))
+          return
+        }
+      }
+    }
+    outgoing.current.delete(file.id)
+    sessionFiles.current.delete(file.id)
+    if (stored.has(file.id)) await forgetFile(file.id)
+    markStored([], [file.id])
+    if (file.url) URL.revokeObjectURL(file.url)
+    setFileUrl(file.id, '')
+    markGone(file.id)
+    for (const peer of onlinePeers(message.conversationId, message.senderId || me)) {
+      transport.sendFrame(newFrame('chat.file.missing', { file_id: file.id }, { user: peer }))
+    }
+    await refreshUsage()
+    toast(fromServer ? t('fileNotOnServer') : t('fileNotAvailableForTransfer'))
   }
 
   function onlinePeers(conversationId: string, senderId?: string) {
@@ -1685,10 +1815,20 @@ export function ChatApp() {
         transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
         return
       }
+      const claimed = claimTransfer(fileId)
       try {
+        if (claimed) bumpTransfer('send', 0, source.size, fileId, userId)
         await sendFileChunks(source, fileId, userId)
       } finally {
         endPeerUpload(fileId, userId)
+        if (claimed && transferLock.current === fileId && !(peerUploads.current.get(fileId)?.size)) {
+          window.setTimeout(() => {
+            if (transferLock.current === fileId && !(peerUploads.current.get(fileId)?.size)) {
+              transferLock.current = null
+              setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
+            }
+          }, 600)
+        }
       }
     })()
   }
@@ -1701,18 +1841,27 @@ export function ChatApp() {
   fileApi.current.have = (fileId, userId) => noteHave(fileId, userId)
   fileApi.current.missing = (fileId, userId) => {
     if (!fileId) return
-    if (userId) {
-      const missed = missingRef.current.get(fileId) ?? new Set<string>()
-      missed.add(userId)
-      missingRef.current.set(fileId, missed)
-      holdersRef.current.get(fileId)?.delete(userId)
-      const wait = holderWaits.current.get(fileId)
-      if (wait) {
-        wait.pending.delete(userId)
-        if (wait.pending.size === 0) wait.finish()
-      }
+    if (!userId) {
+      markGone(fileId)
+      if (transferLock.current === fileId) transferLock.current = null
+      setDownloading((cur) => (cur === fileId ? null : cur))
+      setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
+      if (wantView.current === fileId || wantSave.current === fileId) toast(t('fileNotOnServer'))
+      wantView.current = ''
+      wantSave.current = ''
+      setSwarmTick((n) => n + 1)
+      return
     }
-    const next = userId ? nextHolder(fileId, userId) : ''
+    const missed = missingRef.current.get(fileId) ?? new Set<string>()
+    missed.add(userId)
+    missingRef.current.set(fileId, missed)
+    holdersRef.current.get(fileId)?.delete(userId)
+    const wait = holderWaits.current.get(fileId)
+    if (wait) {
+      wait.pending.delete(userId)
+      if (wait.pending.size === 0) wait.finish()
+    }
+    const next = nextHolder(fileId, userId)
     if (next) {
       transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: next }))
       setSwarmTick((n) => n + 1)
@@ -1724,7 +1873,7 @@ export function ChatApp() {
       if (transferLock.current === fileId) transferLock.current = null
       setDownloading((cur) => (cur === fileId ? null : cur))
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
-      if (wantView.current === fileId) toast(t('fileMissing'))
+      if (wantView.current === fileId) toast(t('fileNotAvailableForTransfer'))
       wantView.current = ''
     }
     setSwarmTick((n) => n + 1)
@@ -1804,7 +1953,7 @@ export function ChatApp() {
   function beginPull(start: Omit<Pull, 'received' | 'parts' | 'queue' | 'decrypt' | 'sink' | 'failed'>) {
     if (cancelledFiles.current.has(start.fileId)) return
     if (pull.current && pull.current.fileId !== start.fileId) void abortPull(pull.current.fileId, false)
-    transferLock.current = start.fileId
+    claimTransfer(start.fileId)
     const slot: Pull = { ...start, received: 0, parts: [], queue: Promise.resolve(), decrypt: null, sink: null, failed: false }
     slot.queue = (async () => {
       slot.decrypt = await pullDecryptor(slot.meta)
@@ -1812,6 +1961,7 @@ export function ChatApp() {
     })()
     pull.current = slot
     setDownloading(start.fileId)
+    bumpTransfer('receive', 0, start.size, start.fileId, start.from)
   }
 
   function pushPull(bytes: Uint8Array) {
@@ -1975,6 +2125,17 @@ export function ChatApp() {
   const activeConv = conversations.find((c) => c.id === active)
   const selfChat = !!me && activeConv?.peer_id === me && activeConv?.kind !== 'group'
   const isGroup = activeConv?.kind === 'group'
+  const fileRouteChoices = (() => {
+    if (directOnly || !pending.length || !activeConv || selfChat) return false
+    const recipients = recipientsOf(activeConv).filter((id) => id !== me)
+    if (!recipients.length) return false
+    const canDirect = recipients.some((id) => online.has(id))
+    const canServer = pending.some((file) => file.size <= MAILBOX_MAX_FILE_BYTES)
+    return canDirect && canServer
+  })()
+  useEffect(() => {
+    if (!fileRouteChoices && fileRoute !== 'auto') setFileRoute('auto')
+  }, [fileRouteChoices, fileRoute])
 
   // Read receipts only when this conversation is actually on screen — not while Chat is backgrounded on iOS.
   useEffect(() => {
@@ -2283,9 +2444,13 @@ export function ChatApp() {
                 setNotifyOn(false)
                 return
               }
-              void enablePush().then((ok) => setNotifyOn(ok)).catch(() => {
+              void enablePush().then((ok) => {
+                setNotifyOn(ok)
+                if (!ok) toast(t('notificationsDenied'))
+              }).catch(() => {
                 setNotifyPref(false)
                 setNotifyOn(false)
+                toast(t('notificationsDenied'))
               })
             }}
             label={t('notifications')}
@@ -2466,9 +2631,15 @@ export function ChatApp() {
           }}
           onFresh={(password) => { void beginFresh(password) }}
           onTransfer={async (pairingId, code, nextPassword) => {
+            const problem = vaultPasswordError(nextPassword)
+            if (problem) throw new Error(problem)
             transferPassword.current = nextPassword
-            await claimPair(pairingId, code)
-            setAskTransfer(false)
+            try {
+              await claimPair(pairingId, code)
+              setAskTransfer(false)
+            } catch (err) {
+              throw new Error(explain(err))
+            }
           }}
         />
       </>
@@ -2489,6 +2660,7 @@ export function ChatApp() {
       onOpenChange={(open) => { if (!open) setCloudPrompt(null) }}
       onSendDirect={cloudPrompt?.canDirect ? () => { setCloudPrompt(null); void send('direct') } : undefined}
       onRemove={(fileId) => void api(`/v1/mailbox/cloud/${fileId}`, { method: 'DELETE' }).then(async () => {
+        markGone(fileId)
         const usage = cloudUsage(await api<CloudUsage>('/v1/mailbox/cloud'))
         setCloudPrompt((cur) => (cur && usage ? { ...cur, usage } : cur))
       }).catch((err) => toast(explain(err)))}
@@ -2540,9 +2712,15 @@ export function ChatApp() {
       }}
       onFresh={(password) => { void beginFresh(password) }}
       onTransfer={async (pairingId, code, nextPassword) => {
+        const problem = vaultPasswordError(nextPassword)
+        if (problem) throw new Error(problem)
         transferPassword.current = nextPassword
-        await claimPair(pairingId, code)
-        setAskTransfer(false)
+        try {
+          await claimPair(pairingId, code)
+          setAskTransfer(false)
+        } catch (err) {
+          throw new Error(explain(err))
+        }
       }}
     />
     <div className="grid min-h-0 w-full flex-1 grid-cols-1 md:grid-cols-[18rem_minmax(0,1fr)]">
@@ -2653,12 +2831,25 @@ export function ChatApp() {
             </div>
             <div
               ref={threadBox}
-              className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-2"
+              className={`relative min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 py-2 ${dragOver ? 'outline outline-2 outline-dashed outline-accent/50' : ''}`}
               onScroll={(e) => {
                 const box = e.currentTarget
                 stickBottom.current = box.scrollHeight - box.scrollTop - box.clientHeight < 120
               }}
+              onDragEnter={(e) => {
+                e.preventDefault()
+                if (e.dataTransfer.types.includes('Files')) setDragOver(true)
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false)
+              }}
+              onDrop={onDropFiles}
             >
+              {dragOver ? <p className="pointer-events-none absolute inset-x-0 top-3 z-10 text-center text-sm text-accent">{t('dropFilesHere')}</p> : null}
               {!thread.length ? <p className="py-10 text-center text-sm text-muted">{isGroup ? t('emptyGroup') : t('emptyThread')}</p> : null}
               {thread.map((m, i) => {
                 const previous = thread[i - 1]
@@ -2695,9 +2886,16 @@ export function ChatApp() {
                           onView={(file) => void viewFile(m, file)}
                           fileMenu={(file) => [
                             ...(file.mime.startsWith('image/') || file.mime.startsWith('video/') ? [{ id: 'view', label: t('view'), onSelect: () => void viewFile(m, file) }] : []),
-                            { id: 'download', label: t('download'), onSelect: () => void saveFile(m, file) },
+                            ...(availability(m, file) !== 'gone' ? [{ id: 'download', label: t('download'), onSelect: () => void saveFile(m, file) }] : []),
                             { id: 'share', label: t('share'), onSelect: () => void shareFile(m, file) },
-                            ...(stored.has(file.id) ? [{ id: 'forget', label: t('removeFromDevice'), onSelect: () => void forgetFile(file.id).then(() => { markStored([], [file.id]); setFileUrl(file.id, ''); void refreshUsage() }) }] : []),
+                            ...(stored.has(file.id) && !m.mine ? [{ id: 'forget', label: t('removeFromDevice'), onSelect: () => void forgetFile(file.id).then(() => { markStored([], [file.id]); setFileUrl(file.id, ''); void refreshUsage() }) }] : []),
+                            ...(m.mine && !file.gone && (file.via === 'mailbox' || stored.has(file.id) || sessionFiles.current.has(file.id) || outgoing.current.has(file.id))
+                              ? [{
+                                  id: 'revoke',
+                                  label: file.via === 'mailbox' ? t('removeFromServer') : t('stopSharing'),
+                                  onSelect: () => void revokeFile(m, file),
+                                }]
+                              : []),
                           ]}
                         />
                       ) : null}
@@ -2715,16 +2913,43 @@ export function ChatApp() {
                 e.preventDefault()
                 void send()
               }}
+              onDragOver={(e) => {
+                if (!e.dataTransfer.types.includes('Files')) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'copy'
+              }}
+              onDrop={onDropFiles}
             >
               {pending.length ? (
-                <div className="flex max-w-full gap-1 overflow-x-auto">
-                  {pending.map((file, index) => (
-                    <span key={`${file.name}-${file.size}-${index}`} className="inline-flex max-w-44 shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs">
-                      <span className="truncate">{file.name || 'file'}</span>
-                      <span className="shrink-0 text-muted">{formatBytes(file.size)}</span>
-                      <button type="button" className="text-muted" aria-label={t('removeFile')} onClick={() => setPending((prev) => prev.filter((_, i) => i !== index))}>×</button>
-                    </span>
-                  ))}
+                <div className="flex flex-col gap-2">
+                  <div className="flex max-w-full gap-1 overflow-x-auto">
+                    {pending.map((file, index) => (
+                      <span key={`${file.name}-${file.size}-${index}`} className="inline-flex max-w-44 shrink-0 items-center gap-1 rounded-md bg-surface-2 px-2 py-1 text-xs">
+                        <span className="truncate">{file.name || 'file'}</span>
+                        <span className="shrink-0 text-muted">{formatBytes(file.size)}</span>
+                        <button type="button" className="text-muted" aria-label={t('removeFile')} onClick={() => setPending((prev) => prev.filter((_, i) => i !== index))}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                  {fileRouteChoices ? (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="text-muted">{t('sendRouteHint')}</span>
+                      {([
+                        ['auto', 'sendAuto'],
+                        ['direct', 'sendDirect'],
+                        ['server', 'sendViaServer'],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`rounded-md px-2 py-1 ${fileRoute === value ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-muted'}`}
+                          onClick={() => setFileRoute(value)}
+                        >
+                          {t(label)}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="flex min-w-0 items-end gap-2">
@@ -2910,21 +3135,8 @@ function statusLabel(translate: (key: string) => string, status: string, route?:
 
 const STAGE_MEMORY_BYTES = 32 * 1024 * 1024
 
-/** Encrypt once, straight to disk, so a multi-gigabyte cloud upload is never held in memory. */
+/** Encrypt once into a dedicated sync-temp blob used for the upload, then optionally keep a durable copy. */
 async function stageCipher(fileId: string, file: File, userId: string): Promise<{ meta: FileCipherMeta; body: Blob; stored: boolean; removed: string[]; cleanup?: () => Promise<void> }> {
-  const sink = await beginCipherFile(fileId, file.size)
-  if (sink) {
-    const enc = await createEncryptor(file.size)
-    try {
-      for await (const { part, final } of blobParts(file)) await sink.write(enc.push(part, final))
-      const removed = await sink.finish(enc.meta)
-      const stored = await openStored(fileId)
-      if (stored?.kind === 'opfs') return { meta: enc.meta, body: stored.cipher, stored: true, removed }
-    } catch (err) {
-      await sink.abort()
-      throw err
-    }
-  }
   const enc = await createEncryptor(file.size)
   if (opfsAvailable() && userId) {
     const writer = await openWriter(userId, 'sync-temp', fileId).catch(() => null)
@@ -2937,7 +3149,30 @@ async function stageCipher(fileId: string, file: File, userId: string): Promise<
         throw err
       }
       const body = await openNamed(userId, 'sync-temp', fileId)
-      if (body) return { meta: enc.meta, body, stored: false, removed: [], cleanup: () => removeNamed(userId, 'sync-temp', fileId) }
+      if (body) {
+        let stored = false
+        let removed: string[] = []
+        const sink = await beginCipherFile(fileId, file.size)
+        if (sink) {
+          try {
+            const step = 4 * 1024 * 1024
+            for (let offset = 0; offset < body.size; offset += step) {
+              await sink.write(new Uint8Array(await body.slice(offset, Math.min(body.size, offset + step)).arrayBuffer()))
+            }
+            removed = await sink.finish(enc.meta)
+            stored = true
+          } catch {
+            await sink.abort()
+          }
+        }
+        return {
+          meta: enc.meta,
+          body,
+          stored,
+          removed,
+          cleanup: () => removeNamed(userId, 'sync-temp', fileId),
+        }
+      }
     }
   }
   if (file.size > STAGE_MEMORY_BYTES) throw new Error('stage')

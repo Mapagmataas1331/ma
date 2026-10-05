@@ -83,6 +83,7 @@ func (a *App) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/auth/login", a.login)
 	mux.HandleFunc("POST /v1/auth/login/2fa", a.login2fa)
 	mux.HandleFunc("POST /v1/auth/logout", a.logout)
+	mux.HandleFunc("GET /v1/auth/session", a.sessionStatus)
 	mux.HandleFunc("GET /v1/users/me", a.me)
 	mux.HandleFunc("PATCH /v1/users/me", a.patchMe)
 	mux.HandleFunc("GET /v1/users/{username}", a.profile)
@@ -171,31 +172,36 @@ type principal struct {
 }
 
 func (a *App) auth(w http.ResponseWriter, r *http.Request) (principal, bool) {
+	p, ok := a.lookupSession(r)
+	if !ok {
+		httpx.WriteError(w, 401, "unauthorized", "sign in")
+		return principal{}, false
+	}
+	return p, true
+}
+
+/** Resolve the session cookie without writing an error. Used for soft probes. */
+func (a *App) lookupSession(r *http.Request) (principal, bool) {
 	token := httpx.SessionCookie(r, a.Cfg.DevInsecureHTTP)
 	if token == "" {
-		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
 	hash, err := httpx.HashToken(token)
 	if err != nil {
-		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
 	sess, err := a.DB.SessionByHash(r.Context(), hash)
 	if err != nil || sess.Revoked != nil || time.Now().After(sess.Expires) || time.Now().After(sess.Created.Add(a.Cfg.SessionAbsolute)) {
-		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
 	user, err := a.DB.UserByID(r.Context(), sess.UserID)
 	if err != nil || user.Disabled != nil {
-		httpx.WriteError(w, 401, "unauthorized", "sign in")
 		return principal{}, false
 	}
 	trust := ""
 	if sess.DeviceID != nil {
 		dev, err := a.DB.DeviceOwned(r.Context(), user.ID, *sess.DeviceID)
 		if err != nil {
-			httpx.WriteError(w, 401, "unauthorized", "sign in")
 			return principal{}, false
 		}
 		trust = dev.Trust
@@ -427,6 +433,34 @@ func (a *App) me(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	a.writeMe(w, p)
+}
+
+/** Soft session probe: always 200 so anonymous page loads never show a 401 in the console. */
+func (a *App) sessionStatus(w http.ResponseWriter, r *http.Request) {
+	p, ok := a.lookupSession(r)
+	if !ok {
+		httpx.WriteJSON(w, 200, map[string]any{"authenticated": false})
+		return
+	}
+	deviceID := ""
+	if p.Device != nil {
+		deviceID = p.Device.String()
+	}
+	httpx.WriteJSON(w, 200, map[string]any{
+		"authenticated": true,
+		"id":            p.User.ID,
+		"username":      p.User.Username,
+		"display_name":  p.User.DisplayName,
+		"email":         p.User.Email,
+		"totp_enabled":  p.User.TOTP,
+		"device_id":     deviceID,
+		"trust_state":   p.Trust,
+		"has_identity":  len(p.User.X25519) == 32 && len(p.User.Ed25519) == 32,
+	})
+}
+
+func (a *App) writeMe(w http.ResponseWriter, p principal) {
 	deviceID := ""
 	if p.Device != nil {
 		deviceID = p.Device.String()
@@ -449,6 +483,7 @@ func (a *App) profile(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, 200, map[string]any{
 		"username": item.Username, "display_name": item.DisplayName,
 		"created_at": item.CreatedAt.Format(time.RFC3339), "invited": item.Invited, "badges": item.Badges,
+		"badge_tracks": item.Tracks,
 	})
 }
 
@@ -474,9 +509,17 @@ func (a *App) account(w http.ResponseWriter, r *http.Request) {
 	for _, item := range open {
 		codes = append(codes, map[string]string{"id": item.ID.String(), "expires_at": item.ExpiresAt.Format(time.RFC3339), "created_at": item.CreatedAt.Format(time.RFC3339)})
 	}
+	var usernameNextAt any
+	if info.UsernameChangedAt != nil {
+		next := info.UsernameChangedAt.Add(30 * 24 * time.Hour)
+		if time.Now().Before(next) {
+			usernameNextAt = next.UTC().Format(time.RFC3339)
+		}
+	}
 	httpx.WriteJSON(w, 200, map[string]any{
 		"id": p.User.ID, "username": p.User.Username, "display_name": p.User.DisplayName,
-		"invite_credits": info.Credits, "invited": info.Invited, "badges": info.Badges, "invitees": people, "open_invites": codes,
+		"invite_credits": info.Credits, "invited": info.Invited, "badges": info.Badges, "badge_tracks": info.Tracks,
+		"invitees": people, "open_invites": codes, "username_next_at": usernameNextAt,
 	})
 }
 

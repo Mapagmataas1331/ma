@@ -118,13 +118,15 @@ export type ChatFile = {
  */
 export type FileAvailability = 'ready' | 'server' | 'peer' | 'offline' | 'gone' | 'sharing' | 'sessionOnly'
 
-export function availabilityLabel(t: (key: string) => string, state: FileAvailability) {
-  const map: Record<FileAvailability, string> = {
+export function availabilityLabel(t: (key: string) => string, state: FileAvailability, file?: Pick<ChatFile, 'via'>) {
+  if (state === 'gone') {
+    return t(file?.via === 'peer' ? 'fileNotAvailableForTransfer' : 'fileNotOnServer')
+  }
+  const map: Record<Exclude<FileAvailability, 'gone'>, string> = {
     ready: 'fileReady',
     server: 'fileOnServer',
     peer: 'fileAvailable',
     offline: 'fileSenderOffline',
-    gone: 'fileUnavailable',
     sharing: 'fileSharing',
     sessionOnly: 'fileSessionOnly',
   }
@@ -180,7 +182,7 @@ export function MessageAttachments({
               <button type="button" className="flex min-h-24 w-full flex-col items-start justify-center rounded-md bg-black/10 px-3 py-2 text-left" onClick={() => onView?.(file)} disabled={state === 'gone'}>
                 <span className="w-full truncate text-sm font-medium">{file.name}</span>
                 <span className="text-xs opacity-80">{formatSize(file.size)}</span>
-                <span className={cn('text-xs', state ? availabilityTone(state) : 'opacity-80')}>{state ? availabilityLabel(t, state) : t('view')}</span>
+                <span className={cn('text-xs', state ? availabilityTone(state) : 'opacity-80')}>{state ? availabilityLabel(t, state, file) : t('view')}</span>
               </button>
             ))
           })}
@@ -210,7 +212,7 @@ function FileOffer({ file, state, downloading, onDownload, onView }: { file: Cha
       <button type="button" className="block w-full text-left" onClick={onView}>
         <p className="truncate text-sm font-medium">{file.name}</p>
         <p className="text-xs opacity-80">{format} · {formatSize(file.size)}</p>
-        {state ? <p className={cn('text-xs', availabilityTone(state))}>{availabilityLabel(t, state)}</p> : null}
+        {state ? <p className={cn('text-xs', availabilityTone(state))}>{availabilityLabel(t, state, file)}</p> : null}
       </button>
       {file.url && file.mime.startsWith('audio/') ? <audio src={file.url} controls className="mt-2 w-full" /> : null}
       {onDownload && !blocked ? (

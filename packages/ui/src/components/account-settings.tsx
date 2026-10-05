@@ -1,5 +1,5 @@
-import { ApiError, authApi } from '@ma/api-client'
-import { canonicalDisplayName, displayNameError, passwordError, usernameError } from '@ma/protocol'
+import { ApiError, authApi, type BadgeTrack } from '@ma/api-client'
+import { canonicalDisplayName, canonicalUsername, displayNameError, passwordError, usernameError } from '@ma/protocol'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
@@ -13,6 +13,8 @@ type Account = {
   invite_credits: number
   invited: number
   badges: string[]
+  badge_tracks?: BadgeTrack[]
+  username_next_at?: string | null
   invitees: { username: string; display_name: string }[]
   open_invites?: { id: string; expires_at: string; created_at: string }[]
 }
@@ -40,12 +42,28 @@ export function AccountSettings() {
   const [code, setCode] = useState('')
   const { setSlot } = useContext(AppSettingsSlot)
   const [error, setError] = useState('')
+  const [editDisplay, setEditDisplay] = useState('')
+  const [editUsername, setEditUsername] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileSaved, setProfileSaved] = useState('')
 
   async function load() {
+    setError('')
     try {
-      setAccount(await authApi.account())
-    } catch {
+      const session = await authApi.session()
+      if (!session.authenticated) {
+        setAccount(null)
+        return
+      }
+      const next = await authApi.account()
+      setAccount(next)
+      setEditDisplay(next.display_name)
+      setEditUsername(next.username)
+    } catch (err) {
       setAccount(null)
+      if (err instanceof ApiError && err.code !== 'unauthorized' && err.status !== 401) {
+        setError(err.message || t('somethingWentWrong'))
+      }
     } finally {
       setReady(true)
     }
@@ -88,15 +106,70 @@ export function AccountSettings() {
   }
 
   async function createInvite() {
-    const created = await authApi.createInvite()
-    setCode(created.code)
-    await load()
+    try {
+      const created = await authApi.createInvite()
+      setCode(created.code)
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('somethingWentWrong'))
+    }
   }
 
   async function revokeInvite(id: string) {
-    await authApi.revokeInvite(id)
-    if (code) setCode('')
-    await load()
+    try {
+      await authApi.revokeInvite(id)
+      if (code) setCode('')
+      await load()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('somethingWentWrong'))
+    }
+  }
+
+  async function saveProfile(e: React.FormEvent) {
+    e.preventDefault()
+    if (!account) return
+    setProfileSaved('')
+    setError('')
+    const shown = displayNameError(editDisplay)
+    if (shown) {
+      setError(t('displayNameInvalid'))
+      return
+    }
+    const nameChanged = canonicalUsername(editUsername) !== account.username
+    if (nameChanged) {
+      const nameError = usernameError(editUsername)
+      if (nameError) {
+        setError(t('usernameInvalid'))
+        return
+      }
+      if (account.username_next_at) {
+        setError(t('usernameCooldown', { date: new Date(account.username_next_at).toLocaleDateString() }))
+        return
+      }
+    }
+    setProfileBusy(true)
+    try {
+      const body: { display_name: string; username?: string } = { display_name: canonicalDisplayName(editDisplay) }
+      if (nameChanged) body.username = canonicalUsername(editUsername)
+      const updated = await authApi.patchMe(body)
+      setAccount((cur) => (cur ? { ...cur, username: updated.username, display_name: updated.display_name } : cur))
+      setEditUsername(updated.username)
+      setEditDisplay(updated.display_name)
+      setProfileSaved(t('profileSaved'))
+      window.dispatchEvent(new Event('ma-auth'))
+      await load()
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'username_cooldown') {
+        const next = (err.details as { next_at?: string } | undefined)?.next_at
+        setError(t('usernameCooldown', { date: next ? new Date(next).toLocaleDateString() : '—' }))
+      } else if (err instanceof ApiError && err.code === 'username_taken') {
+        setError(t('usernameTaken'))
+      } else {
+        setError(err instanceof Error ? err.message : t('somethingWentWrong'))
+      }
+    } finally {
+      setProfileBusy(false)
+    }
   }
 
   if (!ready) return null
@@ -135,10 +208,23 @@ export function AccountSettings() {
             <p className="font-medium">{account.display_name}</p>
             <p className="text-sm text-muted">@{account.username}</p>
             <div className="mt-2">
-              <BadgeRow badges={account.badges} />
+              <BadgeRow tracks={account.badge_tracks} badges={account.badges} />
             </div>
           </div>
         </div>
+        <form className="space-y-3 border-t border-line px-4 py-3" onSubmit={(e) => void saveProfile(e)}>
+          <p className="text-sm font-medium">{t('editProfile')}</p>
+          <Input placeholder={t('displayName')} aria-label={t('displayName')} value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
+          <Input placeholder={t('username')} aria-label={t('username')} value={editUsername} onChange={(e) => setEditUsername(e.target.value)} disabled={!!account.username_next_at} />
+          <p className="text-xs text-muted">
+            {account.username_next_at
+              ? t('usernameCooldown', { date: new Date(account.username_next_at).toLocaleDateString() })
+              : t('usernameChangeHint')}
+          </p>
+          {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
+          {profileSaved ? <p className="text-sm text-accent">{profileSaved}</p> : null}
+          <Button type="submit" disabled={profileBusy}>{t('saveProfile')}</Button>
+        </form>
         <SettingsRow label={t('invitesLeft')}>
           <span className="text-sm">{account.invite_credits}</span>
         </SettingsRow>

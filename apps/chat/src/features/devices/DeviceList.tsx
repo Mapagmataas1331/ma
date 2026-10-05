@@ -12,7 +12,6 @@ export function DeviceList({ enabled, userId }: { enabled: boolean; userId: stri
     enabled: enabled && !!userId,
     queryFn: () => api<Device[]>('/v1/devices'),
   })
-  if (!query.data?.length) return null
 
   async function revoke(device: Device, confirmLast = false) {
     try {
@@ -25,6 +24,14 @@ export function DeviceList({ enabled, userId }: { enabled: boolean; userId: stri
       }
       toast(err instanceof Error ? err.message : t('somethingWentWrong'))
     }
+  }
+
+  if (query.isError) {
+    return <p className="px-4 py-2 text-sm text-danger">{t('devicesLoadFailed')}</p>
+  }
+  if (query.isLoading) return null
+  if (!query.data?.length) {
+    return <p className="px-4 py-2 text-sm text-muted">{t('noDevicesYet')}</p>
   }
 
   return (

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/mapagmataas1331/ma/services/api/internal/auth"
@@ -108,22 +110,69 @@ func (a *App) patchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName string `json:"display_name"`
+		DisplayName *string `json:"display_name"`
+		Username    *string `json:"username"`
 	}
 	if err := httpx.ReadJSON(r, &body); err != nil {
 		httpx.WriteError(w, 400, "bad_request", "invalid json")
 		return
 	}
-	display, err := auth.CanonicalDisplayName(body.DisplayName)
-	if err != nil {
-		httpx.WriteError(w, 400, "display_name_invalid", "display name must be 1-32 characters")
+	if body.DisplayName == nil && body.Username == nil {
+		httpx.WriteError(w, 400, "bad_request", "nothing to update")
 		return
 	}
-	if _, err := a.DB.Pool.Exec(r.Context(), `UPDATE users SET display_name=$2 WHERE id=$1`, p.User.ID, display); err != nil {
+	display := p.User.DisplayName
+	if body.DisplayName != nil {
+		next, err := auth.CanonicalDisplayName(*body.DisplayName)
+		if err != nil {
+			httpx.WriteError(w, 400, "display_name_invalid", "display name must be 1-32 characters")
+			return
+		}
+		display = next
+	}
+	username := p.User.Username
+	changedUsername := false
+	if body.Username != nil {
+		next, err := auth.CanonicalUsername(*body.Username)
+		if err != nil {
+			httpx.WriteError(w, 400, "username_invalid", "username must be 3-12 letters, numbers, or underscores")
+			return
+		}
+		if next != p.User.Username {
+			var last *time.Time
+			_ = a.DB.Pool.QueryRow(r.Context(), `SELECT username_changed_at FROM users WHERE id=$1`, p.User.ID).Scan(&last)
+			if last != nil && time.Since(*last) < 30*24*time.Hour {
+				nextAt := last.Add(30 * 24 * time.Hour)
+				httpx.WriteJSON(w, 429, map[string]any{
+					"code":    "username_cooldown",
+					"message": "username can be changed once every 30 days",
+					"details": map[string]any{"next_at": nextAt.UTC().Format(time.RFC3339)},
+				})
+				return
+			}
+			username = next
+			changedUsername = true
+		}
+	}
+	if changedUsername {
+		tag, err := a.DB.Pool.Exec(r.Context(), `UPDATE users SET display_name=$2, username=$3, username_changed_at=now() WHERE id=$1`, p.User.ID, display, username)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(err.Error(), "users_username") {
+				httpx.WriteError(w, 409, "username_taken", "username is taken")
+				return
+			}
+			httpx.WriteError(w, 500, "internal", "profile")
+			return
+		}
+		if tag.RowsAffected() != 1 {
+			httpx.WriteError(w, 500, "internal", "profile")
+			return
+		}
+	} else if _, err := a.DB.Pool.Exec(r.Context(), `UPDATE users SET display_name=$2 WHERE id=$1`, p.User.ID, display); err != nil {
 		httpx.WriteError(w, 500, "internal", "profile")
 		return
 	}
-	w.WriteHeader(204)
+	httpx.WriteJSON(w, 200, map[string]any{"username": username, "display_name": display})
 }
 
 func (a *App) publishPresence(ctx context.Context, user uuid.UUID, online bool) {

@@ -84,20 +84,122 @@ func (s *Store) ConsumeInvite(ctx context.Context, hash []byte) error {
 }
 
 func InviteBadges(n int) []string {
-	var out []string
-	if n >= 1 {
-		out = append(out, "introducer")
+	track := InviteTrack(n)
+	if track.Tier == "" {
+		return nil
 	}
-	if n >= 3 {
-		out = append(out, "connector")
+	return []string{track.Tier}
+}
+
+/** One progressive track: current tier, raw value, and the next threshold (nil at the top). */
+type BadgeTrack struct {
+	ID    string `json:"id"`
+	Tier  string `json:"tier"`
+	Value int    `json:"value"`
+	Next  *int   `json:"next"`
+}
+
+func progressTrack(id string, value int, thresholds []struct {
+	min int
+	id  string
+}) BadgeTrack {
+	track := BadgeTrack{ID: id, Value: value}
+	for i, step := range thresholds {
+		if value < step.min {
+			v := step.min
+			track.Next = &v
+			return track
+		}
+		track.Tier = step.id
+		if i == len(thresholds)-1 {
+			track.Next = nil
+		}
 	}
-	if n >= 10 {
-		out = append(out, "host")
+	return track
+}
+
+func InviteTrack(n int) BadgeTrack {
+	return progressTrack("invites", n, []struct {
+		min int
+		id  string
+	}{
+		{1, "introducer"},
+		{3, "connector"},
+		{10, "host"},
+		{25, "circle"},
+	})
+}
+
+/** Account age in whole days. Tiers: 30 / 90 / 365 / 1095. */
+func TenureTrack(created time.Time) BadgeTrack {
+	days := int(time.Since(created).Hours() / 24)
+	if days < 0 {
+		days = 0
 	}
-	if n >= 25 {
-		out = append(out, "circle")
+	return progressTrack("tenure", days, []struct {
+		min int
+		id  string
+	}{
+		{30, "settling"},
+		{90, "regular"},
+		{365, "veteran"},
+		{1095, "elder"},
+	})
+}
+
+/** Accepted contacts. */
+func ContactsTrack(n int) BadgeTrack {
+	return progressTrack("contacts", n, []struct {
+		min int
+		id  string
+	}{
+		{1, "penpal"},
+		{5, "ally"},
+		{15, "crew"},
+		{40, "clan"},
+	})
+}
+
+/** Trusted devices on the account. */
+func DevicesTrack(n int) BadgeTrack {
+	return progressTrack("devices", n, []struct {
+		min int
+		id  string
+	}{
+		{2, "paired"},
+		{3, "synced"},
+		{5, "fleet"},
+	})
+}
+
+/** Active group memberships. */
+func GroupsTrack(n int) BadgeTrack {
+	return progressTrack("groups", n, []struct {
+		min int
+		id  string
+	}{
+		{1, "member"},
+		{3, "regulars"},
+		{8, "organizer"},
+	})
+}
+
+type BadgeStats struct {
+	Invited  int
+	Contacts int
+	Devices  int
+	Groups   int
+	Created  time.Time
+}
+
+func BadgeTracks(stats BadgeStats) []BadgeTrack {
+	return []BadgeTrack{
+		InviteTrack(stats.Invited),
+		TenureTrack(stats.Created),
+		ContactsTrack(stats.Contacts),
+		DevicesTrack(stats.Devices),
+		GroupsTrack(stats.Groups),
 	}
-	return out
 }
 
 type Invitee struct {
@@ -107,10 +209,13 @@ type Invitee struct {
 }
 
 type AccountInvites struct {
-	Credits int
-	Invited int
-	Badges  []string
-	People  []Invitee
+	Credits            int
+	Invited            int
+	Badges             []string
+	Tracks             []BadgeTrack
+	People             []Invitee
+	CreatedAt          time.Time
+	UsernameChangedAt  *time.Time
 }
 
 type PublicProfile struct {
@@ -119,6 +224,7 @@ type PublicProfile struct {
 	CreatedAt   time.Time
 	Invited     int
 	Badges      []string
+	Tracks      []BadgeTrack
 }
 
 func (s *Store) RegisterWithInvite(ctx context.Context, codeHash []byte, username, display, passHash string) error {
@@ -178,10 +284,19 @@ func (s *Store) CreateUserInvite(ctx context.Context, userID uuid.UUID, hash []b
 
 func (s *Store) AccountInvites(ctx context.Context, userID uuid.UUID) (AccountInvites, error) {
 	var out AccountInvites
-	err := s.Pool.QueryRow(ctx, `SELECT invite_credits, (SELECT count(*) FROM invite_redemptions WHERE inviter_id=$1) FROM users WHERE id=$1`, userID).Scan(&out.Credits, &out.Invited)
+	var contacts, devices, groups int
+	err := s.Pool.QueryRow(ctx, `
+		SELECT invite_credits, created_at, username_changed_at,
+			(SELECT count(*) FROM invite_redemptions WHERE inviter_id=$1),
+			(SELECT count(*) FROM contacts WHERE owner_id=$1 AND state='accepted'),
+			(SELECT count(*) FROM devices WHERE user_id=$1 AND trust_state='trusted' AND revoked_at IS NULL),
+			(SELECT count(*) FROM conversation_members m JOIN conversations c ON c.id=m.conversation_id
+				WHERE m.user_id=$1 AND m.left_at IS NULL AND c.kind='group')
+		FROM users WHERE id=$1`, userID).Scan(&out.Credits, &out.CreatedAt, &out.UsernameChangedAt, &out.Invited, &contacts, &devices, &groups)
 	if err != nil {
 		return out, err
 	}
+	out.Tracks = BadgeTracks(BadgeStats{Invited: out.Invited, Contacts: contacts, Devices: devices, Groups: groups, Created: out.CreatedAt})
 	out.Badges = InviteBadges(out.Invited)
 	rows, err := s.Pool.Query(ctx, `SELECT u.username, u.display_name, r.created_at FROM invite_redemptions r JOIN users u ON u.id=r.invitee_id WHERE r.inviter_id=$1 ORDER BY r.created_at DESC`, userID)
 	if err != nil {
@@ -200,10 +315,19 @@ func (s *Store) AccountInvites(ctx context.Context, userID uuid.UUID) (AccountIn
 
 func (s *Store) ProfileByName(ctx context.Context, username string) (PublicProfile, error) {
 	var out PublicProfile
-	err := s.Pool.QueryRow(ctx, `SELECT username, display_name, created_at, (SELECT count(*) FROM invite_redemptions WHERE inviter_id=users.id) FROM users WHERE username=$1 AND disabled_at IS NULL`, username).Scan(&out.Username, &out.DisplayName, &out.CreatedAt, &out.Invited)
+	var contacts, devices, groups int
+	err := s.Pool.QueryRow(ctx, `
+		SELECT username, display_name, created_at,
+			(SELECT count(*) FROM invite_redemptions WHERE inviter_id=users.id),
+			(SELECT count(*) FROM contacts WHERE owner_id=users.id AND state='accepted'),
+			(SELECT count(*) FROM devices WHERE user_id=users.id AND trust_state='trusted' AND revoked_at IS NULL),
+			(SELECT count(*) FROM conversation_members m JOIN conversations c ON c.id=m.conversation_id
+				WHERE m.user_id=users.id AND m.left_at IS NULL AND c.kind='group')
+		FROM users WHERE username=$1 AND disabled_at IS NULL`, username).Scan(&out.Username, &out.DisplayName, &out.CreatedAt, &out.Invited, &contacts, &devices, &groups)
 	if err != nil {
 		return out, err
 	}
+	out.Tracks = BadgeTracks(BadgeStats{Invited: out.Invited, Contacts: contacts, Devices: devices, Groups: groups, Created: out.CreatedAt})
 	out.Badges = InviteBadges(out.Invited)
 	return out, nil
 }

@@ -21,7 +21,12 @@ const DEVICE_KEY = 'ma.device.pks'
 export function loadDevicePublicKeys(): { ed25519: string; x25519: string } | null {
   const raw = localStorage.getItem(DEVICE_KEY)
   if (!raw) return null
-  return JSON.parse(raw) as { ed25519: string; x25519: string }
+  try {
+    return JSON.parse(raw) as { ed25519: string; x25519: string }
+  } catch {
+    localStorage.removeItem(DEVICE_KEY)
+    return null
+  }
 }
 
 export function saveDevicePublicKeys(keys: { ed25519: string; x25519: string }) {

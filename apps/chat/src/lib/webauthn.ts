@@ -85,7 +85,12 @@ export async function createPrfCredential(opts: {
   return { credentialId: b64(new Uint8Array(cred.rawId)), prf }
 }
 
-export async function evaluatePrf(credentialId: ArrayBuffer | Uint8Array | string, prfSalt: Uint8Array): Promise<Uint8Array | null> {
+export async function evaluatePrf(
+  credentialId: ArrayBuffer | Uint8Array | string,
+  prfSalt: Uint8Array,
+  signal?: AbortSignal,
+): Promise<Uint8Array | null> {
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
   const id = typeof credentialId === 'string' ? unb64(credentialId) : credentialId instanceof Uint8Array ? credentialId : new Uint8Array(credentialId)
   const assertion = (await navigator.credentials.get({
     publicKey: {
@@ -100,6 +105,7 @@ export async function evaluatePrf(credentialId: ArrayBuffer | Uint8Array | strin
         },
       } as AuthenticationExtensionsClientInputs,
     },
+    signal,
   })) as PublicKeyCredential | null
   return prfFirst(assertion)
 }

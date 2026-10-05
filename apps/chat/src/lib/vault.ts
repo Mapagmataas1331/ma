@@ -53,11 +53,18 @@ export function lockVault() {
   }
   secrets = null
   if (lockTimer) window.clearTimeout(lockTimer)
+  lockTimer = 0
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('ma-vault-lock'))
 }
 
 function armLock(minutes = 15) {
   if (lockTimer) window.clearTimeout(lockTimer)
   lockTimer = window.setTimeout(lockVault, minutes * 60_000)
+}
+
+/** Keep the idle lock timer alive while the user is active with the vault open. */
+export function touchVault() {
+  if (secrets) armLock()
 }
 
 async function readSlots() {
@@ -163,12 +170,12 @@ export async function webAuthnUnlockAvailable() {
   return platformAuthenticatorAvailable()
 }
 
-export async function unlockVaultWithWebAuthn() {
+export async function unlockVaultWithWebAuthn(signal?: AbortSignal) {
   await ready()
   const slots = await readSlots()
   const slot = slots.find((s) => s.kind === 'webauthn')
   if (!slot || slot.kind !== 'webauthn') throw new Error('no_webauthn')
-  const prf = await evaluatePrf(slot.credentialId, unb64(slot.prfSalt))
+  const prf = await evaluatePrf(slot.credentialId, unb64(slot.prfSalt), signal)
   if (!prf) throw new Error('webauthn_prf_unsupported')
   const kek = kekFromPrf(prf)
   try {
@@ -256,10 +263,6 @@ export async function loadHistory(): Promise<{ id: string; conversationId: strin
     }
   }
   return out.sort((a, b) => a.at.localeCompare(b.at))
-}
-
-export function touchVault() {
-  if (secrets) armLock()
 }
 
 /** Default budget for everything this account keeps on this device: chats, cached files, files waiting to be sent. */

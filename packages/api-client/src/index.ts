@@ -59,23 +59,26 @@ function readApiError(status: number, text: string, statusText: string): ApiErro
   return new ApiError(status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : statusText, parsed.success ? parsed.data.details : undefined)
 }
 
-export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<T> {
+export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal, expectedTotal = 0): Promise<T> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     const abort = () => xhr.abort()
+    const done = () => signal?.removeEventListener('abort', abort)
     signal?.addEventListener('abort', abort)
     xhr.open('POST', `${apiOrigin()}${path}`)
     xhr.withCredentials = true
     xhr.setRequestHeader('X-Requested-With', 'ma')
     xhr.upload.onprogress = (event) => {
-      if (signal?.aborted || !event.lengthComputable) return
-      onProgress?.(event.loaded, event.total)
+      if (signal?.aborted) return
+      const total = event.lengthComputable && event.total > 0 ? event.total : expectedTotal
+      if (total > 0 || event.loaded > 0) onProgress?.(event.loaded, total || event.loaded)
     }
     xhr.onabort = () => {
-      signal?.removeEventListener('abort', abort)
+      done()
       reject(new DOMException('aborted', 'AbortError'))
     }
     xhr.onload = () => {
+      done()
       try {
         if (xhr.status === 204) {
           resolve(undefined as T)
@@ -90,7 +93,10 @@ export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded:
         reject(err)
       }
     }
-    xhr.onerror = () => reject(new ApiError(0, 'network', 'network'))
+    xhr.onerror = () => {
+      done()
+      reject(new ApiError(0, 'network', 'network'))
+    }
     xhr.send(body)
   })
 }
@@ -129,12 +135,20 @@ export function apiBlobProgress(path: string, onProgress?: (loaded: number, tota
   })
 }
 
+export type BadgeTrack = {
+  id: string
+  tier: string
+  value: number
+  next: number | null
+}
+
 export type PublicProfile = {
   username: string
   display_name: string
   created_at: string
   invited: number
   badges: string[]
+  badge_tracks?: BadgeTrack[]
 }
 
 export const authApi = {
@@ -144,7 +158,21 @@ export const authApi = {
     api<{ status: string; challenge_id?: string; user?: { id: string; username: string; display_name: string }; device?: { id: string; trust_state: string } }>('/v1/auth/login', { method: 'POST', body: JSON.stringify(body) }),
   login2fa: (body: { challenge_id: string; code: string }) => api('/v1/auth/login/2fa', { method: 'POST', body: JSON.stringify(body) }),
   logout: () => api('/v1/auth/logout', { method: 'POST' }),
+  /** Soft probe: always 200. Use on cold load so logged-out visitors never see a 401. */
+  session: () =>
+    api<{
+      authenticated: boolean
+      id?: string
+      username?: string
+      display_name?: string
+      email?: string | null
+      totp_enabled?: boolean
+      device_id?: string
+      trust_state?: string
+    }>('/v1/auth/session'),
   me: () => api<{ id: string; username: string; display_name: string; email?: string | null; totp_enabled?: boolean; device_id?: string; trust_state?: string }>('/v1/users/me'),
+  patchMe: (body: { display_name?: string; username?: string }) =>
+    api<{ username: string; display_name: string }>('/v1/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
   account: () =>
     api<{
       id: string
@@ -153,6 +181,8 @@ export const authApi = {
       invite_credits: number
       invited: number
       badges: string[]
+      badge_tracks?: BadgeTrack[]
+      username_next_at?: string | null
       invitees: { username: string; display_name: string; created_at: string }[]
       open_invites?: { id: string; expires_at: string; created_at: string }[]
     }>('/v1/account'),

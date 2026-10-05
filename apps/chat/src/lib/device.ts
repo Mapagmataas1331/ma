@@ -22,7 +22,12 @@ export function publicDeviceKeys(userId: string): PublicKeys | null {
   if (keys) return { ed25519: keys.ed25519, x25519: keys.x25519 }
   const raw = sessionStorage.getItem(accountKey(userId, 'device.pks'))
   if (!raw) return null
-  return JSON.parse(raw) as PublicKeys
+  try {
+    return JSON.parse(raw) as PublicKeys
+  } catch {
+    sessionStorage.removeItem(accountKey(userId, 'device.pks'))
+    return null
+  }
 }
 
 export function ensureDeviceSecrets(userId: string): PublicKeys {
