@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { activeDatabase, openAccount } from '../lib/db'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
-import { blobParts, ciphertextSize, createEncryptor, decryptFile, pullDecryptor, type FileCipherMeta } from '../lib/files'
+import { blobParts, ciphertextSize, createEncryptor, decryptParts, FILE_CHUNK_BYTES, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
 import { enablePush, notifyHere, notifyPrefOn, setAppBadge, setNotifyPref } from '../lib/push'
@@ -123,6 +123,14 @@ type Pull = {
 }
 
 const PROBE_TTL = 30_000
+/** A requested peer file that shows no start or chunk for this long is treated as stalled. */
+const PULL_STALL_MS = 30_000
+/** Tag bytes secretstream (XChaCha20-Poly1305) adds to every chunk. Fixed by libsodium. */
+const SECRETSTREAM_ABYTES = 17
+/** The server caps the ciphertext it receives, so compare the encrypted size against the cloud limit. */
+function fitsCloud(size: number) {
+  return size + Math.max(1, Math.ceil(size / FILE_CHUNK_BYTES)) * SECRETSTREAM_ABYTES <= MAILBOX_MAX_FILE_BYTES
+}
 /** How long a group file stays offerable after the last byte moved, so someone who was offline can still join the send. */
 const SHARE_TAIL = 120_000
 
@@ -265,6 +273,10 @@ export function ChatApp() {
   prefsRef.current = prefs
   const liveShares = useRef(new Map<string, LiveShare>())
   const busyRetry = useRef(new Map<string, number>())
+  /** Set while send() is preparing files, so a double tap cannot start a second upload. */
+  const sendingFiles = useRef(false)
+  /** Watchdog for a peer file this device asked for: fires when nothing arrives for PULL_STALL_MS. */
+  const pullWatch = useRef<{ fileId: string; last: number; timer: number } | null>(null)
   const offerLateRef = useRef<(userId: string) => void>(() => {})
   offerLateRef.current = (userId: string) => {
     for (const share of liveShares.current.values()) {
@@ -605,7 +617,15 @@ export function ChatApp() {
       if (frame.t === 'chat.file.busy') fileApi.current.busy(String(frame.p.file_id ?? ''), frame.from?.user ?? '')
       if (frame.t === 'chat.file.cancel') {
         const fileId = String(frame.p.file_id ?? '')
+        const fromUser = frame.from?.user ?? ''
+        // Say once why a download stopped when the peer we were pulling from (or had asked) ends it.
+        const pulling = !!fileId && pull.current?.fileId === fileId && pull.current.from === fromUser
+        const asked = !!fileId && pullWatch.current?.fileId === fileId && askOrder.current.get(fileId)?.[0] === fromUser
         if (fileId) cancelledFiles.current.add(fileId)
+        if (pulling || asked) {
+          clearPullWatch(fileId)
+          toast(tRef.current(frame.p.reason === 'interrupted' ? 'transferInterrupted' : 'transferCancelledBySender'))
+        }
         void abortPull(fileId, false)
         const activeTransfer = !fileId || transferLock.current === fileId || abortFile.current === fileId
         if (activeTransfer) {
@@ -1167,7 +1187,7 @@ export function ChatApp() {
   function beginPeerUpload(fileId: string, userId: string) {
     if (pull.current?.fileId === fileId) return false
     const existing = peerUploads.current.get(fileId)
-    if (existing?.has(userId)) return true
+    if (existing?.has(userId)) return false
     if (peerUploadCount() >= MAX_PEER_UPLOADS) return false
     const set = existing ?? new Set<string>()
     set.add(userId)
@@ -1190,10 +1210,11 @@ export function ChatApp() {
     const text = draft.trim()
     const picked = pending
     if (!conv || (!text && picked.length === 0)) return
-    if (picked.length && transferLock.current) {
+    if (picked.length && (transferLock.current || sendingFiles.current)) {
       toast(t('transferBusy'))
       return
     }
+    if (picked.length) sendingFiles.current = true
     const id = crypto.randomUUID()
     const at = new Date().toISOString()
     setDraft('')
@@ -1202,6 +1223,9 @@ export function ChatApp() {
     let activeFile = ''
     let allowDirect = false
     let postedLocal = false
+    /** Sync-temp copies still on disk, and durable copies made for this send. */
+    const stagedCleanup: (() => Promise<void>)[] = []
+    const stagedDurable: string[] = []
     try {
       await ready()
       const recipients = recipientsOf(conv)
@@ -1217,8 +1241,8 @@ export function ChatApp() {
         : sendMode === 'direct'
           ? []
           : offline
-      const oversized = picked.some((file) => file.size > MAILBOX_MAX_FILE_BYTES)
-      const cloudBytes = !cloudTargets.length ? 0 : picked.reduce((sum, file) => file.size <= MAILBOX_MAX_FILE_BYTES ? sum + ciphertextSize(file.size) : sum, 0)
+      const oversized = picked.some((file) => !fitsCloud(file.size))
+      const cloudBytes = !cloudTargets.length ? 0 : picked.reduce((sum, file) => fitsCloud(file.size) ? sum + ciphertextSize(file.size) : sum, 0)
       if (cloudBytes > 0) {
         const usage = cloudUsage(await api<CloudUsage>('/v1/mailbox/cloud').catch(() => null))
         if (usage && usage.used + cloudBytes > usage.limit) {
@@ -1229,7 +1253,7 @@ export function ChatApp() {
         }
       }
       if (cloudTargets.length && oversized) {
-        const onlyOversized = !text && picked.every((file) => file.size > MAILBOX_MAX_FILE_BYTES)
+        const onlyOversized = !text && picked.every((file) => !fitsCloud(file.size))
         if (!onlineRecipients.length && onlyOversized) {
           setDraft(text)
           setPending(picked)
@@ -1259,9 +1283,9 @@ export function ChatApp() {
         const fileId = crypto.randomUUID()
         const name = file.name || 'file'
         const mime = file.type || 'application/octet-stream'
-        if (file.size > MAILBOX_MAX_FILE_BYTES && !onlineRecipients.length && cloudTargets.length) continue
+        if (!fitsCloud(file.size) && !onlineRecipients.length && cloudTargets.length) continue
         const url = URL.createObjectURL(file)
-        const queue = cloudTargets.length > 0 && file.size <= MAILBOX_MAX_FILE_BYTES
+        const queue = cloudTargets.length > 0 && fitsCloud(file.size)
         if (!queue) directIds.add(fileId)
         outgoing.current.set(fileId, file)
         sessionFiles.current.set(fileId, file)
@@ -1284,8 +1308,9 @@ export function ChatApp() {
         transferAbort.current = upload
         abortFile.current = fileId
         const prepareTotal = ciphertextSize(file.size)
+        const prepareTitle = t('preparingFile')
         setTransfer({
-          title: t('preparingFile'),
+          title: prepareTitle,
           loaded: 0,
           total: prepareTotal,
           fileId,
@@ -1293,11 +1318,25 @@ export function ChatApp() {
           kind: 'upload',
           startedAt: Date.now(),
         })
-        const staged = await stageCipher(fileId, file, session.user?.id || '')
-        if (upload.signal.aborted || cancelledFiles.current.has(fileId)) {
-          await staged.cleanup?.()
-          throw new DOMException('aborted', 'AbortError')
+        const stopped = () => upload.signal.aborted || cancelledFiles.current.has(fileId)
+        let shownAt = 0
+        const staged = await stageCipher(fileId, file, session.user?.id || '', {
+          cancelled: stopped,
+          onProgress: (done) => {
+            const now = performance.now()
+            if (now - shownAt < 120 && done < prepareTotal) return
+            shownAt = now
+            setTransfer((cur) => (cur?.fileId === fileId && cur.kind === 'upload' && cur.title === prepareTitle ? { ...cur, loaded: Math.min(done, cur.total || done) } : cur))
+          },
+        })
+        const cleanupStaged = async () => {
+          const run = staged.cleanup
+          staged.cleanup = undefined
+          await run?.().catch(() => undefined)
         }
+        stagedCleanup.push(cleanupStaged)
+        if (staged.stored) stagedDurable.push(fileId)
+        if (stopped()) throw new DOMException('aborted', 'AbortError')
         if (staged.removed.length) dropMessages(staged.removed)
         if (staged.stored) {
           markStored([fileId])
@@ -1310,12 +1349,13 @@ export function ChatApp() {
         form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...staged.meta }))))
         for (const recipientId of cloudTargets) form.append('recipient_user_id', recipientId)
         const uploadTotal = staged.body.size || prepareTotal
-        bumpTransfer('upload', 0, uploadTotal, fileId, cloudTargets[0] || '')
+        // Fresh start time, so the upload speed is not diluted by the time spent encrypting.
+        bumpTransfer('upload', 0, uploadTotal, fileId, cloudTargets[0] || '', true)
         await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
           if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
           bumpTransfer('upload', loaded, total || uploadTotal, fileId, cloudTargets[0] || '')
         }, upload.signal, uploadTotal)
-        await staged.cleanup?.()
+        await cleanupStaged()
         cloudRecipients.set(fileId, new Set(cloudTargets))
         Object.assign(entry, { via: 'mailbox' as const, ...staged.meta })
         liveShares.current.get(id)?.cloudReady.add(fileId)
@@ -1387,6 +1427,8 @@ export function ChatApp() {
     } catch (err) {
       releaseTransfer(activeFile)
       setTransfer((cur) => (cur?.fileId === activeFile ? null : cur))
+      // The sync-temp ciphertext is only for the upload; never leave it behind on failure.
+      for (const run of stagedCleanup) await run()
       const posted = postedLocal || messagesRef.current.some((message) => message.id === id)
       if (!posted) {
         setDraft(text)
@@ -1396,6 +1438,11 @@ export function ChatApp() {
           outgoing.current.delete(file.id)
           sessionFiles.current.delete(file.id)
           if (file.key) void api(`/v1/mailbox/cloud/${file.id}`, { method: 'DELETE' }).catch(() => undefined)
+        }
+        if (stagedDurable.length) {
+          // Durable copies for a send that never happened would sit in storage with no message.
+          markStored([], stagedDurable)
+          void Promise.all(stagedDurable.map((fileId) => forgetFile(fileId).catch(() => undefined))).then(() => refreshUsage())
         }
       }
       if (err instanceof DOMException && err.name === 'AbortError') return
@@ -1409,7 +1456,9 @@ export function ChatApp() {
         return
       }
       if (posted) setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'failed' } : m)))
-      toast(explain(err))
+      toast(explainTransfer(err))
+    } finally {
+      if (picked.length) sendingFiles.current = false
     }
   }
 
@@ -1449,7 +1498,7 @@ export function ChatApp() {
     }
   }
 
-  function bumpTransfer(kind: 'upload' | 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string) {
+  function bumpTransfer(kind: 'upload' | 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string, reset = false) {
     for (const share of liveShares.current.values()) {
       if (share.files.some((file) => file.id === fileId)) share.until = Date.now() + SHARE_TAIL
     }
@@ -1463,7 +1512,8 @@ export function ChatApp() {
     const title = transferTitle(kind, peerId)
     setTransfer((prev) => {
       if (cancelledFiles.current.has(fileId) || transferLock.current !== fileId) return prev?.fileId === fileId ? null : prev
-      const same = prev?.fileId === fileId && prev.kind === kind
+      // `reset` marks a fresh (re)start: let the bar drop back and restart the speed clock.
+      const same = !reset && prev?.fileId === fileId && prev.kind === kind
       const nextLoaded = same && loaded < prev.loaded ? prev.loaded : loaded
       const nextTotal = same && total > 0 && prev.total > total ? prev.total : total
       return { title, loaded: nextLoaded, total: nextTotal, fileId, peerId, kind, startedAt: same ? prev.startedAt : Date.now() }
@@ -1474,6 +1524,7 @@ export function ChatApp() {
     const current = transfer
     const fileId = current?.fileId ?? ''
     if (fileId) cancelledFiles.current.add(fileId)
+    clearPullWatch(fileId)
     releaseTransfer(fileId)
     abortFile.current = ''
     transferAbort.current?.abort()
@@ -1502,6 +1553,9 @@ export function ChatApp() {
       if (err.code === 'not_contact') return t('groupNotContact')
       if (err.code === 'forbidden') return t('notAllowed')
       if (err.code === 'network') return t('networkError')
+      if (err.code === 'timeout') return t('transferStalled')
+      if (err.code === 'upload_incomplete') return t('transferInterrupted')
+      if (err.code === 'http_error') return t('requestFailedStatus', { status: err.status || '?' })
     }
     if (err instanceof Error) {
       if (err.message === 'webauthn_cancelled' || err.name === 'NotAllowedError') return t('webauthnCancelled')
@@ -1510,7 +1564,13 @@ export function ChatApp() {
       if (err.message === 'webauthn_prf_unsupported') return t('webauthnPrfUnsupported')
       if (err.message === 'no_webauthn' || err.message === 'wrong_password') return t('webauthnFailed')
     }
-    return err instanceof Error ? err.message : t('couldNotSend')
+    return err instanceof Error && err.message ? err.message : t('couldNotSend')
+  }
+
+  /** Like explain, but for file transfers: an abort here is a cancel, not a dismissed passkey prompt. */
+  function explainTransfer(err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') return t('cancelled')
+    return explain(err)
   }
 
   async function addContact(e: React.FormEvent) {
@@ -1596,13 +1656,21 @@ export function ChatApp() {
         toast(message.mine ? t('fileNoLongerHere') : t('fileSenderOfflineLong'))
         return
       }
+      // Already asked for or streaming this file: a second tap must not start a parallel pull.
+      if (pull.current?.fileId === file.id || pullWatch.current?.fileId === file.id) return
       cancelledFiles.current.delete(file.id)
+      busyRetry.current.delete(file.id)
       claimTransfer(file.id)
       setDownloading(file.id)
-      bumpTransfer('receive', 0, file.size, file.id, senderId)
+      bumpTransfer('receive', 0, file.size, file.id, senderId, true)
+      watchPull(file.id)
       const ranked = await chooseHolder(file.id, peers)
-      if (cancelledFiles.current.has(file.id)) return
-        if (!ranked.length) {
+      if (cancelledFiles.current.has(file.id)) {
+        clearPullWatch(file.id)
+        return
+      }
+      if (!ranked.length) {
+        clearPullWatch(file.id)
         setDownloading(null)
         releaseTransfer(file.id)
         setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
@@ -1611,6 +1679,7 @@ export function ChatApp() {
         return
       }
       askOrder.current.set(file.id, ranked)
+      touchPullWatch(file.id)
       transport.sendFrame(newFrame('chat.file.request', { file_id: file.id }, { user: ranked[0] }))
       return
     }
@@ -1623,22 +1692,24 @@ export function ChatApp() {
         toast(t('fileNotOnServer'))
         return
       }
+      // A second tap while this download runs would start a parallel copy.
+      if (transferLock.current === file.id && abortFile.current === file.id) return
       cancelledFiles.current.delete(file.id)
       transferLock.current = file.id
       const download = new AbortController()
       transferAbort.current = download
       abortFile.current = file.id
       setDownloading(file.id)
+      bumpTransfer('receive', 0, file.size, file.id, senderId, true)
       try {
         const blob = await apiBlobProgress(`/v1/mailbox/files/${file.id}`, (loaded, total) => {
           if (download.signal.aborted || cancelledFiles.current.has(file.id)) return
           bumpTransfer('receive', loaded, total || file.size, file.id, senderId)
         }, download.signal)
         if (cancelledFiles.current.has(file.id)) return
-        let plain = new Uint8Array(await blob.arrayBuffer())
         const meta = file.key && file.header && file.lengths?.length ? { key: file.key, header: file.header, lengths: file.lengths } : null
-        if (meta) plain = await decryptFile(plain, meta.key, meta.header, meta.lengths)
-        const decoded = new Blob([plain as BlobPart], { type: file.mime || 'application/octet-stream' })
+        // Decrypt chunk by chunk from the blob, so large files never sit in one ciphertext and one plaintext buffer at once.
+        const decoded = new Blob(meta ? (await decryptParts(blob, meta)) as BlobPart[] : [blob], { type: file.mime || 'application/octet-stream' })
         sessionFiles.current.set(file.id, decoded)
         url = URL.createObjectURL(decoded)
         const keep = meta ? keepCipher(file.id, blob, meta, file.size) : keepFile(file.id, decoded)
@@ -1654,6 +1725,12 @@ export function ChatApp() {
         }, 600)
       } catch (err) {
         releaseTransfer(file.id)
+        if (abortFile.current === file.id) {
+          abortFile.current = ''
+          transferAbort.current = null
+        }
+        setDownloading((cur) => (cur === file.id ? null : cur))
+        setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
         if (!(err instanceof DOMException && err.name === 'AbortError')) throw err
       }
       setDownloading(null)
@@ -1675,7 +1752,7 @@ export function ChatApp() {
       toast(file?.via === 'peer' ? t('fileNotAvailableForTransfer') : t('fileNotOnServer'))
       return
     }
-    toast(explain(err))
+    toast(explainTransfer(err))
   }
 
   function saveUrl(url: string, name: string) {
@@ -1867,6 +1944,11 @@ export function ChatApp() {
 
   fileApi.current.request = (fileId, userId) => {
     void (async () => {
+      // Already streaming this file to this peer: a second stream on the same channel would corrupt both.
+      if (userId && peerUploads.current.get(fileId)?.has(userId)) {
+        transport.sendFrame(newFrame('chat.file.busy', { file_id: fileId }, { user: userId }))
+        return
+      }
       cancelledFiles.current.delete(fileId)
       const source = await sourceFor(fileId)
       if (cancelledFiles.current.has(fileId)) return
@@ -1880,7 +1962,7 @@ export function ChatApp() {
       }
       const claimed = claimTransfer(fileId)
       try {
-        if (claimed) bumpTransfer('send', 0, source.size, fileId, userId)
+        if (claimed) bumpTransfer('send', 0, source.size, fileId, userId, true)
         await sendFileChunks(source, fileId, userId)
       } finally {
         endPeerUpload(fileId, userId)
@@ -1905,6 +1987,7 @@ export function ChatApp() {
   fileApi.current.missing = (fileId, userId) => {
     if (!fileId) return
     if (!userId) {
+      clearPullWatch(fileId)
       markGone(fileId)
       releaseTransfer(fileId)
       setDownloading((cur) => (cur === fileId ? null : cur))
@@ -1926,12 +2009,14 @@ export function ChatApp() {
     }
     const next = nextHolder(fileId, userId)
     if (next) {
+      touchPullWatch(fileId)
       transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: next }))
       setSwarmTick((n) => n + 1)
       return
     }
     const order = askOrder.current.get(fileId)
     if (order && order.length === 0) {
+      clearPullWatch(fileId)
       markGone(fileId)
       releaseTransfer(fileId)
       setDownloading((cur) => (cur === fileId ? null : cur))
@@ -1944,6 +2029,7 @@ export function ChatApp() {
   fileApi.current.busy = (fileId, userId) => {
     const next = nextHolder(fileId, userId)
     if (next) {
+      touchPullWatch(fileId)
       transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: next }))
       return
     }
@@ -1952,12 +2038,14 @@ export function ChatApp() {
       busyRetry.current.set(fileId, tries + 1)
       window.setTimeout(() => {
         if (cancelledFiles.current.has(fileId)) return
+        touchPullWatch(fileId)
         askOrder.current.set(fileId, [userId])
         transport.sendFrame(newFrame('chat.file.request', { file_id: fileId }, { user: userId }))
       }, 2000)
       return
     }
     busyRetry.current.delete(fileId)
+    clearPullWatch(fileId)
     releaseTransfer(fileId)
     setDownloading((cur) => (cur === fileId ? null : cur))
     setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
@@ -1977,11 +2065,13 @@ export function ChatApp() {
     const name = source instanceof File ? source.name || known?.name || 'file' : known?.name || 'file'
     const mime = source instanceof Blob ? source.type || known?.mime || 'application/octet-stream' : known?.mime || 'application/octet-stream'
     const size = source.size
-    const cancelled = () => cancelledFiles.current.has(fileId) || channel.readyState !== 'open'
+    // Only a real cancel is an abort; a channel that closes mid-stream is a failure the user must hear about.
+    const cancelled = () => cancelledFiles.current.has(fileId)
     let sent = 0
     const emit = async (chunk: Uint8Array, plainBytes: number) => {
       await Transport.drain(channel)
       if (cancelled()) throw new DOMException('aborted', 'AbortError')
+      if (channel.readyState !== 'open') throw new Error('peer_closed')
       channel.send(chunk as unknown as ArrayBufferView<ArrayBuffer>)
       sent += plainBytes
       bumpTransfer('send', sent, size, fileId, userId)
@@ -2005,31 +2095,112 @@ export function ChatApp() {
       channel.send(JSON.stringify({ t: 'file.end', file_id: fileId }))
       bumpTransfer('send', size, size, fileId, userId)
     } catch (err) {
-      if (channel.readyState === 'open') channel.send(JSON.stringify({ t: 'file.abort', file_id: fileId }))
-      if (!(err instanceof DOMException && err.name === 'AbortError')) toast(explain(err))
+      const userCancel = err instanceof DOMException && err.name === 'AbortError'
+      const open = channel.readyState === 'open'
+      if (open) {
+        try {
+          channel.send(JSON.stringify({ t: 'file.abort', file_id: fileId }))
+        } catch {
+          // the channel went away between the check and the send
+        }
+      } else if (!userCancel && userId) {
+        // The data channel dropped mid-stream: tell the receiver over signaling so it does not wait for bytes.
+        transport.sendFrame(newFrame('chat.file.cancel', { file_id: fileId, reason: 'interrupted' }, { user: userId }))
+      }
+      if (!userCancel) toast(open ? explainTransfer(err) : t('transferInterrupted'))
     }
     window.setTimeout(() => {
       setTransfer((cur) => (cur?.fileId === fileId && cur.peerId === userId ? null : cur))
     }, 600)
   }
 
+  /** Start (or keep) the receive watchdog for a peer file this device is waiting on. */
+  function watchPull(fileId: string) {
+    const cur = pullWatch.current
+    if (cur?.fileId === fileId) {
+      cur.last = Date.now()
+      return
+    }
+    if (cur) window.clearInterval(cur.timer)
+    const timer = window.setInterval(() => {
+      const watch = pullWatch.current
+      if (!watch || watch.timer !== timer) {
+        window.clearInterval(timer)
+        return
+      }
+      if (Date.now() - watch.last >= PULL_STALL_MS) stallPull(watch.fileId)
+    }, 5000)
+    pullWatch.current = { fileId, last: Date.now(), timer }
+  }
+
+  function touchPullWatch(fileId: string) {
+    if (pullWatch.current?.fileId === fileId) pullWatch.current.last = Date.now()
+  }
+
+  function clearPullWatch(fileId?: string) {
+    const cur = pullWatch.current
+    if (!cur || (fileId && cur.fileId !== fileId)) return
+    window.clearInterval(cur.timer)
+    pullWatch.current = null
+  }
+
+  /** Nothing arrived for too long: free the transfer slot, tell the holder to stop, and say so. */
+  function stallPull(fileId: string) {
+    clearPullWatch(fileId)
+    const holder = pull.current?.fileId === fileId ? pull.current.from : askOrder.current.get(fileId)?.[0] ?? ''
+    askOrder.current.delete(fileId)
+    busyRetry.current.delete(fileId)
+    // A late file.start for a pull we gave up on must not bring the bar back; a new tap clears this.
+    cancelledFiles.current.add(fileId)
+    if (holder) transport.sendFrame(newFrame('chat.file.cancel', { file_id: fileId }, { user: holder }))
+    if (pull.current?.fileId === fileId) void abortPull(fileId, false)
+    else {
+      releaseTransfer(fileId)
+      if (wantSave.current === fileId) wantSave.current = ''
+      if (wantView.current === fileId) wantView.current = ''
+      setDownloading((cur) => (cur === fileId ? null : cur))
+      setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
+    }
+    toast(tRef.current('transferStalled'))
+  }
+
   function beginPull(start: Omit<Pull, 'received' | 'parts' | 'queue' | 'decrypt' | 'sink' | 'failed'>) {
     if (cancelledFiles.current.has(start.fileId)) return
-    if (pull.current && pull.current.fileId !== start.fileId) void abortPull(pull.current.fileId, false)
+    const old = pull.current
+    let settled: Promise<unknown> = Promise.resolve()
+    if (old) {
+      // A restart of the same file, or a different file, must not leak the previous slot's buffers and OPFS writer.
+      pull.current = null
+      old.failed = true
+      old.parts = []
+      settled = old.queue.catch(() => undefined).then(() => old.sink?.abort()).catch(() => undefined)
+      if (old.fileId !== start.fileId) {
+        releaseTransfer(old.fileId)
+        if (wantSave.current === old.fileId) wantSave.current = ''
+        if (wantView.current === old.fileId) wantView.current = ''
+        setDownloading((cur) => (cur === old.fileId ? null : cur))
+        setTransfer((cur) => (cur?.fileId === old.fileId ? null : cur))
+      }
+    }
     claimTransfer(start.fileId)
+    busyRetry.current.delete(start.fileId)
     const slot: Pull = { ...start, received: 0, parts: [], queue: Promise.resolve(), decrypt: null, sink: null, failed: false }
     slot.queue = (async () => {
+      // The old writer for the same file id must be gone before a new one opens it.
+      await settled
       slot.decrypt = await pullDecryptor(slot.meta)
       slot.sink = await beginCipherFile(slot.fileId, slot.size).catch(() => null)
     })()
     pull.current = slot
+    watchPull(start.fileId)
     setDownloading(start.fileId)
-    bumpTransfer('receive', 0, start.size, start.fileId, start.from)
+    bumpTransfer('receive', 0, start.size, start.fileId, start.from, true)
   }
 
   function pushPull(bytes: Uint8Array) {
     const slot = pull.current
     if (!slot || slot.failed) return
+    touchPullWatch(slot.fileId)
     slot.queue = slot.queue.then(async () => {
       if (slot.failed || cancelledFiles.current.has(slot.fileId) || !slot.decrypt) return
       const plain = slot.decrypt(bytes)
@@ -2046,6 +2217,8 @@ export function ChatApp() {
     const slot = pull.current
     if (!slot || slot.fileId !== fileId) return
     pull.current = null
+    clearPullWatch(fileId)
+    askOrder.current.delete(fileId)
     await slot.queue
     if (slot.failed || cancelledFiles.current.has(fileId)) {
       await slot.sink?.abort()
@@ -2088,6 +2261,7 @@ export function ChatApp() {
     const slot = pull.current
     if (!slot || (fileId && slot.fileId !== fileId)) return
     pull.current = null
+    clearPullWatch(slot.fileId)
     slot.failed = true
     await slot.queue.catch(() => undefined)
     await slot.sink?.abort()
@@ -2193,7 +2367,7 @@ export function ChatApp() {
     const recipients = recipientsOf(activeConv).filter((id) => id !== me)
     if (!recipients.length) return false
     const canDirect = recipients.some((id) => online.has(id))
-    const canServer = pending.some((file) => file.size <= MAILBOX_MAX_FILE_BYTES)
+    const canServer = pending.some((file) => fitsCloud(file.size))
     return canDirect && canServer
   })()
   useEffect(() => {
@@ -3233,13 +3407,25 @@ function statusLabel(translate: (key: string) => string, status: string, route?:
 const STAGE_MEMORY_BYTES = 32 * 1024 * 1024
 
 /** Encrypt once into a dedicated sync-temp blob used for the upload, then optionally keep a durable copy. */
-async function stageCipher(fileId: string, file: File, userId: string): Promise<{ meta: FileCipherMeta; body: Blob; stored: boolean; removed: string[]; cleanup?: () => Promise<void> }> {
+type StageHooks = { cancelled?: () => boolean; onProgress?: (cipherBytes: number) => void }
+
+async function stageCipher(fileId: string, file: File, userId: string, hooks: StageHooks = {}): Promise<{ meta: FileCipherMeta; body: Blob; stored: boolean; removed: string[]; cleanup?: () => Promise<void> }> {
+  const check = () => {
+    if (hooks.cancelled?.()) throw new DOMException('aborted', 'AbortError')
+  }
   const enc = await createEncryptor(file.size)
   if (opfsAvailable() && userId) {
     const writer = await openWriter(userId, 'sync-temp', fileId).catch(() => null)
     if (writer) {
       try {
-        for await (const { part, final } of blobParts(file)) await writer.write(enc.push(part, final))
+        let done = 0
+        for await (const { part, final } of blobParts(file)) {
+          check()
+          const chunk = enc.push(part, final)
+          await writer.write(chunk)
+          done += chunk.byteLength
+          hooks.onProgress?.(done)
+        }
         await writer.close()
       } catch (err) {
         await writer.abort()
@@ -3254,6 +3440,7 @@ async function stageCipher(fileId: string, file: File, userId: string): Promise<
           try {
             const step = 4 * 1024 * 1024
             for (let offset = 0; offset < body.size; offset += step) {
+              check()
               await sink.write(new Uint8Array(await body.slice(offset, Math.min(body.size, offset + step)).arrayBuffer()))
             }
             removed = await sink.finish(enc.meta)
@@ -3275,7 +3462,14 @@ async function stageCipher(fileId: string, file: File, userId: string): Promise<
   if (file.size > STAGE_MEMORY_BYTES) throw new Error('stage')
   const chunks: Uint8Array[] = []
   const mem = await createEncryptor(file.size)
-  for await (const { part, final } of blobParts(file)) chunks.push(mem.push(part, final))
+  let done = 0
+  for await (const { part, final } of blobParts(file)) {
+    check()
+    const chunk = mem.push(part, final)
+    chunks.push(chunk)
+    done += chunk.byteLength
+    hooks.onProgress?.(done)
+  }
   return { meta: mem.meta, body: new Blob(chunks as BlobPart[]), stored: false, removed: [] }
 }
 

@@ -6,6 +6,10 @@ import { getIdentity, sealRow } from './vault'
 
 type Handler = (frame: SignalFrame) => void
 
+/** File-control frames queued while the socket reconnects are only worth sending this soon after. */
+const BACKLOG_TTL = 15_000
+const BACKLOG_MAX = 64
+
 export class Transport {
   private ws: WebSocket | null = null
   private peers = new Map<string, RTCPeerConnection>()
@@ -17,6 +21,8 @@ export class Transport {
   private stopped = false
   private reconnectTimer = 0
   private localUser = ''
+  /** chat.file.* frames that tried to go out while the socket was not open. Flushed on open. */
+  private backlog: { frame: SignalFrame; at: number }[] = []
   relayOnly = false
   /** When set, a message is handed to an open data channel and never stored in the mailbox. */
   directOnly = false
@@ -40,6 +46,7 @@ export class Transport {
     this.status = 'connecting'
     ws.onopen = () => {
       this.status = 'online'
+      this.flushBacklog(ws)
       this.emit({ v: 1, t: 'session.ready', id: 'local', p: {} })
     }
     ws.onclose = () => {
@@ -75,6 +82,7 @@ export class Transport {
     this.reconnectTimer = 0
     this.ws?.close()
     this.ws = null
+    this.backlog = []
     for (const peer of this.peers.values()) peer.close()
     this.peers.clear()
     this.channels.clear()
@@ -93,9 +101,38 @@ export class Transport {
     return true
   }
 
+  /** Send a signaling frame. Returns false when it could not go out now (file-control frames are queued for the reconnect). */
   sendFrame(frame: SignalFrame) {
-    if (frame.t === 'chat.file.chunk' || 'data' in frame.p) return
-    this.ws?.send(JSON.stringify(frame))
+    if (frame.t === 'chat.file.chunk' || 'data' in frame.p) return false
+    const ws = this.ws
+    // Sending on a CONNECTING socket throws InvalidStateError; on CLOSING/CLOSED it is silently lost.
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.send(JSON.stringify(frame))
+        return true
+      } catch {
+        // fall through to the backlog
+      }
+    }
+    if (!this.stopped && frame.t.startsWith('chat.file.')) {
+      this.backlog.push({ frame, at: Date.now() })
+      if (this.backlog.length > BACKLOG_MAX) this.backlog.shift()
+    }
+    return false
+  }
+
+  private flushBacklog(ws: WebSocket) {
+    const now = Date.now()
+    const queued = this.backlog
+    this.backlog = []
+    for (const { frame, at } of queued) {
+      if (now - at > BACKLOG_TTL) continue
+      try {
+        ws.send(JSON.stringify(frame))
+      } catch {
+        return
+      }
+    }
   }
 
   buffered() {
