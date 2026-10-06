@@ -11,13 +11,13 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const buttonClass = {
-  base: 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+  base: 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm text-center leading-tight font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
   primary: 'bg-accent text-accent-fg shadow-float hover:-translate-y-0.5 hover:shadow-md',
   ghost: 'bg-transparent text-fg hover:-translate-y-0.5 hover:bg-surface-2',
   outline: 'border border-line bg-surface-1 text-fg hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-sm',
   danger: 'bg-danger text-white hover:-translate-y-0.5 hover:shadow-md',
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
+  sm: 'min-h-8 h-auto px-3 py-1.5 text-sm',
+  md: 'min-h-10 h-auto px-4 py-2 text-sm',
   icon: 'size-10',
 }
 

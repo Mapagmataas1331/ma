@@ -35,7 +35,7 @@ import { activeDatabase, openAccount } from '../lib/db'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
 import { blobParts, ciphertextSize, createEncryptor, decryptParts, FILE_CHUNK_BYTES, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { replayOutbox } from '../lib/outbox'
-import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed } from '../lib/prefs'
+import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed, type ChatPref } from '../lib/prefs'
 import { enablePush, notifyHere, notifyPrefOn, setAppBadge, setNotifyPref } from '../lib/push'
 import { openNamed, openWriter, opfsAvailable, removeNamed } from '../lib/opfs'
 import { resetChatRuntime } from '../lib/runtime'
@@ -103,8 +103,6 @@ type LocalMessage = {
   route?: 'direct' | 'server' | 'mixed'
   receipts?: { delivered?: { userId: string; at: string }[]; read?: { userId: string; at: string }[] }
 }
-
-type ChatPref = { pinned?: boolean; muted?: boolean }
 
 /** Incoming P2P file: chunks are decrypted as they arrive and, when there is room, written straight to OPFS. */
 type Pull = {
@@ -190,6 +188,7 @@ export function ChatApp() {
   const [pairQr, setPairQr] = useState('')
   const [pairFingerprint, setPairFingerprint] = useState('')
   const [askTransfer, setAskTransfer] = useState(false)
+  const [identityOutOfSync, setIdentityOutOfSync] = useState(false)
   const [vaultDialog, setVaultDialog] = useState(false)
   const [currentVaultPassword, setCurrentVaultPassword] = useState('')
   const [nextVaultPassword, setNextVaultPassword] = useState('')
@@ -751,17 +750,31 @@ export function ChatApp() {
       if (!skip) throw err
     }
     if (!force && existing?.x25519 && existing.x25519 !== pubs.x25519) {
-      if (!quiet) toast(t('identityMismatch'))
+      setIdentityOutOfSync(true)
+      if (!quiet) toast(t('identityMismatch'), { duration: 10_000 })
       return
     }
-    if (!existing?.x25519 || existing.x25519 !== pubs.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
-  
+    if (!existing?.x25519 || existing.x25519 !== pubs.x25519) {
+      await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
+    }
+    setIdentityOutOfSync(false)
   }, [t])
+
+  async function reclaimIdentityKey() {
+    if (!window.confirm(t('useThisDeviceKeyConfirm'))) return
+    try {
+      await publishIdentityIfEmpty(true)
+      toast(t('useThisDeviceKeyDone'))
+    } catch (err) {
+      toast(explain(err))
+    }
+  }
 
   const identityPublished = useRef(false)
   useEffect(() => {
     if (!unlocked) {
       identityPublished.current = false
+      setIdentityOutOfSync(false)
       return
     }
     if (identityPublished.current) return
@@ -2496,8 +2509,15 @@ export function ChatApp() {
   function togglePref(conversationId: string, key: 'pinned' | 'muted') {
     const current = prefs[conversationId] ?? {}
     const conv = conversations.find((c) => c.id === conversationId)
-    const nextValue = key === 'pinned' ? !isPinnedId(conversationId, conv?.peer_id, conv?.kind) : !current[key]
-    savePrefs({ ...prefs, [conversationId]: { ...current, [key]: nextValue } })
+    if (key === 'pinned') {
+      const nextPinned = !isPinnedId(conversationId, conv?.peer_id, conv?.kind)
+      const next: ChatPref = { ...current, pinned: nextPinned }
+      if (nextPinned) next.pinnedAt = Date.now()
+      else delete next.pinnedAt
+      savePrefs({ ...prefs, [conversationId]: next })
+      return
+    }
+    savePrefs({ ...prefs, [conversationId]: { ...current, muted: !current.muted } })
   }
 
   /** Saved messages stay pinned unless the user explicitly unpins. */
@@ -2577,8 +2597,15 @@ export function ChatApp() {
 
   const statusMessage = statusFor ? messages.find((m) => m.id === statusFor.id) ?? statusFor : null
   const orderedConversations = [...conversations].sort((a, b) => {
-    const pin = Number(isPinnedConv(b)) - Number(isPinnedConv(a))
-    if (pin) return pin
+    const aPinned = isPinnedConv(a)
+    const bPinned = isPinnedConv(b)
+    if (aPinned !== bPinned) return aPinned ? -1 : 1
+    if (aPinned && bPinned) {
+      const aAt = prefs[a.id]?.pinnedAt ?? 0
+      const bAt = prefs[b.id]?.pinnedAt ?? 0
+      if (aAt !== bAt) return aAt - bAt
+      return a.id.localeCompare(b.id)
+    }
     return lastAt(messages, b.id) - lastAt(messages, a.id)
   })
   const groupInfoConv = conversations.find((c) => c.id === groupInfoFor && c.kind === 'group') ?? null
@@ -2823,6 +2850,11 @@ export function ChatApp() {
       </SettingsSection>
       <SettingsSection title={t('devices')} description={t('devicesLead')}>
         <DeviceList enabled={mode === 'app'} userId={session.user?.id || ''} />
+        {identityOutOfSync ? (
+          <SettingsRow label={t('useThisDeviceKey')} hint={t('useThisDeviceKeyHint')}>
+            <Button variant="outline" onClick={() => void reclaimIdentityKey()}>{t('useThisDeviceKey')}</Button>
+          </SettingsRow>
+        ) : null}
         <SettingsRow label={t('linkDevice')} hint={t('linkDeviceHint')}>
           <Button variant="outline" onClick={() => void startPair().catch((err) => toast(explain(err)))}>{t('linkDevice')}</Button>
         </SettingsRow>
@@ -2978,7 +3010,7 @@ export function ChatApp() {
     />
     <div className="relative grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)]">
       <SkyBackdrop scene={activeConv ? 'conversation' : 'chat'} />
-      <aside className={`${active ? 'hidden' : 'flex'} relative z-[1] min-h-0 min-w-0 flex-col border-line bg-bg/80 backdrop-blur-md md:flex md:border-r`}>
+      <aside className={`${active ? 'hidden' : 'flex'} relative z-[1] min-h-0 min-w-0 flex-col border-line bg-transparent backdrop-blur-sm md:flex md:border-r`}>
         <form onSubmit={addContact} className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
           <Input placeholder={t('friendUsername')} aria-label={t('friendUsername')} autoComplete="off" value={lookup} onChange={(e) => setLookup(e.target.value)} />
           <div className="grid grid-cols-2 gap-2">
@@ -3062,7 +3094,7 @@ export function ChatApp() {
       <section className={`${active ? 'flex' : 'hidden'} relative z-[1] min-h-0 min-w-0 flex-col md:flex`}>
         {activeConv ? (
           <>
-            <div className="flex h-14 shrink-0 items-center gap-1 border-b border-line bg-bg/75 px-2 backdrop-blur-md">
+            <div className="flex h-14 shrink-0 items-center gap-1 border-b border-line bg-transparent px-2 backdrop-blur-sm">
               <IconButton label={t('back')} className="md:hidden" onClick={() => setActive(null)}>
                 <BackIcon />
               </IconButton>
@@ -3176,7 +3208,7 @@ export function ChatApp() {
             </div>
             {transfer ? <div className="shrink-0 px-3 pb-2"><TransferProgress title={transfer.title} loaded={transfer.loaded} total={transfer.total} startedAt={transfer.startedAt} onCancel={stopTransfer} /></div> : null}
             <form
-              className="flex shrink-0 flex-col gap-2 border-t border-line bg-bg/75 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md"
+              className="flex shrink-0 flex-col gap-2 border-t border-line bg-transparent p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-sm"
               onSubmit={(e) => {
                 e.preventDefault()
                 void send()

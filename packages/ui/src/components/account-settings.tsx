@@ -267,9 +267,10 @@ export function AccountSettings() {
             <p className="text-sm text-muted">{t('noInvitesYet')}</p>
           )}
         </div>
-        <SettingsRow label={t('signOut')}>
+        <div className="flex justify-end px-4 py-3">
           <Button
             variant="ghost"
+            className="text-danger hover:bg-danger/10 hover:text-danger"
             onClick={() => {
               void authApi.logout().then(() => {
                 setCode('')
@@ -279,7 +280,7 @@ export function AccountSettings() {
           >
             {t('signOut')}
           </Button>
-        </SettingsRow>
+        </div>
       </SettingsSection>
       <div ref={setSlot} />
       <p className="px-1 pb-8 text-sm leading-relaxed text-muted">

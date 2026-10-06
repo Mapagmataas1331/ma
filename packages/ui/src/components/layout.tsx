@@ -39,7 +39,7 @@ export function PageHeader({ eyebrow, title, lead }: { eyebrow?: string; title: 
   return (
     <header className="mb-8">
       {eyebrow ? <p className="mb-2 text-xs tracking-[0.18em] text-muted uppercase">{eyebrow}</p> : null}
-      <h1 className="text-[clamp(1.75rem,7vw,3rem)] font-semibold tracking-tight break-words">{title}</h1>
+      <h1 className="text-[clamp(1.75rem,7vw,3rem)] leading-[1.15] font-semibold tracking-tight break-words">{title}</h1>
       {lead ? <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">{lead}</p> : null}
     </header>
   )

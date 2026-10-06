@@ -1,6 +1,6 @@
 import { accountKey } from './db'
 
-export type ChatPref = { pinned?: boolean; muted?: boolean }
+export type ChatPref = { pinned?: boolean; pinnedAt?: number; muted?: boolean }
 
 export function loadPrefs(userId: string): Record<string, ChatPref> {
   if (!userId) return {}
