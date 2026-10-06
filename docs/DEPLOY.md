@@ -40,7 +40,7 @@ Install `infra/oracle/nginx-api.conf` (and `nginx-upgrade.conf` in `http {}`) in
 
 CORS for credentialed browser calls is an allowlist in `CORS_ORIGINS` (see `api.env.example`): `https://ma.cyou`, `https://me.ma.cyou`, `https://projects.ma.cyou`, `https://chat.ma.cyou`. Do not put `Access-Control-*` wildcards in nginx.
 
-Security headers are set at the nginx edge and again in Go (`httpx.SecurityHeaders`). HSTS is only appropriate on HTTPS: enable the commented `:443` block in `nginx-api.conf` after certificates exist, e.g. `sudo certbot certonly --webroot -w /var/www/html -d api.ma.cyou`, then `sudo nginx -t && sudo systemctl reload nginx`. Go also emits HSTS when `X-Forwarded-Proto: https` (set from `$scheme` on the TLS vhost).
+Live HTTPS is already wired in `nginx-api.conf`: `:80` serves ACME HTTP-01 under `/.well-known/acme-challenge/` and redirects everything else to HTTPS; the `:443` vhost terminates TLS with certbot-managed certs, sets HSTS and the other security headers, and uses `proxy_hide_header` so Go's duplicate copies (`httpx.SecurityHeaders`) are not emitted twice. First issue (or re-issue) with `sudo certbot certonly --webroot -w /var/www/html -d api.ma.cyou`, then `sudo nginx -t && sudo systemctl reload nginx`. Go still sees `X-Forwarded-Proto: https` from `$scheme` on the TLS vhost.
 
 WebSocket upgrades for chat use `$connection_upgrade` from `nginx-upgrade.conf` and long proxy timeouts; leave those intact when editing the vhost.
 
