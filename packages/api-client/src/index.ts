@@ -18,6 +18,22 @@ export function apiOrigin() {
   return 'https://api.ma.cyou'
 }
 
+/** HTTP/2 responses carry no reason phrase, so never fall back to a blank statusText. */
+function statusMessage(status: number, statusText: string, text = '') {
+  if (statusText) return statusText
+  const snippet = text.trim()
+  if (snippet && !snippet.startsWith('<')) return snippet.slice(0, 180)
+  return status ? `HTTP ${status}` : 'network'
+}
+
+/** Error code for a response without a JSON error body (proxy pages, empty bodies). */
+function statusCode(status: number) {
+  if (status === 413) return 'too_large'
+  if (status === 429) return 'rate_limited'
+  if (status === 507) return 'server_overloaded'
+  return 'http_error'
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
   headers.set('X-Requested-With', 'ma')
@@ -32,12 +48,12 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       data = JSON.parse(text)
     } catch {
-      throw new ApiError(res.status, 'bad_response', res.ok ? 'The server sent a response that was not JSON.' : text.slice(0, 180) || res.statusText)
+      throw new ApiError(res.status, res.ok ? 'bad_response' : statusCode(res.status), res.ok ? 'The server sent a response that was not JSON.' : statusMessage(res.status, res.statusText, text))
     }
   }
   if (!res.ok) {
     const parsed = apiErrorSchema.safeParse(data)
-    throw new ApiError(res.status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : res.statusText, parsed.success ? parsed.data.details : undefined)
+    throw new ApiError(res.status, parsed.success ? parsed.data.code : statusCode(res.status), parsed.success ? parsed.data.message || statusMessage(res.status, res.statusText) : statusMessage(res.status, res.statusText), parsed.success ? parsed.data.details : undefined)
   }
   return data as T
 }
@@ -56,26 +72,74 @@ function readApiError(status: number, text: string, statusText: string): ApiErro
     }
   }
   const parsed = apiErrorSchema.safeParse(data)
-  return new ApiError(status, parsed.success ? parsed.data.code : 'http_error', parsed.success ? parsed.data.message : statusText, parsed.success ? parsed.data.details : undefined)
+  return new ApiError(status, parsed.success ? parsed.data.code : statusCode(status), parsed.success ? parsed.data.message || statusMessage(status, statusText) : statusMessage(status, statusText, text), parsed.success ? parsed.data.details : undefined)
 }
 
-export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal, expectedTotal = 0): Promise<T> {
+export type TransferOptions = {
+  /** Abort with ApiError code `timeout` when no bytes move for this long. 0 turns the check off. */
+  stallMs?: number
+}
+
+const DEFAULT_STALL_MS = 60_000
+
+/** Aborts an XHR that stops making progress. `touch(factor)` stretches the window, e.g. while the server finishes a large upload. */
+function stallWatch(xhr: XMLHttpRequest, stallMs: number) {
+  let last = Date.now()
+  let factor = 1
+  let timer: ReturnType<typeof setInterval> | undefined
+  const state = {
+    stalled: false,
+    touch: (stretch = 1) => {
+      last = Date.now()
+      factor = stretch
+    },
+    stop: () => {
+      if (timer !== undefined) clearInterval(timer)
+      timer = undefined
+    },
+  }
+  if (stallMs > 0) {
+    timer = setInterval(() => {
+      if (Date.now() - last < stallMs * factor) return
+      state.stalled = true
+      state.stop()
+      xhr.abort()
+    }, Math.min(5000, stallMs))
+  }
+  return state
+}
+
+const stallError = () => new ApiError(0, 'timeout', 'timeout')
+
+export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal, expectedTotal = 0, options: TransferOptions = {}): Promise<T> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('aborted', 'AbortError'))
+      return
+    }
     const xhr = new XMLHttpRequest()
+    const watch = stallWatch(xhr, options.stallMs ?? DEFAULT_STALL_MS)
     const abort = () => xhr.abort()
-    const done = () => signal?.removeEventListener('abort', abort)
-    signal?.addEventListener('abort', abort)
+    const done = () => {
+      watch.stop()
+      signal?.removeEventListener('abort', abort)
+    }
+    signal?.addEventListener('abort', abort, { once: true })
     xhr.open('POST', `${apiOrigin()}${path}`)
     xhr.withCredentials = true
     xhr.setRequestHeader('X-Requested-With', 'ma')
     xhr.upload.onprogress = (event) => {
+      watch.touch()
       if (signal?.aborted) return
       const total = event.lengthComputable && event.total > 0 ? event.total : expectedTotal
       if (total > 0 || event.loaded > 0) onProgress?.(event.loaded, total || event.loaded)
     }
+    // Body fully sent: the server still has to store it, so give the response more time.
+    xhr.upload.onload = () => watch.touch(5)
+    xhr.onprogress = () => watch.touch(5)
     xhr.onabort = () => {
       done()
-      reject(new DOMException('aborted', 'AbortError'))
+      reject(watch.stalled ? stallError() : new DOMException('aborted', 'AbortError'))
     }
     xhr.onload = () => {
       done()
@@ -101,24 +165,35 @@ export function apiUpload<T>(path: string, body: FormData, onProgress?: (loaded:
   })
 }
 
-export function apiBlobProgress(path: string, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal): Promise<Blob> {
+export function apiBlobProgress(path: string, onProgress?: (loaded: number, total: number) => void, signal?: AbortSignal, options: TransferOptions = {}): Promise<Blob> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('aborted', 'AbortError'))
+      return
+    }
     const xhr = new XMLHttpRequest()
+    const watch = stallWatch(xhr, options.stallMs ?? DEFAULT_STALL_MS)
     const abort = () => xhr.abort()
-    signal?.addEventListener('abort', abort)
+    const done = () => {
+      watch.stop()
+      signal?.removeEventListener('abort', abort)
+    }
+    signal?.addEventListener('abort', abort, { once: true })
     xhr.open('GET', `${apiOrigin()}${path}`)
     xhr.withCredentials = true
     xhr.responseType = 'blob'
     xhr.setRequestHeader('X-Requested-With', 'ma')
     xhr.onabort = () => {
-      signal?.removeEventListener('abort', abort)
-      reject(new DOMException('aborted', 'AbortError'))
+      done()
+      reject(watch.stalled ? stallError() : new DOMException('aborted', 'AbortError'))
     }
     xhr.onprogress = (event) => {
+      watch.touch()
       if (signal?.aborted || !event.lengthComputable) return
       onProgress?.(event.loaded, event.total)
     }
     xhr.onload = () => {
+      done()
       if (xhr.status < 200 || xhr.status >= 300) {
         const blob = xhr.response instanceof Blob ? xhr.response : null
         if (!blob) {
@@ -130,7 +205,10 @@ export function apiBlobProgress(path: string, onProgress?: (loaded: number, tota
       }
       resolve(xhr.response as Blob)
     }
-    xhr.onerror = () => reject(new ApiError(0, 'network', 'network'))
+    xhr.onerror = () => {
+      done()
+      reject(new ApiError(0, 'network', 'network'))
+    }
     xhr.send()
   })
 }

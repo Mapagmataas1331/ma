@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1157,7 +1158,16 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, a.Cfg.MaxFileBytes+1<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+		var tooBig *http.MaxBytesError
+		switch {
+		case errors.As(err, &tooBig) || errors.Is(err, multipart.ErrMessageTooLarge):
+			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+		case r.Context().Err() != nil || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF):
+			// The client went away or the body was cut short: not a size problem.
+			httpx.WriteError(w, 400, "upload_incomplete", "the upload ended before the whole file arrived")
+		default:
+			httpx.WriteError(w, 400, "bad_request", "multipart")
+		}
 		return
 	}
 	file, hdr, err := r.FormFile("file")
