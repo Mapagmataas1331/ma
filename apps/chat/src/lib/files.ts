@@ -59,21 +59,6 @@ export async function encryptStream(file: Blob, onChunk: (chunk: Uint8Array, ind
   return enc.meta
 }
 
-/** Encrypt into one in-memory buffer. Used for mailbox uploads, which are capped at a small size. */
-export async function encryptFile(file: Blob) {
-  const chunks: Uint8Array[] = []
-  const meta = await encryptStream(file, (chunk) => {
-    chunks.push(chunk)
-  })
-  const body = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0))
-  let cursor = 0
-  for (const chunk of chunks) {
-    body.set(chunk, cursor)
-    cursor += chunk.length
-  }
-  return { bytes: body, ...meta, alg: 'secretstream' as const }
-}
-
 /** Decrypt a ciphertext blob using the recorded chunk lengths. Plaintext parts stay as separate buffers. */
 export async function decryptParts(cipher: Blob, meta: FileCipherMeta) {
   await ready()
@@ -89,17 +74,6 @@ export async function decryptParts(cipher: Blob, meta: FileCipherMeta) {
     offset += length
   }
   return parts
-}
-
-export async function decryptFile(bytes: Uint8Array, key: string, header: string, lengths: number[]) {
-  const parts = await decryptParts(new Blob([bytes as BlobPart]), { key, header, lengths })
-  const body = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
-  let cursor = 0
-  for (const part of parts) {
-    body.set(part, cursor)
-    cursor += part.length
-  }
-  return body
 }
 
 /** Incremental decryptor for chunks that arrive one data-channel message at a time. */
