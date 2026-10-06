@@ -297,6 +297,7 @@
   "transferCancelledBySender": "The sender cancelled the transfer.",
   "transferStalled": "The transfer stopped responding. Try again.",
   "transferInterrupted": "The connection dropped during the transfer. Try again.",
+  "uploadRejected": "The server could not accept that upload. Try again.",
   "requestFailedStatus": "The request failed (error {status}). Try again.",
   "cancel": "Cancel",
   "storageUsed": "Used",

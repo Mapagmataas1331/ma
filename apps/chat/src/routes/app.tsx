@@ -1356,11 +1356,12 @@ export function ChatApp() {
           void refreshUsage()
         }
         const form = new FormData()
-        form.set('file', staged.body, `${fileId}.bin`)
+        // Metadata before the file part (server streams the ciphertext last into MailboxDir).
         form.set('conversation_id', conv.id)
         form.set('file_id', fileId)
         form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...staged.meta }))))
         for (const recipientId of cloudTargets) form.append('recipient_user_id', recipientId)
+        form.set('file', staged.body, `${fileId}.bin`)
         const uploadTotal = staged.body.size || prepareTotal
         // Fresh start time, so the upload speed is not diluted by the time spent encrypting.
         bumpTransfer('upload', 0, uploadTotal, fileId, cloudTargets[0] || '', true)
@@ -1568,6 +1569,7 @@ export function ChatApp() {
       if (err.code === 'network') return t('networkError')
       if (err.code === 'timeout') return t('transferStalled')
       if (err.code === 'upload_incomplete') return t('transferInterrupted')
+      if (err.code === 'bad_request' && /multipart|could not read the upload|expected a multipart/i.test(err.message)) return t('uploadRejected')
       if (err.code === 'http_error') return t('requestFailedStatus', { status: err.status || '?' })
     }
     if (err instanceof Error) {

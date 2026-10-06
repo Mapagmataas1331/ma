@@ -12,6 +12,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -1147,6 +1148,40 @@ func (a *App) ackMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func firstFormValue(values map[string][]string, key string) string {
+	if vs := values[key]; len(vs) > 0 {
+		return vs[0]
+	}
+	return ""
+}
+
+func writeUploadParseError(w http.ResponseWriter, r *http.Request, err error) {
+	var tooBig *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooBig) || errors.Is(err, multipart.ErrMessageTooLarge):
+		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+	case uploadAborted(r, err):
+		httpx.WriteError(w, 400, "upload_incomplete", "the upload ended before the whole file arrived")
+	default:
+		httpx.WriteError(w, 400, "bad_request", "could not read the upload")
+	}
+}
+
+func uploadAborted(r *http.Request, err error) bool {
+	if err == nil {
+		return false
+	}
+	if r.Context().Err() != nil || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	var op *net.OpError
+	if errors.As(err, &op) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "forcibly closed") || strings.Contains(msg, "connection reset") || strings.Contains(msg, "broken pipe") || strings.Contains(msg, "wsarecv")
+}
+
 func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	p, ok := a.requireChat(w, r)
 	if !ok {
@@ -1156,40 +1191,120 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 		return
 	}
+	// Cap the whole request (file + multipart framing). Stream the file part straight into
+	// MailboxDir; do not ParseMultipartForm(32<<20), which spills to os.TempDir and then
+	// copies again. That stall/fail around 32 MiB produced the raw "multipart" toast.
 	r.Body = http.MaxBytesReader(w, r.Body, a.Cfg.MaxFileBytes+1<<20)
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		var tooBig *http.MaxBytesError
-		switch {
-		case errors.As(err, &tooBig) || errors.Is(err, multipart.ErrMessageTooLarge):
-			httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
-		case r.Context().Err() != nil || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF):
-			// The client went away or the body was cut short: not a size problem.
-			httpx.WriteError(w, 400, "upload_incomplete", "the upload ended before the whole file arrived")
-		default:
-			httpx.WriteError(w, 400, "bad_request", "multipart")
-		}
-		return
-	}
-	file, hdr, err := r.FormFile("file")
+	mr, err := r.MultipartReader()
 	if err != nil {
-		httpx.WriteError(w, 400, "bad_request", "file")
+		httpx.WriteError(w, 400, "bad_request", "expected a multipart file upload")
 		return
 	}
-	defer file.Close()
-	sizeHint := hdr.Size
-	if sizeHint < 0 {
-		sizeHint = 0
-	}
-	if sizeHint > a.Cfg.MaxFileBytes {
-		httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
+
+	const maxFieldBytes = 1 << 20
+	values := map[string][]string{}
+	dir := filepath.Join(a.Cfg.MailboxDir, time.Now().Format("2006"), time.Now().Format("01"))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		httpx.WriteError(w, 500, "internal", "disk")
 		return
 	}
-	fileID, err := uuid.Parse(r.FormValue("file_id"))
+
+	var (
+		path    string
+		size    int64
+		digest  []byte
+		kept    bool
+		sawFile bool
+		copyBuf = make([]byte, 1<<20) // 1 MiB; default io.Copy is 32 KiB and throttles large localhost uploads
+	)
+	defer func() {
+		if path != "" && !kept {
+			_ = os.Remove(path)
+		}
+	}()
+
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			writeUploadParseError(w, r, err)
+			return
+		}
+		name := part.FormName()
+		if name == "" {
+			_ = part.Close()
+			continue
+		}
+		isFile := name == "file" || part.FileName() != ""
+		if isFile {
+			if sawFile {
+				_ = part.Close()
+				httpx.WriteError(w, 400, "bad_request", "only one file part is allowed")
+				return
+			}
+			sawFile = true
+			// Temporary name until file_id is known (may arrive after the file part).
+			path = filepath.Join(dir, "up-"+uuid.NewString())
+			out, err := os.Create(path)
+			if err != nil {
+				_ = part.Close()
+				httpx.WriteError(w, 500, "internal", "disk")
+				return
+			}
+			h := sha256.New()
+			n, copyErr := io.CopyBuffer(io.MultiWriter(out, h), io.LimitReader(part, a.Cfg.MaxFileBytes+1), copyBuf)
+			closeErr := out.Close()
+			_ = part.Close()
+			if copyErr != nil {
+				writeUploadParseError(w, r, copyErr)
+				return
+			}
+			if closeErr != nil {
+				httpx.WriteError(w, 500, "internal", "disk")
+				return
+			}
+			if n > a.Cfg.MaxFileBytes {
+				httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
+				return
+			}
+			size = n
+			digest = h.Sum(nil)
+			continue
+		}
+
+		slurp, err := io.ReadAll(io.LimitReader(part, maxFieldBytes+1))
+		_ = part.Close()
+		if err != nil {
+			writeUploadParseError(w, r, err)
+			return
+		}
+		if int64(len(slurp)) > maxFieldBytes {
+			httpx.WriteError(w, 400, "bad_request", "form field too large")
+			return
+		}
+		values[name] = append(values[name], string(slurp))
+	}
+
+	if !sawFile {
+		httpx.WriteError(w, 400, "bad_request", "file is required")
+		return
+	}
+
+	fileID, err := uuid.Parse(firstFormValue(values, "file_id"))
 	if err != nil {
 		fileID = uuid.New()
 	}
-	conv, _ := uuid.Parse(r.FormValue("conversation_id"))
-	recipients, okRec := a.cloudRecipients(w, r, p, conv)
+	finalPath := filepath.Join(dir, fileID.String()+"-"+uuid.NewString())
+	if err := os.Rename(path, finalPath); err != nil {
+		httpx.WriteError(w, 500, "internal", "disk")
+		return
+	}
+	path = finalPath
+
+	conv, _ := uuid.Parse(firstFormValue(values, "conversation_id"))
+	recipients, okRec := a.cloudRecipients(w, r, p, conv, values["recipient_user_id"])
 	if !okRec {
 		return
 	}
@@ -1198,7 +1313,7 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 	globalUsed, _ := a.DB.GlobalUsage(r.Context())
 	free, _ := a.disk()
 	lim := quota.Limits{MaxFileBytes: a.Cfg.MaxFileBytes, UserQuotaBytes: a.Cfg.UserQuotaBytes, GlobalQuotaBytes: a.Cfg.GlobalQuotaBytes, MinFreeBytes: a.Cfg.MinFreeBytes}
-	if err := lim.CheckFile(sizeHint, userUsed, globalUsed, free); err != nil {
+	if err := lim.CheckFile(size, userUsed, globalUsed, free); err != nil {
 		if errors.Is(err, quota.ErrTooLarge) {
 			httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
 			return
@@ -1210,36 +1325,13 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 		return
 	}
-	env, err := base64.RawURLEncoding.DecodeString(r.FormValue("envelope"))
+	env, err := base64.RawURLEncoding.DecodeString(firstFormValue(values, "envelope"))
 	if err != nil || !strings.Contains(string(env), `"alg":"secretstream"`) {
 		httpx.WriteError(w, 400, "plaintext_rejected", "files must be encrypted")
 		return
 	}
-	dir := filepath.Join(a.Cfg.MailboxDir, time.Now().Format("2006"), time.Now().Format("01"))
-	_ = os.MkdirAll(dir, 0o750)
-	// A fresh name so a retry cannot truncate the blob already linked to recipients.
-	path := filepath.Join(dir, fileID.String()+"-"+uuid.NewString())
-	out, err := os.Create(path)
-	if err != nil {
-		httpx.WriteError(w, 500, "internal", "disk")
-		return
-	}
-	h := sha256.New()
-	n, err := io.Copy(io.MultiWriter(out, h), io.LimitReader(file, a.Cfg.MaxFileBytes+1))
-	_ = out.Close()
-	if n > a.Cfg.MaxFileBytes {
-		_ = os.Remove(path)
-		httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
-		return
-	}
-	if err != nil {
-		_ = os.Remove(path)
-		httpx.WriteError(w, 500, "internal", "disk")
-		return
-	}
-	stored, err := a.DB.PutBlob(r.Context(), conv, p.User.ID, fileID, env, n, h.Sum(nil), path, time.Now().Add(a.Cfg.FileTTL), recipients, a.Cfg.UserQuotaBytes, a.Cfg.GlobalQuotaBytes)
+	stored, err := a.DB.PutBlob(r.Context(), conv, p.User.ID, fileID, env, size, digest, path, time.Now().Add(a.Cfg.FileTTL), recipients, a.Cfg.UserQuotaBytes, a.Cfg.GlobalQuotaBytes)
 	if err != nil || !stored {
-		_ = os.Remove(path)
 		if errors.Is(err, store.ErrUserQuota) {
 			a.writeCloudQuota(w, r, p.User.ID)
 			return
@@ -1248,26 +1340,24 @@ func (a *App) postFile(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, 507, "server_overloaded", "Server is overloaded now, wait a bit or send it when the user is online")
 			return
 		}
+		// Duplicate: drop the new blob; the existing stored object remains.
 		for _, rec := range recipients {
 			a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
 		}
 		httpx.WriteJSON(w, 200, map[string]string{"status": "duplicate"})
 		return
 	}
+	kept = true
 	for _, rec := range recipients {
 		a.Hub.Notify(r.Context(), rec, signaling.Frame{V: 1, T: "mailbox.new", ID: uuid.NewString(), P: map[string]any{"n": 1}})
 		if !a.Hub.Online(rec) {
 			a.pushMailbox(r.Context(), rec, 1)
 		}
 	}
-	httpx.WriteJSON(w, 201, map[string]string{"status": "stored", "sha256": hex.EncodeToString(h.Sum(nil))})
+	httpx.WriteJSON(w, 201, map[string]string{"status": "stored", "sha256": hex.EncodeToString(digest)})
 }
 
-func (a *App) cloudRecipients(w http.ResponseWriter, r *http.Request, p principal, conv uuid.UUID) ([]uuid.UUID, bool) {
-	raw := []string{}
-	if r.MultipartForm != nil {
-		raw = r.MultipartForm.Value["recipient_user_id"]
-	}
+func (a *App) cloudRecipients(w http.ResponseWriter, r *http.Request, p principal, conv uuid.UUID, raw []string) ([]uuid.UUID, bool) {
 	if len(raw) == 0 && r.FormValue("recipient_user_id") != "" {
 		raw = []string{r.FormValue("recipient_user_id")}
 	}
