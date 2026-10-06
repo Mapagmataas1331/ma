@@ -186,6 +186,29 @@ a[href] {
   backdrop-filter: blur(12px) saturate(1.2);
 }
 
+/* Visually hidden until focused — first Tab lands here, then jumps to #main-content. */
+.ma-skip-link {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--fg);
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: var(--shadow);
+  transform: translateY(-150%);
+  transition: transform 160ms ease;
+}
+
+.ma-skip-link:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring), var(--shadow);
+  transform: translateY(0);
+}
+
 /* Calm focus ring for plain buttons/links that are not using Button. */
 .ma-focusable:focus-visible {
   outline: none;

@@ -39,3 +39,76 @@
     animation: none;
   }
 }
+
+/* Short viewports: denser link list and tighter chrome so the four sites fit without a long scroll.
+   Tall screens keep the Tailwind spacing on the markup above. */
+@media (max-height: 740px) {
+  .home-sky .home-brand {
+    margin-bottom: 1.25rem;
+  }
+
+  .home-sky .home-brand h1 {
+    margin-top: 0.5rem;
+  }
+
+  .home-sky .home-link {
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+  }
+
+  .home-sky .home-link-arrow {
+    width: 2rem;
+    height: 2rem;
+    font-size: 1.125rem;
+  }
+
+  .home-sky .home-social {
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+  }
+}
+
+@media (max-height: 560px) {
+  .home-sky .home-frame {
+    padding-block: 0.5rem;
+  }
+
+  .home-sky .home-brand {
+    margin-bottom: 0.75rem;
+  }
+
+  .home-sky .home-wordmark {
+    font-size: clamp(2.25rem, 12vw, 3.5rem);
+  }
+
+  .home-sky .home-brand h1 {
+    margin-top: 0.35rem;
+    font-size: 1.125rem;
+  }
+
+  .home-sky .home-lead {
+    display: none;
+  }
+
+  .home-sky .home-link {
+    gap: 0.5rem;
+    padding-block: 0.35rem;
+  }
+
+  .home-sky .home-link-blurb {
+    font-size: 0.75rem;
+    line-height: 1.25;
+  }
+
+  .home-sky .home-link-arrow {
+    width: 1.75rem;
+    height: 1.75rem;
+    font-size: 1rem;
+  }
+
+  .home-sky .home-social {
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    gap: 0.35rem 1rem;
+  }
+}

@@ -17,4 +17,11 @@ describe('per-user preferences', () => {
     expect(transferDismissed('user-a')).toBe(true)
     expect(transferDismissed('user-b')).toBe(false)
   })
+
+  it('keeps pinnedAt with the pin so pin order can be restored', () => {
+    savePrefs('user-a', { c1: { pinned: true, pinnedAt: 100 }, c2: { pinned: true, pinnedAt: 200 } })
+    const prefs = loadPrefs('user-a')
+    expect(prefs.c1?.pinnedAt).toBe(100)
+    expect(prefs.c2?.pinnedAt).toBe(200)
+  })
 })

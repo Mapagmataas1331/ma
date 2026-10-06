@@ -159,6 +159,9 @@ export function AppShell({
   return (
     <AppSettingsSlot.Provider value={{ slot, setSlot }}>
       <div className={cn('relative flex w-full max-w-full flex-col overflow-x-clip', fill ? 'h-dvh overflow-hidden' : 'min-h-dvh')}>
+        <a href="#main-content" className="ma-skip-link">
+          {t('skipToContent')}
+        </a>
         <header className={cn('ma-header z-40 shrink-0 border-b border-line/80 bg-bg/70 pt-[env(safe-area-inset-top)] backdrop-blur-md', fill ? 'relative' : 'sticky top-0')}>
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-2 px-3 sm:px-4">
             {sites.length ? (
@@ -231,7 +234,7 @@ export function AppShell({
             <CommandDialog items={commandItems} open={command} onOpenChange={setCommand} />
           </Deferred>
         ) : null}
-        <main className={cn('mx-auto w-full max-w-6xl', fill ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'min-w-0 flex-1 px-4 py-6 sm:py-10')}>{children}</main>
+        <main id="main-content" tabIndex={-1} className={cn('mx-auto w-full max-w-6xl outline-none', fill ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'min-w-0 flex-1 px-4 py-6 sm:py-10')}>{children}</main>
       </div>
     </AppSettingsSlot.Provider>
   )

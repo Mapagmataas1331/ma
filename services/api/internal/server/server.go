@@ -1159,7 +1159,7 @@ func writeUploadParseError(w http.ResponseWriter, r *http.Request, err error) {
 	var tooBig *http.MaxBytesError
 	switch {
 	case errors.As(err, &tooBig) || errors.Is(err, multipart.ErrMessageTooLarge):
-		httpx.WriteError(w, 413, "too_large", "file is above the offline limit")
+		httpx.WriteError(w, 413, "too_large", "file is above the cloud limit")
 	case uploadAborted(r, err):
 		httpx.WriteError(w, 400, "upload_incomplete", "the upload ended before the whole file arrived")
 	default:
