@@ -76,7 +76,7 @@ export function AuthScreens({
       {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
       <Button type="submit">{mode === 'register' ? t('register') : t('continue')}</Button>
       {mode === 'login' ? (
-        <button type="button" className="block text-sm text-muted" onClick={() => { setError(''); onMode('register') }}>
+        <button type="button" className="block text-sm text-accent/80 underline decoration-accent/25 underline-offset-2 hover:text-accent hover:decoration-accent/50" onClick={() => { setError(''); onMode('register') }}>
           {t('haveInvite')}
         </button>
       ) : null}

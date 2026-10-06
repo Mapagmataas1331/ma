@@ -1,3 +1,4 @@
+import { Bookmark } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '../lib/cn'
@@ -6,6 +7,20 @@ import { HoldMenu, Progress } from './primitives'
 export function PresenceDot({ online }: { online: boolean }) {
   const { t } = useTranslation('common')
   return <span className={cn('inline-block size-2 rounded-full', online ? 'bg-ok' : 'bg-muted/50')} aria-label={online ? t('online') : t('offline')} />
+}
+
+/** Dedicated avatar for Saved messages / Избранное. */
+export function SavedMessagesAvatar({ className }: { className?: string }) {
+  const { t } = useTranslation('common')
+  return (
+    <span
+      className={cn('inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-300', className)}
+      role="img"
+      aria-label={t('savedMessages')}
+    >
+      <Bookmark className="size-[45%] fill-current" aria-hidden />
+    </span>
+  )
 }
 
 export function MessageBubble({

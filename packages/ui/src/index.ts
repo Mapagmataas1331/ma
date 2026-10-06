@@ -1,6 +1,7 @@
+export { SkyBackdrop, type SkyVariant } from './components/sky-backdrop'
 export { cn } from './lib/cn'
 export { ThemeProvider, useTheme, type ThemeMode } from './theme'
-export { AppShell, ThemeToggle, type NavLink } from './components/shell'
+export { AppShell, ThemeToggle, type NavLink, type SiteLink } from './components/shell'
 export { AccountSettings, AppSettings } from './components/account-settings'
 export { UserAvatar } from './components/identicon'
 export { BadgeRow, ProfileButton } from './components/profile'
@@ -12,6 +13,7 @@ export {
   MessageBubble,
   MessageGroup,
   PresenceDot,
+  SavedMessagesAvatar,
   TransferProgress,
   TypingIndicator,
 } from './components/chat'

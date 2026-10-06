@@ -1,1 +1,41 @@
 @import '@ma/ui/styles.css';
+
+@keyframes home-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.home-rise {
+  animation: home-rise 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.home-fade {
+  animation: home-fade 1s ease both;
+}
+
+/* Light sky behind the homepage (SkyBackdrop): slightly deeper muted text for contrast on blue/cream. */
+:root:not(.dark) .home-sky {
+  --fg-muted: oklch(0.43 0.022 262);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-rise,
+  .home-fade {
+    animation: none;
+  }
+}

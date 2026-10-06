@@ -1,5 +1,5 @@
 import { createI18n, LanguageSwitch } from '@ma/i18n'
-import { AppShell, ThemeProvider, Toaster } from '@ma/ui'
+import { AppShell, SkyBackdrop, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
 import { StrictMode, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createRoot } from 'react-dom/client'
@@ -9,20 +9,36 @@ import { DetailPage } from './routes/detail'
 import { ListPage } from './routes/list'
 import './styles.css'
 
-const home = import.meta.env.VITE_APP_ORIGIN_HOME || 'https://ma.cyou'
+const origins = {
+  home: import.meta.env.VITE_APP_ORIGIN_HOME || 'https://ma.cyou',
+  resume: import.meta.env.VITE_APP_ORIGIN_RESUME || 'https://me.ma.cyou',
+  projects: import.meta.env.VITE_APP_ORIGIN_PROJECTS || (typeof location !== 'undefined' ? location.origin : 'https://projects.ma.cyou'),
+  chat: import.meta.env.VITE_APP_ORIGIN_CHAT || 'https://chat.ma.cyou',
+}
+
+function useSites(current: '@' | 'me' | 'projects' | 'chat'): SiteLink[] {
+  const { t } = useTranslation('common')
+  return [
+    { short: '@', label: t('home'), href: origins.home, current: current === '@' },
+    { short: 'me', label: t('resume'), href: origins.resume, current: current === 'me' },
+    { short: 'projects', label: t('projects'), href: origins.projects, current: current === 'projects' },
+    { short: 'chat', label: t('chat'), href: origins.chat, current: current === 'chat' },
+  ]
+}
 
 function Shell({ children }: { children: ReactNode }) {
   const { t, i18n } = useTranslation('common')
+  const sites = useSites('projects')
   const ru = i18n.language.startsWith('ru')
   const projects = loadProjects()
   return (
     <AppShell
-      brand={{ href: '/', label: 'projects.ma.cyou' }}
-      nav={[{ href: home, label: 'ma.cyou', external: true }, { href: '/', label: t('all') }]}
+      sites={sites}
+      nav={[{ href: '/', label: t('all') }]}
       actions={<LanguageSwitch />}
       commandItems={[
+        ...sites.map((site) => ({ id: `site-${site.short}`, label: site.label, onSelect: () => window.location.assign(site.href) })),
         { id: 'all', label: t('all'), onSelect: () => window.location.assign('/') },
-        { id: 'home', label: 'ma.cyou', onSelect: () => window.location.assign(home) },
         ...projects.map((project) => ({
           id: project.slug,
           label: ru && project.titleRu ? project.titleRu : project.title,
@@ -30,6 +46,7 @@ function Shell({ children }: { children: ReactNode }) {
         })),
       ]}
     >
+      <SkyBackdrop scene="projects" />
       {children}
     </AppShell>
   )

@@ -28,11 +28,11 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 const buttonClass = {
-  base: 'inline-flex items-center justify-center gap-2 rounded-sm font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
-  primary: 'bg-accent text-accent-fg shadow-float hover:-translate-y-px',
-  ghost: 'bg-transparent text-fg hover:bg-surface-2',
-  outline: 'border border-line bg-surface-1 text-fg hover:bg-surface-2',
-  danger: 'bg-danger text-white hover:-translate-y-px',
+  base: 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
+  primary: 'bg-accent text-accent-fg shadow-float hover:-translate-y-0.5 hover:shadow-md',
+  ghost: 'bg-transparent text-fg hover:-translate-y-0.5 hover:bg-surface-2',
+  outline: 'border border-line bg-surface-1 text-fg hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-sm',
+  danger: 'bg-danger text-white hover:-translate-y-0.5 hover:shadow-md',
   sm: 'h-8 px-3 text-sm',
   md: 'h-10 px-4 text-sm',
   icon: 'size-10',
@@ -316,9 +316,9 @@ export function Dropdown({ trigger, children }: { trigger: ReactNode; children: 
   )
 }
 
-export function DropdownItem({ children, onSelect }: { children: ReactNode; onSelect?: () => void }) {
+export function DropdownItem({ children, onSelect, className }: { children: ReactNode; onSelect?: () => void; className?: string }) {
   return (
-    <DropdownMenuPrimitive.Item onSelect={onSelect} className="cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-surface-2">
+    <DropdownMenuPrimitive.Item onSelect={onSelect} className={cn('cursor-pointer rounded-sm px-2 py-1.5 text-sm outline-none transition data-[highlighted]:bg-surface-2', className)}>
       {children}
     </DropdownMenuPrimitive.Item>
   )

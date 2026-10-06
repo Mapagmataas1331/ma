@@ -1,8 +1,8 @@
 {
-  "lead": "A small set of sites for writing, work, and a private messenger.",
-  "intro": "I build web systems that have to run: APIs, databases, and the Linux hosts around them.",
+  "lead": "Resume, projects, and a quiet messenger — everything needed, nothing loud.",
+  "intro": "I keep web systems alive — APIs, data, and the machines under them.",
   "open": "Open",
-  "resumeBlurb": "Experience, stack, and how to reach me.",
-  "projectsBlurb": "Systems I run and what they are made of.",
-  "chatBlurb": "Invite-only and encrypted. Files go directly between people who are online."
+  "resumeBlurb": "CV without the corporate fog.",
+  "projectsBlurb": "Things that are actually online.",
+  "chatBlurb": "Invite-gated chat. Encryption on. No feed, no ads."
 }

@@ -1,1 +1,6 @@
 @import '@ma/ui/styles.css';
+
+/* Light sky behind projects (SkyBackdrop): deeper muted text where it sits on blue sky or cloud. */
+:root[data-sky]:not(.dark) {
+  --fg-muted: oklch(0.43 0.022 262);
+}

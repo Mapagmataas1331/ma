@@ -1,1 +1,6 @@
 @import '@ma/ui/styles.css';
+
+/* Light sky behind chat (SkyBackdrop): slightly deeper muted text on the pale haze. */
+:root[data-sky]:not(.dark) {
+  --fg-muted: oklch(0.44 0.022 262);
+}

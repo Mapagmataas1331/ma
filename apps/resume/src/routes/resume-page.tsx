@@ -1,6 +1,6 @@
 import { loadProjects, loadResume } from '@ma/content'
-import { Lightbox } from '@ma/ui'
-import { useState, type ReactNode } from 'react'
+import { Lightbox, SkyBackdrop } from '@ma/ui'
+import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function ResumePage() {
@@ -10,8 +10,11 @@ export function ResumePage() {
   const projectsOrigin = import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou'
   const projectPages = new Set(loadProjects().map((project) => project.slug))
   const [shot, setShot] = useState<{ src: string; alt: string; caption: string } | null>(null)
+  const articleRef = useRef<HTMLElement>(null)
   return (
-    <article className="mx-auto max-w-3xl">
+    <>
+    <SkyBackdrop scene="resume" contentRef={articleRef} />
+    <article ref={articleRef} className="mx-auto max-w-3xl">
       <header>
         <div className="flex items-center gap-4 sm:gap-6">
           <button type="button" className="size-24 shrink-0 overflow-hidden rounded-lg sm:size-32" onClick={() => setShot({ src: data.profile.photo, alt: data.profile.name, caption: data.profile.name })}>
@@ -162,6 +165,7 @@ export function ResumePage() {
 
       {shot ? <Lightbox src={shot.src} alt={shot.alt} caption={shot.caption} onClose={() => setShot(null)} /> : null}
     </article>
+    </>
   )
 }
 

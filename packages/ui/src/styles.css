@@ -91,6 +91,83 @@ canvas {
   max-width: 100%;
 }
 
+button:not(:disabled),
+[role='button']:not([aria-disabled='true']),
+summary {
+  cursor: pointer;
+}
+
+a[href] {
+  cursor: pointer;
+}
+
+/* Canvas sky (SkyBackdrop) — scenes in components/sky/. Background is set inline per scene for the first paint.
+   z-index -1 keeps it under every in-flow block without extra wrappers. */
+.ma-sky {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ma-sky__layer {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+/* Header over a sky (SkyBackdrop marks <html data-sky>): a thin frosted veil that melts into the
+   backdrop instead of a flat bar. The veil runs ~20px past the header and fades out, so content
+   scrolling underneath softens before it reaches the controls. */
+:root[data-sky] .ma-header {
+  border-bottom-color: transparent;
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+:root[data-sky] .ma-header::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 -20px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in oklch, var(--bg) 46%, transparent),
+    color-mix(in oklch, var(--bg) 26%, transparent) calc(100% - 20px),
+    transparent
+  );
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+/* Theme switch: ThemeProvider adds this class for ~650ms so text and surfaces ease along with the
+   sky's 600ms crossfade (no permanent global transitions). The sky layers keep their own fade. */
+@media (prefers-reduced-motion: no-preference) {
+  :root.ma-theme-fade,
+  :root.ma-theme-fade *:not(.ma-sky__layer),
+  :root.ma-theme-fade *::before,
+  :root.ma-theme-fade *::after {
+    transition-property: color, background-color, border-color, outline-color, text-decoration-color, fill, stroke, box-shadow !important;
+    transition-duration: 600ms !important;
+    transition-timing-function: ease !important;
+    transition-delay: 0s !important;
+  }
+}
+
+@media print {
+  .ma-sky {
+    display: none;
+  }
+}
+
 #root {
   min-height: 100dvh;
 }

@@ -1,5 +1,5 @@
 import { createI18n, LanguageSwitch } from '@ma/i18n'
-import { AppShell, ThemeProvider, Toaster } from '@ma/ui'
+import { AppShell, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
 import { StrictMode, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router'
@@ -11,27 +11,35 @@ import { HomePage } from './routes/home-page'
 import './styles.css'
 
 const origins = {
+  home: import.meta.env.VITE_APP_ORIGIN_HOME || 'https://ma.cyou',
   resume: import.meta.env.VITE_APP_ORIGIN_RESUME || 'https://me.ma.cyou',
   projects: import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou',
   chat: import.meta.env.VITE_APP_ORIGIN_CHAT || 'https://chat.ma.cyou',
 }
 
+function useSites(current: '@' | 'me' | 'projects' | 'chat'): SiteLink[] {
+  const { t } = useTranslation('common')
+  return [
+    { short: '@', label: t('home'), href: origins.home, current: current === '@' },
+    { short: 'me', label: t('resume'), href: origins.resume, current: current === 'me' },
+    { short: 'projects', label: t('projects'), href: origins.projects, current: current === 'projects' },
+    { short: 'chat', label: t('chat'), href: origins.chat, current: current === 'chat' },
+  ]
+}
+
 function Shell({ children }: { children: ReactNode }) {
-  const { t } = useTranslation('home')
+  const sites = useSites('@')
   return (
     <AppShell
-      brand={{ href: '/', label: 'ma.cyou' }}
-      nav={[
-        { href: origins.resume, label: t('resume', { ns: 'common' }), external: true },
-        { href: origins.projects, label: t('projects', { ns: 'common' }), external: true },
-        { href: origins.chat, label: t('chat', { ns: 'common' }), external: true },
-      ]}
+      fill
+      sites={sites}
+      nav={[]}
       actions={<LanguageSwitch />}
-      commandItems={[
-        { id: 'resume', label: t('resume', { ns: 'common' }), onSelect: () => window.location.assign(origins.resume) },
-        { id: 'projects', label: t('projects', { ns: 'common' }), onSelect: () => window.location.assign(origins.projects) },
-        { id: 'chat', label: t('chat', { ns: 'common' }), onSelect: () => window.location.assign(origins.chat) },
-      ]}
+      commandItems={sites.map((site) => ({
+        id: site.short,
+        label: site.label,
+        onSelect: () => window.location.assign(site.href),
+      }))}
     >
       {children}
     </AppShell>

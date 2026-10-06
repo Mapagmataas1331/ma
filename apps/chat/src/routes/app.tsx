@@ -17,14 +17,17 @@ import {
   type ChatFile,
   type FileAvailability,
   PresenceDot,
+  SavedMessagesAvatar,
   TypingIndicator,
   SettingsRow,
   SettingsSection,
+  SkyBackdrop,
   Switch,
   Textarea,
   TransferProgress,
   toast,
 } from '@ma/ui'
+import { Pin } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -204,6 +207,8 @@ export function ChatApp() {
   const transferAbort = useRef<AbortController | null>(null)
   const abortFile = useRef('')
   const transferLock = useRef<string | null>(null)
+  /** Kind of the transfer currently owning the progress UI. */
+  const transferKind = useRef<'upload' | 'send' | 'receive' | null>(null)
   /** Peer uploads in flight: file id → peer user ids. Lets several group members pull the same file at once. */
   const peerUploads = useRef(new Map<string, Set<string>>())
   const MAX_PEER_UPLOADS = 3
@@ -382,7 +387,14 @@ export function ChatApp() {
     transport.directOnly = directOnly
     transport.setLocalUser(session.user?.id || '')
     transport.connect()
-    const sync = () => syncRef.current()
+    let syncSoon: number | null = null
+    const sync = () => {
+      if (syncSoon != null) return
+      syncSoon = window.setTimeout(() => {
+        syncSoon = null
+        syncRef.current()
+      }, 250)
+    }
     const off = transport.on((frame) => {
       if (frame.t === 'session.ready') {
         setWsOnline(true)
@@ -600,7 +612,10 @@ export function ChatApp() {
           transferAbort.current?.abort()
           transferAbort.current = null
           abortFile.current = ''
-          transferLock.current = null
+          if (!fileId || transferLock.current === fileId) {
+            transferLock.current = null
+            transferKind.current = null
+          }
           setDownloading(null)
           setTransfer(null)
         }
@@ -619,6 +634,7 @@ export function ChatApp() {
       off()
       document.removeEventListener('visibilitychange', onVisible)
       window.clearInterval(timer)
+      if (syncSoon != null) window.clearTimeout(syncSoon)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, unlocked, relay, directOnly, session.user?.id])
@@ -830,10 +846,14 @@ export function ChatApp() {
         throw err
       }
       const code = err instanceof Error ? err.message : ''
+      const name = err instanceof DOMException ? err.name : ''
       if (code === 'wrong_password' || code === 'no_webauthn') toast(t('webauthnFailed'))
       else if (code === 'webauthn_prf_unsupported') toast(t('webauthnPrfUnsupported'))
       else if (code === 'vault_owner') { /* toasted above */ }
-      else if (code !== 'NotAllowedError' && !/cancel|abort/i.test(code)) toast(explain(err))
+      else if (code === 'webauthn_cancelled' || name === 'NotAllowedError' || name === 'AbortError' || /cancel|abort|denied permission|not allowed by the user agent/i.test(code)) {
+        /* user cancelled — UnlockScreen shows the localized message */
+      }
+      else toast(explain(err))
       throw err
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1256,24 +1276,39 @@ export function ChatApp() {
         }
         const entry: ChatFile = { id: fileId, name, mime, size: file.size, via: 'peer', url }
         files.push(entry)
+        transferLock.current = fileId
+        transferKind.current = 'upload'
+        activeFile = fileId
+        const upload = new AbortController()
+        transferAbort.current = upload
+        abortFile.current = fileId
+        const prepareTotal = ciphertextSize(file.size)
+        setTransfer({
+          title: t('preparingFile'),
+          loaded: 0,
+          total: prepareTotal,
+          fileId,
+          peerId: cloudTargets[0] || '',
+          kind: 'upload',
+          startedAt: Date.now(),
+        })
         const staged = await stageCipher(fileId, file, session.user?.id || '')
+        if (upload.signal.aborted || cancelledFiles.current.has(fileId)) {
+          await staged.cleanup?.()
+          throw new DOMException('aborted', 'AbortError')
+        }
         if (staged.removed.length) dropMessages(staged.removed)
         if (staged.stored) {
           markStored([fileId])
           void refreshUsage()
         }
-        transferLock.current = fileId
-        activeFile = fileId
-        const upload = new AbortController()
-        transferAbort.current = upload
-        abortFile.current = fileId
         const form = new FormData()
         form.set('file', staged.body, `${fileId}.bin`)
         form.set('conversation_id', conv.id)
         form.set('file_id', fileId)
         form.set('envelope', b64(new TextEncoder().encode(JSON.stringify({ alg: 'secretstream', name, mime, size: file.size, ...staged.meta }))))
         for (const recipientId of cloudTargets) form.append('recipient_user_id', recipientId)
-        const uploadTotal = staged.body.size || ciphertextSize(file.size)
+        const uploadTotal = staged.body.size || prepareTotal
         bumpTransfer('upload', 0, uploadTotal, fileId, cloudTargets[0] || '')
         await apiUpload('/v1/mailbox/files', form, (loaded, total) => {
           if (upload.signal.aborted || cancelledFiles.current.has(fileId)) return
@@ -1346,10 +1381,10 @@ export function ChatApp() {
       const finished = activeFile
       window.setTimeout(() => {
         setTransfer((cur) => (cur?.fileId === finished ? null : cur))
-        if (transferLock.current === finished) transferLock.current = null
+        releaseTransfer(finished)
       }, 600)
     } catch (err) {
-      if (transferLock.current === activeFile) transferLock.current = null
+      releaseTransfer(activeFile)
       setTransfer((cur) => (cur?.fileId === activeFile ? null : cur))
       const posted = postedLocal || messagesRef.current.some((message) => message.id === id)
       if (!posted) {
@@ -1400,8 +1435,17 @@ export function ChatApp() {
 
   function claimTransfer(fileId: string) {
     if (transferLock.current && transferLock.current !== fileId) return false
+    // Keep server-upload progress; peer serves can run without stealing the bar.
+    if (transferLock.current === fileId && transferKind.current === 'upload') return false
     transferLock.current = fileId
     return true
+  }
+
+  function releaseTransfer(fileId: string) {
+    if (transferLock.current === fileId) {
+      transferLock.current = null
+      transferKind.current = null
+    }
   }
 
   function bumpTransfer(kind: 'upload' | 'send' | 'receive', loaded: number, total: number, fileId: string, peerId: string) {
@@ -1412,10 +1456,16 @@ export function ChatApp() {
     if (cancelledFiles.current.has(fileId)) return
     if (!transferLock.current) transferLock.current = fileId
     if (transferLock.current !== fileId) return
+    // Peer/receive updates must not reset an in-flight server upload bar.
+    if (transferKind.current === 'upload' && kind !== 'upload') return
+    transferKind.current = kind
     const title = transferTitle(kind, peerId)
     setTransfer((prev) => {
       if (cancelledFiles.current.has(fileId) || transferLock.current !== fileId) return prev?.fileId === fileId ? null : prev
-      return { title, loaded, total, fileId, peerId, kind, startedAt: prev?.fileId === fileId && prev.kind === kind ? prev.startedAt : Date.now() }
+      const same = prev?.fileId === fileId && prev.kind === kind
+      const nextLoaded = same && loaded < prev.loaded ? prev.loaded : loaded
+      const nextTotal = same && total > 0 && prev.total > total ? prev.total : total
+      return { title, loaded: nextLoaded, total: nextTotal, fileId, peerId, kind, startedAt: same ? prev.startedAt : Date.now() }
     })
   }
 
@@ -1423,7 +1473,7 @@ export function ChatApp() {
     const current = transfer
     const fileId = current?.fileId ?? ''
     if (fileId) cancelledFiles.current.add(fileId)
-    if (transferLock.current === fileId) transferLock.current = null
+    releaseTransfer(fileId)
     abortFile.current = ''
     transferAbort.current?.abort()
     transferAbort.current = null
@@ -1434,6 +1484,7 @@ export function ChatApp() {
   }
 
   function explain(err: unknown) {
+    if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError')) return t('webauthnCancelled')
     if (err instanceof ApiError) {
       if (err.code === 'server_overloaded') return t('serverOverloaded')
       if (err.code === 'keys_missing') return t('recipientNoVault')
@@ -1450,6 +1501,13 @@ export function ChatApp() {
       if (err.code === 'not_contact') return t('groupNotContact')
       if (err.code === 'forbidden') return t('notAllowed')
       if (err.code === 'network') return t('networkError')
+    }
+    if (err instanceof Error) {
+      if (err.message === 'webauthn_cancelled' || err.name === 'NotAllowedError') return t('webauthnCancelled')
+      if (/not allowed by the user agent|denied permission|timed out or was not allowed/i.test(err.message)) return t('webauthnCancelled')
+      if (err.message === 'webauthn_unavailable') return t('webauthnUnavailable')
+      if (err.message === 'webauthn_prf_unsupported') return t('webauthnPrfUnsupported')
+      if (err.message === 'no_webauthn' || err.message === 'wrong_password') return t('webauthnFailed')
     }
     return err instanceof Error ? err.message : t('couldNotSend')
   }
@@ -1543,9 +1601,9 @@ export function ChatApp() {
       bumpTransfer('receive', 0, file.size, file.id, senderId)
       const ranked = await chooseHolder(file.id, peers)
       if (cancelledFiles.current.has(file.id)) return
-      if (!ranked.length) {
+        if (!ranked.length) {
         setDownloading(null)
-        if (transferLock.current === file.id) transferLock.current = null
+        releaseTransfer(file.id)
         setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
         markGone(file.id)
         toast(t('fileNotAvailableForTransfer'))
@@ -1591,10 +1649,10 @@ export function ChatApp() {
         setTransfer((cur) => (cancelledFiles.current.has(file.id) || cur?.fileId !== file.id ? cur : { ...cur, title: t('received'), loaded: cur.total || blob.size }))
         window.setTimeout(() => {
           setTransfer((cur) => (cur?.fileId === file.id ? null : cur))
-          if (transferLock.current === file.id) transferLock.current = null
+          releaseTransfer(file.id)
         }, 600)
       } catch (err) {
-        if (transferLock.current === file.id) transferLock.current = null
+        releaseTransfer(file.id)
         if (!(err instanceof DOMException && err.name === 'AbortError')) throw err
       }
       setDownloading(null)
@@ -1635,6 +1693,8 @@ export function ChatApp() {
       else wantSave.current = file.id
     } catch (err) {
       setDownloading(null)
+      transferLock.current = null
+      transferKind.current = null
       setTransfer(null)
       missFile(message, err)
     }
@@ -1682,6 +1742,8 @@ export function ChatApp() {
       }
     } catch (err) {
       setDownloading(null)
+      transferLock.current = null
+      transferKind.current = null
       setTransfer(null)
       missFile(message, err)
     }
@@ -1824,7 +1886,7 @@ export function ChatApp() {
         if (claimed && transferLock.current === fileId && !(peerUploads.current.get(fileId)?.size)) {
           window.setTimeout(() => {
             if (transferLock.current === fileId && !(peerUploads.current.get(fileId)?.size)) {
-              transferLock.current = null
+              releaseTransfer(fileId)
               setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
             }
           }, 600)
@@ -1843,7 +1905,7 @@ export function ChatApp() {
     if (!fileId) return
     if (!userId) {
       markGone(fileId)
-      if (transferLock.current === fileId) transferLock.current = null
+      releaseTransfer(fileId)
       setDownloading((cur) => (cur === fileId ? null : cur))
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
       if (wantView.current === fileId || wantSave.current === fileId) toast(t('fileNotOnServer'))
@@ -1870,7 +1932,7 @@ export function ChatApp() {
     const order = askOrder.current.get(fileId)
     if (order && order.length === 0) {
       markGone(fileId)
-      if (transferLock.current === fileId) transferLock.current = null
+      releaseTransfer(fileId)
       setDownloading((cur) => (cur === fileId ? null : cur))
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
       if (wantView.current === fileId) toast(t('fileNotAvailableForTransfer'))
@@ -1895,7 +1957,7 @@ export function ChatApp() {
       return
     }
     busyRetry.current.delete(fileId)
-    if (transferLock.current === fileId) transferLock.current = null
+    releaseTransfer(fileId)
     setDownloading((cur) => (cur === fileId ? null : cur))
     setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
     toast(t('transferBusy'))
@@ -1986,7 +2048,7 @@ export function ChatApp() {
     await slot.queue
     if (slot.failed || cancelledFiles.current.has(fileId)) {
       await slot.sink?.abort()
-      if (transferLock.current === fileId) transferLock.current = null
+      releaseTransfer(fileId)
       setDownloading(null)
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
       if (slot.failed) toast(t('transferFailed'))
@@ -2017,7 +2079,7 @@ export function ChatApp() {
     setTransfer((cur) => (cur?.fileId === fileId ? { ...cur, title: t('received'), loaded: cur.total || cur.loaded } : cur))
     window.setTimeout(() => {
       setTransfer((cur) => (cur?.fileId === fileId ? null : cur))
-      if (transferLock.current === fileId) transferLock.current = null
+      releaseTransfer(fileId)
     }, 600)
   }
 
@@ -2028,7 +2090,7 @@ export function ChatApp() {
     slot.failed = true
     await slot.queue.catch(() => undefined)
     await slot.sink?.abort()
-    if (transferLock.current === slot.fileId) transferLock.current = null
+    releaseTransfer(slot.fileId)
     if (wantSave.current === slot.fileId) wantSave.current = ''
     if (wantView.current === slot.fileId) wantView.current = ''
     setDownloading((cur) => (cur === slot.fileId ? null : cur))
@@ -2258,7 +2320,20 @@ export function ChatApp() {
 
   function togglePref(conversationId: string, key: 'pinned' | 'muted') {
     const current = prefs[conversationId] ?? {}
-    savePrefs({ ...prefs, [conversationId]: { ...current, [key]: !current[key] } })
+    const conv = conversations.find((c) => c.id === conversationId)
+    const nextValue = key === 'pinned' ? !isPinnedId(conversationId, conv?.peer_id, conv?.kind) : !current[key]
+    savePrefs({ ...prefs, [conversationId]: { ...current, [key]: nextValue } })
+  }
+
+  /** Saved messages stay pinned unless the user explicitly unpins. */
+  function isPinnedId(conversationId: string, peerId?: string, kind?: string) {
+    const self = !!me && peerId === me && kind !== 'group'
+    if (self) return prefs[conversationId]?.pinned !== false
+    return !!prefs[conversationId]?.pinned
+  }
+
+  function isPinnedConv(c: Conversation) {
+    return isPinnedId(c.id, c.peer_id, c.kind)
   }
 
   async function clearHistory(conversationId: string) {
@@ -2303,7 +2378,7 @@ export function ChatApp() {
     const self = c.peer_id === me && c.kind !== 'group'
     const pref = prefs[c.id] ?? {}
     const items = [
-      { id: 'pin', label: pref.pinned ? t('unpin') : t('pin'), onSelect: () => togglePref(c.id, 'pinned') },
+      { id: 'pin', label: isPinnedConv(c) ? t('unpin') : t('pin'), onSelect: () => togglePref(c.id, 'pinned') },
       { id: 'clear', label: t('clearHistory'), onSelect: () => void clearHistory(c.id) },
     ]
     if (c.kind === 'group') {
@@ -2327,7 +2402,7 @@ export function ChatApp() {
 
   const statusMessage = statusFor ? messages.find((m) => m.id === statusFor.id) ?? statusFor : null
   const orderedConversations = [...conversations].sort((a, b) => {
-    const pin = Number(!!prefs[b.id]?.pinned) - Number(!!prefs[a.id]?.pinned)
+    const pin = Number(isPinnedConv(b)) - Number(isPinnedConv(a))
     if (pin) return pin
     return lastAt(messages, b.id) - lastAt(messages, a.id)
   })
@@ -2546,9 +2621,10 @@ export function ChatApp() {
                   })
                   .catch((err) => {
                     const code = err instanceof Error ? err.message : ''
+                    const name = err instanceof DOMException ? err.name : ''
                     if (code === 'webauthn_unavailable') toast(t('webauthnUnavailable'))
                     else if (code === 'webauthn_prf_unsupported') toast(t('webauthnPrfUnsupported'))
-                    else if (code === 'webauthn_cancelled' || /NotAllowed|Abort/i.test(code)) toast(t('webauthnCancelled'))
+                    else if (code === 'webauthn_cancelled' || name === 'NotAllowedError' || name === 'AbortError' || /NotAllowed|Abort|denied permission|not allowed by the user agent/i.test(code)) toast(t('webauthnCancelled'))
                     else toast(explain(err))
                   })
               }}
@@ -2605,6 +2681,7 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
+        <SkyBackdrop scene="chat" />
         <AuthScreens mode={mode} onMode={setMode} onLogin={onLogin} onRegister={onRegister} on2fa={on2fa} />
       </>
     )
@@ -2614,6 +2691,7 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
+        <SkyBackdrop scene="chat" />
         <UnlockScreen
           mode={vaultExists === false ? 'create' : 'unlock'}
           onUnlock={onUnlock}
@@ -2723,8 +2801,9 @@ export function ChatApp() {
         }
       }}
     />
-    <div className="grid min-h-0 w-full flex-1 grid-cols-1 md:grid-cols-[18rem_minmax(0,1fr)]">
-      <aside className={`${active ? 'hidden' : 'flex'} min-h-0 min-w-0 flex-col border-line md:flex md:border-r`}>
+    <div className="relative grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)]">
+      <SkyBackdrop scene={activeConv ? 'conversation' : 'chat'} />
+      <aside className={`${active ? 'hidden' : 'flex'} relative z-[1] min-h-0 min-w-0 flex-col border-line bg-bg/80 backdrop-blur-md md:flex md:border-r`}>
         <form onSubmit={addContact} className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
           <Input placeholder={t('friendUsername')} aria-label={t('friendUsername')} autoComplete="off" value={lookup} onChange={(e) => setLookup(e.target.value)} />
           <div className="grid grid-cols-2 gap-2">
@@ -2749,22 +2828,26 @@ export function ChatApp() {
         {!wsOnline ? <p className="shrink-0 px-3 pt-2 text-xs text-muted">{t('reconnecting')}</p> : null}
         <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-2">
           {me && !conversations.some((c) => c.peer_id === me && c.kind !== 'group') ? (
-            <button type="button" className="flex w-full items-center gap-3 rounded-sm px-2 py-2.5 text-left hover:bg-surface-2" onClick={() => void openDirect(me, session.user?.display_name || '')}>
-              <UserAvatar username={session.user?.username || ''} />
-              <span className="truncate text-sm">{t('savedMessages')}</span>
+            <button type="button" className="flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left transition hover:bg-surface-2" onClick={() => void openDirect(me, session.user?.display_name || '')}>
+              <SavedMessagesAvatar />
+              <span className="min-w-0 flex-1 truncate text-sm">{t('savedMessages')}</span>
+              <Pin className="size-3.5 shrink-0 text-muted" aria-hidden />
             </button>
           ) : null}
           {orderedConversations.map((c) => {
             const latest = [...messages].reverse().find((m) => m.conversationId === c.id)
             const self = c.peer_id === me && c.kind !== 'group'
             const group = c.kind === 'group'
+            const pinned = isPinnedConv(c)
             const preview = latest ? `${group && latest.senderId ? `${memberName(c, latest.senderId)}: ` : ''}${latest.body || latest.files?.[0]?.name || ''}` : ''
             return (
             <HoldMenu key={c.id} label={convTitle(c)} items={contactMenu(c)}>
-            <div role="button" tabIndex={0} className={`flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left hover:bg-surface-2 ${c.id === active ? 'bg-surface-2' : ''}`} onClick={() => setActive(c.id)} onKeyDown={(e) => { if (e.key === 'Enter') setActive(c.id) }}>
+            <div role="button" tabIndex={0} className={`flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left transition hover:bg-surface-2 ${c.id === active ? 'bg-surface-2' : ''}`} onClick={() => setActive(c.id)} onKeyDown={(e) => { if (e.key === 'Enter') setActive(c.id) }}>
               <span className="relative shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                {group ? (
-                  <button type="button" aria-label={t('groupInfo')} onClick={() => setGroupInfoFor(c.id)}>
+                {self ? (
+                  <SavedMessagesAvatar />
+                ) : group ? (
+                  <button type="button" className="cursor-pointer" aria-label={t('groupInfo')} onClick={() => setGroupInfoFor(c.id)}>
                     <UserAvatar username={convSeed(c)} />
                   </button>
                 ) : (
@@ -2772,10 +2855,13 @@ export function ChatApp() {
                     <UserAvatar username={convSeed(c)} />
                   </ProfileButton>
                 )}
-                {!group ? <span className="pointer-events-none absolute right-0 bottom-0"><PresenceDot online={self || online.has(c.peer_id)} /></span> : null}
+                {!group && !self ? <span className="pointer-events-none absolute right-0 bottom-0"><PresenceDot online={online.has(c.peer_id)} /></span> : null}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm">{convTitle(c)}{!self && prefs[c.id]?.muted ? ` · ${t('mute')}` : ''}{!self && !group && blocked(c.peer_id) ? ` · ${t('blocked')}` : ''}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="min-w-0 truncate text-sm">{convTitle(c)}{!self && prefs[c.id]?.muted ? ` · ${t('mute')}` : ''}{!self && !group && blocked(c.peer_id) ? ` · ${t('blocked')}` : ''}</span>
+                  {pinned ? <Pin className="size-3 shrink-0 text-muted" aria-label={t('pin')} /> : null}
+                </span>
                 {preview ? <span className="block truncate text-xs text-muted">{preview}</span> : group ? <span className="block truncate text-xs text-muted">{t('groupMembersCount', { count: c.members?.length ?? 0, max: 20 })}</span> : null}
               </span>
             </div>
@@ -2798,10 +2884,10 @@ export function ChatApp() {
           {!conversations.length && !contacts.some((c) => c.id !== me) ? <p className="px-2 py-6 text-center text-xs leading-relaxed text-muted">{t('emptyContacts')}</p> : null}
         </div>
       </aside>
-      <section className={`${active ? 'flex' : 'hidden'} min-h-0 min-w-0 flex-col md:flex`}>
+      <section className={`${active ? 'flex' : 'hidden'} relative z-[1] min-h-0 min-w-0 flex-col md:flex`}>
         {activeConv ? (
           <>
-            <div className="flex h-14 shrink-0 items-center gap-1 border-b border-line px-2">
+            <div className="flex h-14 shrink-0 items-center gap-1 border-b border-line bg-bg/75 px-2 backdrop-blur-md">
               <IconButton label={t('back')} className="md:hidden" onClick={() => setActive(null)}>
                 <BackIcon />
               </IconButton>
@@ -2819,12 +2905,19 @@ export function ChatApp() {
                     </span>
                   </span>
                 </button>
+              ) : selfChat ? (
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <SavedMessagesAvatar className="size-9" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{convTitle(activeConv)}</span>
+                  </span>
+                </div>
               ) : (
                 <ProfileButton className="min-w-0 flex-1" username={activeConv.peer_username || activeConv.peer_name} displayName={convTitle(activeConv)} actions={profileActions(activeConv.peer_id, activeConv.id)}>
                   <UserAvatar username={convSeed(activeConv)} className="size-9 shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{convTitle(activeConv)}</span>
-                    {!selfChat ? <span className="block text-xs text-muted">{online.has(activeConv.peer_id) ? t('online') : t('offline')}</span> : null}
+                    <span className="block text-xs text-muted">{online.has(activeConv.peer_id) ? t('online') : t('offline')}</span>
                   </span>
                 </ProfileButton>
               )}
@@ -2908,7 +3001,7 @@ export function ChatApp() {
             </div>
             {transfer ? <div className="shrink-0 px-3 pb-2"><TransferProgress title={transfer.title} loaded={transfer.loaded} total={transfer.total} startedAt={transfer.startedAt} onCancel={stopTransfer} /></div> : null}
             <form
-              className="flex shrink-0 flex-col gap-2 border-t border-line p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+              className="flex shrink-0 flex-col gap-2 border-t border-line bg-bg/75 p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-md"
               onSubmit={(e) => {
                 e.preventDefault()
                 void send()

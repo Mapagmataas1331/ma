@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -11,6 +11,9 @@ type ThemeState = {
 }
 
 const KEY = 'ma.theme'
+/** While this class is on <html>, colours ease along with the sky crossfade (see styles.css). */
+const FADE_CLASS = 'ma-theme-fade'
+const FADE_MS = 650
 export const ThemeContext = createContext<ThemeState | null>(null)
 
 function readStored(): { mode: ThemeMode; accentH: number } {
@@ -44,12 +47,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const resolved = mode === 'system' ? (system ? 'dark' : 'light') : mode
+  const applied = useRef<'light' | 'dark' | null>(null)
 
   useEffect(() => {
     const root = document.documentElement
+    // a real switch (not the first paint): let text and surfaces ease with the backdrop for a moment
+    let fadeTimer = 0
+    if (applied.current && applied.current !== resolved && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      root.classList.add(FADE_CLASS)
+      fadeTimer = window.setTimeout(() => root.classList.remove(FADE_CLASS), FADE_MS)
+    }
+    applied.current = resolved
     root.classList.toggle('dark', resolved === 'dark')
     root.style.setProperty('--accent-h', String(accentH))
     localStorage.setItem(KEY, JSON.stringify({ mode, accentH }))
+    return () => {
+      if (!fadeTimer) return
+      window.clearTimeout(fadeTimer)
+      root.classList.remove(FADE_CLASS)
+    }
   }, [mode, accentH, resolved])
 
   const value = useMemo(

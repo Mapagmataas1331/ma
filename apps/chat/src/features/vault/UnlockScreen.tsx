@@ -102,7 +102,8 @@ export function UnlockScreen({
                 .catch((err: unknown) => {
                   if (ctrl.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return
                   const code = err instanceof Error ? err.message : ''
-                  if (code === 'webauthn_cancelled' || code === 'NotAllowedError') setError(t('webauthnCancelled'))
+                  const name = err instanceof DOMException ? err.name : ''
+                  if (code === 'webauthn_cancelled' || name === 'NotAllowedError' || /denied permission|not allowed by the user agent/i.test(code)) setError(t('webauthnCancelled'))
                   else setError(t('webauthnFailed'))
                 })
                 .finally(() => {

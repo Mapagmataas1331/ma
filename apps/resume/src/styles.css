@@ -1,5 +1,10 @@
 @import '@ma/ui/styles.css';
 
+/* Light sky behind the résumé (SkyBackdrop): deeper muted text for long reading on the pale sky. */
+:root[data-sky]:not(.dark) {
+  --fg-muted: oklch(0.42 0.022 262);
+}
+
 @media print {
   header,
   .no-print {

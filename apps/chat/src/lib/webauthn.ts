@@ -37,6 +37,16 @@ export async function platformAuthenticatorAvailable() {
   }
 }
 
+function mapWebAuthnError(err: unknown): never {
+  if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'AbortError')) {
+    throw new Error('webauthn_cancelled')
+  }
+  if (err instanceof Error && /not allowed by the user agent|denied permission|timed out or was not allowed/i.test(err.message)) {
+    throw new Error('webauthn_cancelled')
+  }
+  throw err
+}
+
 /** Create a platform passkey with PRF and return credential id + PRF bytes for the given salt. */
 export async function createPrfCredential(opts: {
   userId: string
@@ -44,45 +54,49 @@ export async function createPrfCredential(opts: {
   displayName: string
   prfSalt: Uint8Array
 }): Promise<{ credentialId: string; prf: Uint8Array }> {
-  const userIdBytes = new TextEncoder().encode(opts.userId).slice(0, 64)
-  const cred = (await navigator.credentials.create({
-    publicKey: {
-      rp: { id: rpId(), name: RP_NAME },
-      user: {
-        id: userIdBytes,
-        name: opts.userName || 'chat',
-        displayName: opts.displayName || opts.userName || 'Chat vault',
-      },
-      challenge: randomChallenge(),
-      pubKeyCredParams: [
-        { type: 'public-key', alg: -7 },
-        { type: 'public-key', alg: -257 },
-      ],
-      authenticatorSelection: {
-        authenticatorAttachment: 'platform',
-        userVerification: 'required',
-        residentKey: 'preferred',
-        requireResidentKey: false,
-      },
-      timeout: 120_000,
-      attestation: 'none',
-      extensions: {
-        prf: {
-          eval: { first: opts.prfSalt },
+  try {
+    const userIdBytes = new TextEncoder().encode(opts.userId).slice(0, 64)
+    const cred = (await navigator.credentials.create({
+      publicKey: {
+        rp: { id: rpId(), name: RP_NAME },
+        user: {
+          id: userIdBytes,
+          name: opts.userName || 'chat',
+          displayName: opts.displayName || opts.userName || 'Chat vault',
         },
-      } as AuthenticationExtensionsClientInputs,
-    },
-  })) as PublicKeyCredential | null
-  if (!cred) throw new Error('webauthn_cancelled')
-  const ext = cred.getClientExtensionResults() as PrfExtensionResults
-  if (ext.prf && ext.prf.enabled === false) throw new Error('webauthn_prf_unsupported')
-  let prf = prfFirst(cred)
-  // Some authenticators only return PRF on get(); fall through to assert.
-  if (!prf) {
-    prf = await evaluatePrf(cred.rawId, opts.prfSalt)
+        challenge: randomChallenge(),
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 },
+          { type: 'public-key', alg: -257 },
+        ],
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'preferred',
+          requireResidentKey: false,
+        },
+        timeout: 120_000,
+        attestation: 'none',
+        extensions: {
+          prf: {
+            eval: { first: opts.prfSalt },
+          },
+        } as AuthenticationExtensionsClientInputs,
+      },
+    })) as PublicKeyCredential | null
+    if (!cred) throw new Error('webauthn_cancelled')
+    const ext = cred.getClientExtensionResults() as PrfExtensionResults
+    if (ext.prf && ext.prf.enabled === false) throw new Error('webauthn_prf_unsupported')
+    let prf = prfFirst(cred)
+    // Some authenticators only return PRF on get(); fall through to assert.
+    if (!prf) {
+      prf = await evaluatePrf(cred.rawId, opts.prfSalt)
+    }
+    if (!prf) throw new Error('webauthn_prf_unsupported')
+    return { credentialId: b64(new Uint8Array(cred.rawId)), prf }
+  } catch (err) {
+    mapWebAuthnError(err)
   }
-  if (!prf) throw new Error('webauthn_prf_unsupported')
-  return { credentialId: b64(new Uint8Array(cred.rawId)), prf }
 }
 
 export async function evaluatePrf(
@@ -91,21 +105,26 @@ export async function evaluatePrf(
   signal?: AbortSignal,
 ): Promise<Uint8Array | null> {
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-  const id = typeof credentialId === 'string' ? unb64(credentialId) : credentialId instanceof Uint8Array ? credentialId : new Uint8Array(credentialId)
-  const assertion = (await navigator.credentials.get({
-    publicKey: {
-      rpId: rpId(),
-      challenge: randomChallenge(),
-      allowCredentials: [{ type: 'public-key', id }],
-      userVerification: 'required',
-      timeout: 120_000,
-      extensions: {
-        prf: {
-          eval: { first: prfSalt },
-        },
-      } as AuthenticationExtensionsClientInputs,
-    },
-    signal,
-  })) as PublicKeyCredential | null
-  return prfFirst(assertion)
+  try {
+    const id = typeof credentialId === 'string' ? unb64(credentialId) : credentialId instanceof Uint8Array ? credentialId : new Uint8Array(credentialId)
+    const assertion = (await navigator.credentials.get({
+      publicKey: {
+        rpId: rpId(),
+        challenge: randomChallenge(),
+        allowCredentials: [{ type: 'public-key', id }],
+        userVerification: 'required',
+        timeout: 120_000,
+        extensions: {
+          prf: {
+            eval: { first: prfSalt },
+          },
+        } as AuthenticationExtensionsClientInputs,
+      },
+      signal,
+    })) as PublicKeyCredential | null
+    return prfFirst(assertion)
+  } catch (err) {
+    if (signal?.aborted || (err instanceof DOMException && err.name === 'AbortError')) throw err
+    mapWebAuthnError(err)
+  }
 }

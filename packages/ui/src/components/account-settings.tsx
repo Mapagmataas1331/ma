@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from './identicon'
 import { BadgeRow, ProfileButton } from './profile'
-import { Button, Input, SettingsRow, SettingsSection } from './primitives'
+import { Button, Input, Label, SettingsRow, SettingsSection } from './primitives'
 
 type Account = {
   username: string
@@ -186,7 +186,7 @@ export function AccountSettings() {
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             <Button type="submit">{mode === 'up' ? t('register') : t('signIn')}</Button>
             {mode === 'in' ? (
-              <button type="button" className="block text-sm text-muted" onClick={() => setMode('up')}>
+              <button type="button" className="block text-sm text-accent/80 underline decoration-accent/25 underline-offset-2 hover:text-accent hover:decoration-accent/50" onClick={() => setMode('up')}>
                 {t('haveInvite')}
               </button>
             ) : null}
@@ -214,8 +214,14 @@ export function AccountSettings() {
         </div>
         <form className="space-y-3 border-t border-line px-4 py-3" onSubmit={(e) => void saveProfile(e)}>
           <p className="text-sm font-medium">{t('editProfile')}</p>
-          <Input placeholder={t('displayName')} aria-label={t('displayName')} value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
-          <Input placeholder={t('username')} aria-label={t('username')} value={editUsername} onChange={(e) => setEditUsername(e.target.value)} disabled={!!account.username_next_at} />
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-display-name" className="text-xs text-muted">{t('displayName')}</Label>
+            <Input id="edit-display-name" placeholder={t('displayName')} aria-label={t('displayName')} value={editDisplay} onChange={(e) => setEditDisplay(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-username" className="text-xs text-muted">{t('username')}</Label>
+            <Input id="edit-username" placeholder={t('username')} aria-label={t('username')} value={editUsername} onChange={(e) => setEditUsername(e.target.value)} disabled={!!account.username_next_at} />
+          </div>
           <p className="text-xs text-muted">
             {account.username_next_at
               ? t('usernameCooldown', { date: new Date(account.username_next_at).toLocaleDateString() })
