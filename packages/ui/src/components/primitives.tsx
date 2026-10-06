@@ -9,43 +9,20 @@ import * as ProgressPrimitive from '@radix-ui/react-progress'
 import * as ScrollAreaPrimitive from '@radix-ui/react-scroll-area'
 import * as SeparatorPrimitive from '@radix-ui/react-separator'
 import * as SliderPrimitive from '@radix-ui/react-slider'
-import { Slot } from '@radix-ui/react-slot'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
 import * as TabsPrimitive from '@radix-ui/react-tabs'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { Command } from 'cmdk'
 import { Check, ChevronDown, X } from 'lucide-react'
-import { createContext, useContext, useEffect, useRef, useState, type ButtonHTMLAttributes, type ComponentProps, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Toaster as Sonner, toast } from 'sonner'
 import { cn } from '../lib/cn'
 import { ThemeContext } from '../theme'
+import { Button, IconButton } from './button'
+import { Badge, Card, EmptyState, PageHeader, Surface } from './layout'
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'ghost' | 'outline' | 'danger'
-  size?: 'sm' | 'md' | 'icon'
-  asChild?: boolean
-}
-
-const buttonClass = {
-  base: 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
-  primary: 'bg-accent text-accent-fg shadow-float hover:-translate-y-0.5 hover:shadow-md',
-  ghost: 'bg-transparent text-fg hover:-translate-y-0.5 hover:bg-surface-2',
-  outline: 'border border-line bg-surface-1 text-fg hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-sm',
-  danger: 'bg-danger text-white hover:-translate-y-0.5 hover:shadow-md',
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-sm',
-  icon: 'size-10',
-}
-
-export function Button({ className, variant = 'primary', size = 'md', asChild, ...props }: ButtonProps) {
-  const Comp = asChild ? Slot : 'button'
-  return <Comp className={cn(buttonClass.base, buttonClass[variant], buttonClass[size], className)} {...props} />
-}
-
-export function IconButton({ label, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
-  return <Button variant="ghost" size="icon" aria-label={label} className={className} {...props} />
-}
+export { Badge, Button, Card, EmptyState, IconButton, PageHeader, Surface }
 
 export function Input({ className, ...props }: ComponentProps<'input'>) {
   return (
@@ -72,26 +49,6 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 }
 
 export const Label = LabelPrimitive.Root
-
-export function Surface({ className, children, strong }: { className?: string; children: ReactNode; strong?: boolean }) {
-  return (
-    <div className={cn('ma-surface rounded-lg border border-line bg-surface-1 shadow-float', strong && 'ma-surface--strong', className)}>
-      {children}
-    </div>
-  )
-}
-
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <Surface className={cn('p-5', className)}>{children}</Surface>
-}
-
-export function Badge({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-full border border-line/80 bg-surface-2/90 px-2.5 py-0.5 text-[11px] font-medium text-fg/85', className)}>
-      {children}
-    </span>
-  )
-}
 
 export function Separator({ className, orientation = 'horizontal' }: { className?: string; orientation?: 'horizontal' | 'vertical' }) {
   return (
@@ -313,9 +270,9 @@ export function Sheet({ open, onOpenChange, title, children }: { open: boolean; 
   )
 }
 
-export function Dropdown({ trigger, children }: { trigger: ReactNode; children: ReactNode }) {
+export function Dropdown({ trigger, children, open, onOpenChange }: { trigger: ReactNode; children: ReactNode; open?: boolean; onOpenChange?: (v: boolean) => void }) {
   return (
-    <DropdownMenuPrimitive.Root>
+    <DropdownMenuPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DropdownMenuPrimitive.Trigger asChild>{trigger}</DropdownMenuPrimitive.Trigger>
       <DropdownMenuPrimitive.Portal>
         <DropdownMenuPrimitive.Content className="z-50 min-w-44 rounded-md border border-line bg-surface-1 p-1 shadow-float backdrop-blur-md" sideOffset={6}>
@@ -382,8 +339,36 @@ export function ContextMenu({ trigger, items }: { trigger: ReactNode; items: { l
 type CommandItem = { id: string; label: string; hint?: string; onSelect: () => void }
 const CommandCtx = createContext<{ open: boolean; setOpen: (v: boolean) => void; items: CommandItem[] } | null>(null)
 
-export function CommandProvider({ items, children }: { items: CommandItem[]; children: ReactNode }) {
+/** The ⌘K palette on its own, so AppShell can load it only when it is first opened. */
+export function CommandDialog({ items, open, onOpenChange }: { items: CommandItem[]; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { t } = useTranslation('common')
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange} title={t('search')}>
+      <Command className="flex flex-col gap-2" label={t('search')}>
+        <Command.Input placeholder={t('searchPlaceholder')} className="h-10 rounded-sm border border-line bg-surface-2 px-3 text-sm outline-none" />
+        <Command.List className="max-h-64 overflow-auto">
+          <Command.Empty className="px-2 py-3 text-sm text-muted">{t('nothingMatches')}</Command.Empty>
+          {items.map((item) => (
+            <Command.Item
+              key={item.id}
+              value={item.label}
+              onSelect={() => {
+                item.onSelect()
+                onOpenChange(false)
+              }}
+              className="flex cursor-pointer items-center justify-between rounded-sm px-2 py-2 text-sm data-[selected=true]:bg-surface-2"
+            >
+              <span>{item.label}</span>
+              {item.hint ? <span className="text-xs text-muted">{item.hint}</span> : null}
+            </Command.Item>
+          ))}
+        </Command.List>
+      </Command>
+    </Dialog>
+  )
+}
+
+export function CommandProvider({ items, children }: { items: CommandItem[]; children: ReactNode }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -398,28 +383,7 @@ export function CommandProvider({ items, children }: { items: CommandItem[]; chi
   return (
     <CommandCtx.Provider value={{ open, setOpen, items }}>
       {children}
-      <Dialog open={open} onOpenChange={setOpen} title={t('search')}>
-        <Command className="flex flex-col gap-2" label={t('search')}>
-          <Command.Input placeholder={t('searchPlaceholder')} className="h-10 rounded-sm border border-line bg-surface-2 px-3 text-sm outline-none" />
-          <Command.List className="max-h-64 overflow-auto">
-            <Command.Empty className="px-2 py-3 text-sm text-muted">{t('nothingMatches')}</Command.Empty>
-            {items.map((item) => (
-              <Command.Item
-                key={item.id}
-                value={item.label}
-                onSelect={() => {
-                  item.onSelect()
-                  setOpen(false)
-                }}
-                className="flex cursor-pointer items-center justify-between rounded-sm px-2 py-2 text-sm data-[selected=true]:bg-surface-2"
-              >
-                <span>{item.label}</span>
-                {item.hint ? <span className="text-xs text-muted">{item.hint}</span> : null}
-              </Command.Item>
-            ))}
-          </Command.List>
-        </Command>
-      </Dialog>
+      <CommandDialog items={items} open={open} onOpenChange={setOpen} />
     </CommandCtx.Provider>
   )
 }
@@ -455,16 +419,6 @@ export function Toaster() {
 
 export { toast }
 
-export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
-  return (
-    <div className="ma-surface ma-surface--strong flex flex-col items-center justify-center gap-2 rounded-lg border border-line px-6 py-14 text-center shadow-float">
-      <p className="text-lg font-medium">{title}</p>
-      <p className="max-w-sm text-sm leading-relaxed text-muted">{body}</p>
-      {action}
-    </div>
-  )
-}
-
 export function ErrorState({ title, body, onRetry }: { title: string; body: string; onRetry?: () => void }) {
   const { t } = useTranslation('common')
   return (
@@ -499,16 +453,6 @@ export function SettingsRow({ label, hint, children }: { label: string; hint?: s
       </div>
       <div className="max-w-full">{children}</div>
     </div>
-  )
-}
-
-export function PageHeader({ eyebrow, title, lead }: { eyebrow?: string; title: string; lead?: string }) {
-  return (
-    <header className="mb-8">
-      {eyebrow ? <p className="mb-2 text-xs tracking-[0.18em] text-muted uppercase">{eyebrow}</p> : null}
-      <h1 className="text-[clamp(1.75rem,7vw,3rem)] font-semibold tracking-tight break-words">{title}</h1>
-      {lead ? <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">{lead}</p> : null}
-    </header>
   )
 }
 

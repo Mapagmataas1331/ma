@@ -52,6 +52,8 @@ Create a chat invite with `go run ./cmd/admin invite create` from `services/api`
 
 `pnpm dev` sends chat requests to port 8080 on the same host as the page. Open the site by this computer's LAN address on a phone, and the API uses that address too. A production build uses `https://api.ma.cyou` unless `VITE_API_ORIGIN` is set.
 
+`apps/chat/public/_headers` is the production CSP and does not allow localhost. Vite dev does not read `_headers`. To run a built chat against a local API (for example under `wrangler dev`), build with `VITE_API_ORIGIN=http://localhost:8080`; the build adds that origin and its `ws://` twin to `connect-src` in `dist/_headers` only.
+
 Open the apps at `http://localhost`, not `http://127.0.0.1`. The Vite servers listen on IPv6 localhost.
 
 ## Scripts

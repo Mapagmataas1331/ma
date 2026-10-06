@@ -1,5 +1,5 @@
-import { loadSocials } from '@ma/content'
-import { SkyBackdrop } from '@ma/ui'
+import { socials } from '@ma/content/socials'
+import { SkyBackdrop } from '@ma/ui/sky-backdrop'
 import { useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import en from '../locales/en/home.json'
@@ -15,7 +15,6 @@ const links = [
 export function HomePage() {
   const { t, i18n } = useTranslation('common')
   const copy = useMemo(() => (i18n.language.startsWith('ru') ? ru : en), [i18n.language])
-  const socials = loadSocials()
   const contentRef = useRef<HTMLDivElement>(null)
 
   return (

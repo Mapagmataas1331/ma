@@ -1,5 +1,5 @@
 import { loadProjects, type Project } from '@ma/content'
-import { Badge, Card, EmptyState, PageHeader } from '@ma/ui'
+import { Badge, Card, EmptyState, PageHeader } from '@ma/ui/layout'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'

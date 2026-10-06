@@ -1,5 +1,5 @@
 import { loadProjects } from '@ma/content'
-import { Badge, EmptyState, PageHeader } from '@ma/ui'
+import { Badge, EmptyState, PageHeader } from '@ma/ui/layout'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
 import Markdown from 'react-markdown'

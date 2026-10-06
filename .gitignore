@@ -29,3 +29,6 @@ Desktop.ini
 *.log
 .turbo
 .cache
+
+# go run ./cmd/ogpreview output
+services/api/og-preview/

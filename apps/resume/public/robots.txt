@@ -1,0 +1,3 @@
+User-agent: *
+Disallow:
+Sitemap: https://me.ma.cyou/sitemap.xml

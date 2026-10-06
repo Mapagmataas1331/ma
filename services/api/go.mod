@@ -11,6 +11,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/pressly/goose/v3 v3.24.2
 	golang.org/x/crypto v0.37.0
+	golang.org/x/image v0.24.0
 	golang.org/x/sys v0.32.0
 	golang.org/x/time v0.11.0
 )

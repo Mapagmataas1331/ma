@@ -34,6 +34,22 @@ sudo bash infra/oracle/coturn/setup-turns.sh      # Let's Encrypt + TURNS on 534
 
 GitHub Actions `api-deploy.yml` builds `linux/arm64` and restarts `macyou-api` when `ORACLE_HOST` and `ORACLE_SSH_KEY` are set.
 
+## Nginx / TLS / headers
+
+Install `infra/oracle/nginx-api.conf` (and `nginx-upgrade.conf` in `http {}`) in front of the API on `127.0.0.1:8080`. Production `api.env` keeps `BEHIND_PROXY=true` so the Go process does not bind :443 itself.
+
+CORS for credentialed browser calls is an allowlist in `CORS_ORIGINS` (see `api.env.example`): `https://ma.cyou`, `https://me.ma.cyou`, `https://projects.ma.cyou`, `https://chat.ma.cyou`. Do not put `Access-Control-*` wildcards in nginx.
+
+Security headers are set at the nginx edge and again in Go (`httpx.SecurityHeaders`). HSTS is only appropriate on HTTPS: enable the commented `:443` block in `nginx-api.conf` after certificates exist, e.g. `sudo certbot certonly --webroot -w /var/www/html -d api.ma.cyou`, then `sudo nginx -t && sudo systemctl reload nginx`. Go also emits HSTS when `X-Forwarded-Proto: https` (set from `$scheme` on the TLS vhost).
+
+WebSocket upgrades for chat use `$connection_upgrade` from `nginx-upgrade.conf` and long proxy timeouts; leave those intact when editing the vhost.
+
+## Open Graph images
+
+The API renders the social preview cards: `GET https://api.ma.cyou/v1/og?site=home|projects|resume|chat` (alias `/og.png`) returns a 1200×630 PNG in the site's night-sky style, with optional `title` and `subtitle` (or `desc`) query parameters. The four `index.html` files point `og:image` / `twitter:image` at it. Responses carry `Cache-Control: public, max-age=86400, s-maxage=604800` and an `ETag`; rendered cards stay in a small in-process cache. Bump `og.Version` (and add `&v=N` to the meta URLs if crawlers hold old copies) after changing the design.
+
+Preview locally without the database: `cd services/api && go run ./cmd/ogpreview -out og-preview`, or run the API and open `http://localhost:8080/v1/og?site=projects&title=Hello`. Re-scrape after deploy with the Facebook Sharing Debugger or by posting the link to a private Telegram chat.
+
 ## Backups
 
 `infra/oracle/backup.sh` dumps PostgreSQL only. Mailbox blobs are temporary and are not backed up.

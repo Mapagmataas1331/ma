@@ -1,12 +1,9 @@
 import { createI18n, LanguageSwitch } from '@ma/i18n'
-import { AppShell, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
-import { StrictMode, type ReactNode } from 'react'
+import { AppShell, type SiteLink } from '@ma/ui/shell'
+import { ThemeProvider } from '@ma/ui/theme'
+import { lazy, StrictMode, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router'
 import { useTranslation } from 'react-i18next'
-import en from './locales/en/home.json'
-import ru from './locales/ru/home.json'
-import { GalleryPage } from './routes/gallery'
 import { HomePage } from './routes/home-page'
 import './styles.css'
 
@@ -46,20 +43,29 @@ function Shell({ children }: { children: ReactNode }) {
   )
 }
 
-const router = createBrowserRouter([
-  { path: '/', element: <Shell><HomePage /></Shell> },
-  { path: '/dev/gallery', element: <Shell><GalleryPage /></Shell> },
-])
+// dev-only component gallery: its own chunk, never fetched by the homepage
+const GalleryPage = lazy(() => import('./routes/gallery').then((m) => ({ default: m.GalleryPage })))
+
+// Two fixed paths do not need a router: dropping react-router takes ~45 KB gzip off the first load.
+// Anything else never reaches this bundle (the host serves 404.html; see notFoundPlugin / _redirects).
+const page = window.location.pathname.replace(/\/+$/, '') === '/dev/gallery' ? (
+  <Suspense fallback={null}>
+    <GalleryPage />
+  </Suspense>
+) : (
+  <HomePage />
+)
 
 const root = document.getElementById('root')
 if (!root) throw new Error('root missing')
 
-void createI18n({ home: { en, ru } }).then(() => {
+// Waits for the active language's `common` strings, which the pre-paint script in index.html has
+// already started preloading. No <Toaster />: nothing on the homepage raises a toast.
+void createI18n().then(() => {
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider>
-        <RouterProvider router={router} />
-        <Toaster />
+        <Shell>{page}</Shell>
       </ThemeProvider>
     </StrictMode>,
   )

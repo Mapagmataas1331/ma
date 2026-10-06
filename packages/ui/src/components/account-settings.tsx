@@ -1,11 +1,11 @@
 import { ApiError, authApi, type BadgeTrack } from '@ma/api-client'
 import { canonicalDisplayName, canonicalUsername, displayNameError, passwordError, usernameError } from '@ma/protocol'
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useContext, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from './identicon'
 import { BadgeRow, ProfileButton } from './profile'
 import { Button, Input, Label, SettingsRow, SettingsSection } from './primitives'
+import { AppSettings, AppSettingsSlot } from './settings-slot'
 
 type Account = {
   username: string
@@ -19,16 +19,7 @@ type Account = {
   open_invites?: { id: string; expires_at: string; created_at: string }[]
 }
 
-export const AppSettingsSlot = createContext<{ slot: HTMLElement | null; setSlot: (node: HTMLElement | null) => void }>({
-  slot: null,
-  setSlot: () => {},
-})
-
-export function AppSettings({ children }: { children: ReactNode }) {
-  const { slot } = useContext(AppSettingsSlot)
-  if (!slot) return null
-  return createPortal(children, slot)
-}
+export { AppSettings, AppSettingsSlot }
 
 export function AccountSettings() {
   const { t } = useTranslation('common')

@@ -1,13 +1,19 @@
-import i18n, { type Resource } from 'i18next'
-import ICU from 'i18next-icu'
+import i18n, { type BackendModule, type Resource, type ResourceKey } from 'i18next'
 import { initReactI18next } from 'react-i18next'
-import en from './locales/en/common.json'
-import ru from './locales/ru/common.json'
 
 export type Lang = 'en' | 'ru'
 export type NamespaceBundle = Record<string, object>
 
 const LANGS: Lang[] = ['en', 'ru']
+
+// The shared `common` strings are the bulk of the i18n payload, so each language is its own chunk
+// and only the active one is fetched. The build injects <meta name="ma-i18n"> with both chunk URLs
+// (i18nPreloadPlugin in @ma/config/vite) and the inline pre-paint script in index.html preloads the
+// active one, so this import usually resolves from cache instead of costing a round trip.
+const commonLoaders: Record<Lang, () => Promise<{ default: ResourceKey }>> = {
+  en: () => import('./locales/en/common.json'),
+  ru: () => import('./locales/ru/common.json'),
+}
 
 export function detectLanguage(): Lang {
   if (typeof window === 'undefined') return 'en'
@@ -25,22 +31,42 @@ function apply(lng: string) {
   window.localStorage.setItem('ma.lang', lang)
 }
 
+/** i18next backend that lazy-loads `common` per language; app namespaces stay bundled. */
+const lazyCommon: BackendModule = {
+  type: 'backend',
+  init() {},
+  read(language, namespace, callback) {
+    const load = commonLoaders[language as Lang]
+    if (namespace !== 'common' || !load) return callback(null, {})
+    load().then(
+      (mod) => callback(null, mod.default),
+      (err: unknown) => callback(err instanceof Error ? err : new Error(String(err)), null),
+    )
+  },
+}
+
 export async function createI18n(extra: NamespaceBundle = {}) {
-  const resources: Resource = { en: { common: en }, ru: { common: ru } }
+  const resources: Resource = { en: {}, ru: {} }
   for (const [ns, bundle] of Object.entries(extra)) {
     const typed = bundle as { en?: object; ru?: object }
     resources.en![ns] = typed.en ?? {}
     resources.ru![ns] = typed.ru ?? {}
   }
   if (!i18n.isInitialized) {
-    await i18n.use(ICU).use(initReactI18next).init({
+    await i18n.use(lazyCommon).use(initReactI18next).init({
       resources,
+      // bundled app namespaces + lazily loaded `common`; changeLanguage() fetches the other language first
+      partialBundledLanguages: true,
       lng: detectLanguage(),
-      fallbackLng: 'en',
+      // en and ru carry the same keys (keys.test.ts), so a Russian visitor never needs the English chunk
+      fallbackLng: false,
       supportedLngs: LANGS,
-      ns: Object.keys(resources.en ?? { common: {} }),
+      load: 'currentOnly',
+      ns: ['common', ...Object.keys(extra)],
       defaultNS: 'common',
-      interpolation: { escapeValue: false },
+      // ICU-style single-brace placeholders ("{count} online") without shipping an ICU parser:
+      // the strings only use plain substitution, never plural/select/number formats
+      interpolation: { escapeValue: false, prefix: '{', suffix: '}' },
       returnNull: false,
     })
     apply(i18n.language)

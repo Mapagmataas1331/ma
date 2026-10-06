@@ -1,6 +1,12 @@
+# Production headers only; no local API origins here. Builds with VITE_API_ORIGIN set add that origin to the CSP in dist/_headers (see cspApiOriginPlugin).
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Strict-Transport-Security: max-age=31536000; includeSubDomains
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://api.ma.cyou wss://api.ma.cyou http://localhost:8080 ws://localhost:8080; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+  X-Robots-Tag: noindex, nofollow
+  Permissions-Policy: accelerometer=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-BYFH8lyE9bAw6pv/IV/vCqOQWSbtjc0EtD8b0yf11sk=' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://api.ma.cyou wss://api.ma.cyou; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+
+# Vite's /assets/* files are content-hashed, so they can be cached forever. HTML (no rule here) keeps the platform default and revalidates.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -32,3 +32,19 @@ func TestDefaultsMatchArchitecture(t *testing.T) {
 		t.Fatalf("unexpected quotas: %+v", cfg)
 	}
 }
+func TestDefaultCORSOriginsIncludeStaticApps(t *testing.T) {
+	cfg := Load()
+	want := []string{"https://ma.cyou", "https://me.ma.cyou", "https://projects.ma.cyou", "https://chat.ma.cyou"}
+	for _, o := range want {
+		found := false
+		for _, have := range cfg.CORSOrigins {
+			if have == o {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("default CORS_ORIGINS missing %s: %v", o, cfg.CORSOrigins)
+		}
+	}
+}

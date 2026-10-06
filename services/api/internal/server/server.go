@@ -26,6 +26,7 @@ import (
 	"github.com/mapagmataas1331/ma/services/api/internal/authz"
 	"github.com/mapagmataas1331/ma/services/api/internal/config"
 	"github.com/mapagmataas1331/ma/services/api/internal/httpx"
+	"github.com/mapagmataas1331/ma/services/api/internal/og"
 	"github.com/mapagmataas1331/ma/services/api/internal/quota"
 	"github.com/mapagmataas1331/ma/services/api/internal/signaling"
 	"github.com/mapagmataas1331/ma/services/api/internal/store"
@@ -79,6 +80,10 @@ func (a *App) Handler() http.Handler {
 		httpx.WriteJSON(w, 200, map[string]string{"version": "0.1.0"})
 	})
 	mux.HandleFunc("GET /v1/capabilities", a.capabilities)
+	// Open Graph cards for the static sites (og:image / twitter:image); /og.png is a short alias.
+	ogCards := og.NewHandler()
+	mux.Handle("GET /v1/og", ogCards)
+	mux.Handle("GET /og.png", ogCards)
 	mux.HandleFunc("POST /v1/auth/register", a.register)
 	mux.HandleFunc("POST /v1/auth/login", a.login)
 	mux.HandleFunc("POST /v1/auth/login/2fa", a.login2fa)

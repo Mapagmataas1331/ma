@@ -1,5 +1,7 @@
 import { createI18n, LanguageSwitch } from '@ma/i18n'
-import { AppShell, SkyBackdrop, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
+import { AppShell, type SiteLink } from '@ma/ui/shell'
+import { SkyBackdrop } from '@ma/ui/sky-backdrop'
+import { ThemeProvider } from '@ma/ui/theme'
 import { StrictMode, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createRoot } from 'react-dom/client'
@@ -60,12 +62,12 @@ const router = createBrowserRouter([
 const root = document.getElementById('root')
 if (!root) throw new Error('root missing')
 
+// No <Toaster />: nothing on these pages raises a toast (the Lightbox share fallback lives on the resume site).
 void createI18n().then(() => {
   createRoot(root).render(
     <StrictMode>
       <ThemeProvider>
         <RouterProvider router={router} />
-        <Toaster />
       </ThemeProvider>
     </StrictMode>,
   )
