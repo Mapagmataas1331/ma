@@ -8,6 +8,7 @@ import ru from '../locales/ru/home.json'
 const links = [
   { href: import.meta.env.VITE_APP_ORIGIN_RESUME || 'https://me.ma.cyou', short: 'me', key: 'resumeBlurb' as const },
   { href: import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou', short: 'projects', key: 'projectsBlurb' as const },
+  { href: 'https://pocketcam.ma.cyou/', short: 'pocketcam', key: 'pocketcamBlurb' as const },
   { href: import.meta.env.VITE_APP_ORIGIN_CHAT || 'https://chat.ma.cyou', short: 'chat', key: 'chatBlurb' as const },
 ]
 
@@ -27,7 +28,7 @@ export function HomePage() {
             <span className="text-fg">ma</span>
             <span className="text-muted">.cyou</span>
           </p>
-          <h1 className="mt-4 text-xl font-medium tracking-tight sm:text-2xl">Timofey</h1>
+          <h1 className="mt-4 text-xl font-medium tracking-tight sm:text-2xl">{copy.name}</h1>
         </div>
 
         <p className="home-rise mb-2 max-w-lg text-sm leading-relaxed text-muted sm:text-base" style={{ animationDelay: '120ms' }}>

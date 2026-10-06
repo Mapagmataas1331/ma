@@ -10,7 +10,35 @@ export default defineConfig({
   optimizeDeps: {
     esbuildOptions: { target: 'esnext', supported: { 'top-level-await': true } },
   },
-  build: { target: 'esnext' },
+  build: {
+    target: 'esnext',
+    // libsodium-wrappers-sumo alone is ~1.5–2 MiB; keep the Vite warning threshold just above that.
+    chunkSizeWarningLimit: 1800,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('libsodium')) return 'sodium'
+          if (
+            id.includes('node_modules/react-dom') ||
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/scheduler')
+          ) {
+            return 'react'
+          }
+          if (id.includes('node_modules/dexie')) return 'dexie'
+          if (id.includes('@tanstack/react-query')) return 'query'
+          if (
+            id.includes('node_modules/react-router') ||
+            id.includes('node_modules/react-i18next') ||
+            id.includes('node_modules/i18next')
+          ) {
+            return 'router-i18n'
+          }
+          if (id.includes('node_modules/lucide-react')) return 'icons'
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
@@ -35,6 +63,8 @@ export default defineConfig({
         // Take control immediately so iOS can subscribe to push on first launch (Discourse hit).
         skipWaiting: true,
         clientsClaim: true,
+        // Safety margin so the sodium chunk stays precached for offline use.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallbackDenylist: [/^\//],
         runtimeCaching: [],
         importScripts: ['sw-push.js'],

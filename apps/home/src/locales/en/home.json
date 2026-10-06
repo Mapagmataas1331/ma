@@ -1,8 +1,10 @@
 {
-  "lead": "I build web products that are quiet, fast, and reach production — from the database to the UI.",
+  "name": "Timofey - Mapagmataas",
+  "lead": "I like hard problems, clean code and things that actually ship, from the database to the last pixel.",
   "intro": "I keep web systems alive — APIs, data, and the machines under them.",
   "open": "Open",
   "resumeBlurb": "CV without the corporate fog.",
   "projectsBlurb": "Things that are actually online.",
-  "chatBlurb": "Invite-only. E2E in the browser. WebRTC when online. No feed, no ads."
+  "pocketcamBlurb": "Phone browser as a Windows webcam.",
+  "chatBlurb": "Private by design. Invite-only, end-to-end encrypted, device to device. No feed, no ads."
 }
