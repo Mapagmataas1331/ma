@@ -73,17 +73,21 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 
 export const Label = LabelPrimitive.Root
 
-export function Surface({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn('rounded-lg border border-line bg-surface-1 shadow-float', className)}>{children}</div>
+export function Surface({ className, children, strong }: { className?: string; children: ReactNode; strong?: boolean }) {
+  return (
+    <div className={cn('ma-surface rounded-lg border border-line bg-surface-1 shadow-float', strong && 'ma-surface--strong', className)}>
+      {children}
+    </div>
+  )
 }
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <Surface className={cn('p-5', className)}>{children}</Surface>
 }
 
-export function Badge({ children, className }: { children: ReactNode; className?: string }) {
+export function Badge({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <span className={cn('inline-flex items-center rounded-full bg-surface-3 px-2.5 py-0.5 text-xs text-muted', className)}>
+    <span className={cn('inline-flex items-center rounded-full border border-line/80 bg-surface-2/90 px-2.5 py-0.5 text-[11px] font-medium text-fg/85', className)}>
       {children}
     </span>
   )
@@ -290,12 +294,18 @@ export function HoldMenu({ label, items, children, className }: { label: string;
 }
 
 export function Sheet({ open, onOpenChange, title, children }: { open: boolean; onOpenChange: (v: boolean) => void; title: string; children: ReactNode }) {
+  const { t } = useTranslation('common')
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-fg/20 backdrop-blur-sm" />
         <DialogPrimitive.Content className="fixed inset-y-0 right-0 z-50 flex h-dvh w-[min(100%,22rem)] flex-col overflow-hidden border-l border-line bg-surface-1 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] shadow-float">
-          <DialogPrimitive.Title className="shrink-0 px-5 pt-5 text-lg font-semibold">{title}</DialogPrimitive.Title>
+          <div className="flex shrink-0 items-start justify-between gap-3 px-5 pt-5">
+            <DialogPrimitive.Title className="text-lg font-semibold">{title}</DialogPrimitive.Title>
+            <DialogPrimitive.Close className="ma-focusable rounded-sm p-1 text-muted transition hover:bg-surface-2 hover:text-fg" aria-label={t('close')}>
+              <X className="size-4" />
+            </DialogPrimitive.Close>
+          </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-4">{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
@@ -447,9 +457,9 @@ export { toast }
 
 export function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+    <div className="ma-surface ma-surface--strong flex flex-col items-center justify-center gap-2 rounded-lg border border-line px-6 py-14 text-center shadow-float">
       <p className="text-lg font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted">{body}</p>
+      <p className="max-w-sm text-sm leading-relaxed text-muted">{body}</p>
       {action}
     </div>
   )

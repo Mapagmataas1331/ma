@@ -720,7 +720,7 @@ export function ChatApp() {
     }
   }
 
-  async function publishIdentityIfEmpty(force = false, quiet = false) {
+  const publishIdentityIfEmpty = useCallback(async (force = false, quiet = false) => {
     const pubs = { ed25519: getIdentity().identitySign.publicKey, x25519: getIdentity().identityBox.publicKey }
     if (!useSession.getState().user?.id) return
     let existing: { x25519: string } | null = null
@@ -735,7 +735,8 @@ export function ChatApp() {
       return
     }
     if (!existing?.x25519 || existing.x25519 !== pubs.x25519) await api('/v1/users/me/identity-keys', { method: 'PUT', body: JSON.stringify(pubs) })
-  }
+  
+  }, [t])
 
   const identityPublished = useRef(false)
   useEffect(() => {
@@ -746,7 +747,7 @@ export function ChatApp() {
     if (identityPublished.current) return
     identityPublished.current = true
     void publishIdentityIfEmpty(false, true).catch(() => undefined)
-  }, [unlocked])
+  }, [unlocked, publishIdentityIfEmpty])
 
   async function beginFresh(password: string) {
     const passError = vaultPasswordError(password)
@@ -2842,7 +2843,7 @@ export function ChatApp() {
             const preview = latest ? `${group && latest.senderId ? `${memberName(c, latest.senderId)}: ` : ''}${latest.body || latest.files?.[0]?.name || ''}` : ''
             return (
             <HoldMenu key={c.id} label={convTitle(c)} items={contactMenu(c)}>
-            <div role="button" tabIndex={0} className={`flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left transition hover:bg-surface-2 ${c.id === active ? 'bg-surface-2' : ''}`} onClick={() => setActive(c.id)} onKeyDown={(e) => { if (e.key === 'Enter') setActive(c.id) }}>
+            <div role="button" tabIndex={0} className={`ma-focusable flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left transition hover:bg-surface-2/80 ${c.id === active ? 'bg-surface-2/90' : ''}`} onClick={() => setActive(c.id)} onKeyDown={(e) => { if (e.key === 'Enter') setActive(c.id) }}>
               <span className="relative shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 {self ? (
                   <SavedMessagesAvatar />
@@ -2870,7 +2871,7 @@ export function ChatApp() {
           })}
           {contacts.filter((c) => (c.state === 'accepted' || c.state === 'blocked') && c.id !== me && !conversations.some((conv) => conv.peer_id === c.id && conv.kind !== 'group')).map((c) => (
             <HoldMenu key={c.id} label={c.display_name || c.username} items={[{ id: 'block', label: blocked(c.id) ? t('unblock') : t('block'), onSelect: () => void setBlocked(c.id, !blocked(c.id)) }]}>
-            <div role="button" tabIndex={0} className="flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left hover:bg-surface-2" onClick={() => void openDirect(c.id, c.display_name || c.username)} onKeyDown={(e) => { if (e.key === 'Enter') void openDirect(c.id, c.display_name || c.username) }}>
+            <div role="button" tabIndex={0} className="ma-focusable flex w-full cursor-pointer items-center gap-3 rounded-sm px-2 py-2.5 text-left transition hover:bg-surface-2/80" onClick={() => void openDirect(c.id, c.display_name || c.username)} onKeyDown={(e) => { if (e.key === 'Enter') void openDirect(c.id, c.display_name || c.username) }}>
               <span className="relative shrink-0" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 <ProfileButton username={c.username} displayName={c.display_name} actions={profileActions(c.id)}>
                   <UserAvatar username={c.username} />
@@ -3035,7 +3036,7 @@ export function ChatApp() {
                         <button
                           key={value}
                           type="button"
-                          className={`rounded-md px-2 py-1 ${fileRoute === value ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-muted'}`}
+                          className={`ma-focusable rounded-md px-2 py-1 ${fileRoute === value ? 'bg-accent text-accent-fg' : 'bg-surface-2 text-muted'}`}
                           onClick={() => setFileRoute(value)}
                         >
                           {t(label)}
@@ -3069,7 +3070,10 @@ export function ChatApp() {
             </form>
           </>
         ) : (
-          <p className="p-6 text-sm text-muted">{t('pickConversation')}</p>
+          <div className="m-6 max-w-sm self-center rounded-lg border border-line/70 bg-bg/50 p-5 text-sm leading-relaxed text-muted backdrop-blur-md md:self-auto">
+            <p className="font-medium text-fg">{t('pickConversation')}</p>
+            <p className="mt-1">{t('pickConversationHint')}</p>
+          </div>
         )}
       </section>
     </div>

@@ -42,7 +42,7 @@ export function MessageBubble({
   children: ReactNode
 }) {
   const bubble = (
-    <div className={cn('px-3.5 py-2 text-sm leading-relaxed break-words shadow-float', mine ? 'rounded-lg rounded-br-sm bg-accent text-accent-fg' : 'rounded-lg rounded-bl-sm bg-surface-1 text-fg')}>
+    <div className={cn('px-3.5 py-2 text-sm leading-relaxed break-words shadow-float backdrop-blur-md', mine ? 'rounded-lg rounded-br-sm bg-accent/92 text-accent-fg' : 'ma-surface rounded-lg rounded-bl-sm border border-line/70 bg-surface-1 text-fg')}>
       {sender && !grouped ? <p className="mb-0.5 text-xs font-medium text-accent">{sender}</p> : null}
       {children}
       {time || status ? (
@@ -71,9 +71,9 @@ export function MessageGroup({ children }: { children: ReactNode }) {
 export function DayDivider({ label }: { label: string }) {
   return (
     <div className="my-4 flex items-center gap-3 text-xs text-muted">
-      <span className="h-px flex-1 bg-line" />
-      {label}
-      <span className="h-px flex-1 bg-line" />
+      <span className="h-px flex-1 bg-line/80" />
+      <span className="rounded-full bg-bg/50 px-2 py-0.5 backdrop-blur-sm">{label}</span>
+      <span className="h-px flex-1 bg-line/80" />
     </div>
   )
 }
@@ -99,7 +99,7 @@ export function TransferProgress({ title, loaded, total, startedAt, onCancel }: 
     <div className="rounded-md border border-line bg-surface-2 p-3">
       <div className="mb-1 flex items-center justify-between gap-3">
         <p className="truncate text-sm">{title}</p>
-        {onCancel ? <button type="button" className="shrink-0 text-xs text-muted" onClick={onCancel}>{t('cancel')}</button> : null}
+        {onCancel ? <button type="button" className="ma-focusable shrink-0 rounded-sm px-1.5 py-0.5 text-xs text-muted transition hover:bg-surface-3 hover:text-fg" onClick={onCancel}>{t('cancel')}</button> : null}
       </div>
       <p className="mb-2 text-xs text-muted">{formatSize(loaded)} / {formatSize(total)} · {formatSize(rate)}/s{eta ? ` · ${t('timeLeft', { time: eta })}` : ''}</p>
       <Progress value={pct} label={title} />
@@ -282,7 +282,7 @@ export function ConversationListItem({
   onClick?: () => void
 }) {
   return (
-    <button type="button" onClick={onClick} className={cn('flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-surface-2', active && 'bg-surface-2')}>
+    <button type="button" onClick={onClick} className={cn('ma-focusable flex w-full items-center gap-3 rounded-md px-2 py-2.5 text-left transition hover:bg-surface-2/80', active && 'bg-surface-2/90')}>
       <span className="relative">
         <span className="flex size-10 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent">{name.slice(0, 1).toUpperCase()}</span>
         <span className="absolute right-0 bottom-0"><PresenceDot online={!!online} /></span>

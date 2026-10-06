@@ -1,5 +1,5 @@
 import { loadProjects, type Project } from '@ma/content'
-import { Badge, Card, PageHeader } from '@ma/ui'
+import { Badge, Card, EmptyState, PageHeader } from '@ma/ui'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -21,30 +21,36 @@ export function ListPage() {
   return (
     <div>
       <PageHeader eyebrow="projects.ma.cyou" title={t('projects')} lead={t('projectsLead')} />
-      <div className="mb-6 flex flex-wrap gap-2">
-        <button type="button" aria-pressed={tag === null} onClick={() => setTag(null)} className={`rounded-full px-3 py-1 text-xs ${tag === null ? 'bg-fg text-bg' : 'bg-surface-2'}`}>{t('all')}</button>
+      <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label={t('filterByTag')}>
+        <button type="button" aria-pressed={tag === null} onClick={() => setTag(null)} className={`ma-chip ${tag === null ? 'ma-chip--active' : 'ma-chip--idle'}`}>
+          {t('all')}
+        </button>
         {tags.map((item) => (
-          <button key={item} type="button" aria-pressed={tag === item} onClick={() => setTag(item)} className={`rounded-full px-3 py-1 text-xs ${tag === item ? 'bg-fg text-bg' : 'bg-surface-2'}`}>
+          <button key={item} type="button" aria-pressed={tag === item} onClick={() => setTag(item)} className={`ma-chip ${tag === item ? 'ma-chip--active' : 'ma-chip--idle'}`}>
             {item}
           </button>
         ))}
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        {shown.map((project) => (
-          <Link key={project.slug} to={`/p/${project.slug}`} className="block transition hover:-translate-y-0.5">
-            <Card>
-              <div className="mb-2 flex flex-wrap gap-2">
-                {project.tags.slice(0, 3).map((t) => (
-                  <Badge key={t}>{t}</Badge>
-                ))}
-              </div>
-              <h2 className="text-lg font-medium break-words">{localized(project, ru).title}</h2>
-              <p className="mt-1 text-xs text-muted">{project.year}</p>
-              <p className="mt-2 text-sm text-muted break-words">{localized(project, ru).summary}</p>
-            </Card>
-          </Link>
-        ))}
-      </div>
+      {shown.length === 0 ? (
+        <EmptyState title={t('nothingMatches')} body={t('projectsFilterEmpty')} action={<button type="button" className="ma-focusable text-sm text-accent underline-offset-2 hover:underline" onClick={() => setTag(null)}>{t('showAllProjects')}</button>} />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {shown.map((project) => (
+            <Link key={project.slug} to={`/p/${project.slug}`} className="ma-focusable block rounded-lg transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none">
+              <Card className="h-full transition duration-200 hover:border-accent/25 hover:shadow-md">
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {project.tags.slice(0, 3).map((tagName) => (
+                    <Badge key={tagName}>{tagName}</Badge>
+                  ))}
+                </div>
+                <h2 className="text-lg font-medium break-words">{localized(project, ru).title}</h2>
+                <p className="mt-1 text-xs text-muted">{project.year}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted break-words">{localized(project, ru).summary}</p>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

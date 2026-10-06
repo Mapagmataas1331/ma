@@ -40,7 +40,7 @@ export function HomePage() {
               <li key={link.href}>
                 <a
                   href={link.href}
-                  className="group -mx-3 flex items-center gap-4 rounded-md px-3 py-3.5 transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] hover:bg-surface-2/80"
+                  className="ma-focusable group -mx-3 flex items-center gap-4 rounded-md px-3 py-3.5 transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] hover:bg-surface-2/70 focus-visible:bg-surface-2/70"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block text-base font-medium tracking-tight sm:text-lg">
@@ -63,7 +63,7 @@ export function HomePage() {
 
         <div className="home-fade mt-6 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5" style={{ animationDelay: '300ms' }}>
           {socials.map((s) => (
-            <a key={s.href} href={s.href} target="_blank" rel="noreferrer" className="text-sm text-muted transition hover:text-fg">
+            <a key={s.href} href={s.href} target="_blank" rel="noreferrer" className="ma-focusable rounded-sm text-sm text-muted transition hover:text-fg">
               {s.label}
             </a>
           ))}

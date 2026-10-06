@@ -37,8 +37,8 @@ function SiteSwitcher({ sites }: { sites: SiteLink[] }) {
       trigger={
         <button
           type="button"
-          className="group inline-flex h-9 max-w-[min(100%,14rem)] cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-left transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-px hover:bg-surface-2 active:translate-y-0 active:scale-[0.98]"
-          aria-label={t('sites')}
+          className="ma-focusable group inline-flex h-9 max-w-[min(100%,14rem)] cursor-pointer items-center gap-1.5 rounded-md px-2.5 text-left transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] hover:-translate-y-px hover:bg-surface-2/80 active:translate-y-0 active:scale-[0.98]"
+          aria-label={t('sites')} title={t('sitesHint')}
         >
           <span className="min-w-0 truncate font-semibold tracking-tight">
             {current.short === '@' ? (

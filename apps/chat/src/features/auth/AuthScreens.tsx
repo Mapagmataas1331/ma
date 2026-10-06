@@ -1,5 +1,5 @@
 import { displayNameError, passwordError, usernameError } from '@ma/protocol'
-import { Button, Input, PageHeader } from '@ma/ui'
+import { Button, Input, PageHeader, Surface } from '@ma/ui'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
@@ -32,7 +32,7 @@ export function AuthScreens({
 
   return (
     <form
-      className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-3 overflow-y-auto px-4 py-6"
+      className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center overflow-y-auto px-4 py-6"
       onSubmit={form.handleSubmit(async (values) => {
         setError('')
         try {
@@ -61,6 +61,7 @@ export function AuthScreens({
         }
       })}
     >
+      <Surface strong className="flex flex-col gap-3 p-5 sm:p-6">
       <PageHeader title={mode === 'register' ? t('createAccount') : mode === '2fa' ? t('twoFactorCode') : t('signIn')} lead={t('signInLead')} />
       {mode === 'register' ? <Input placeholder={t('inviteCode')} aria-label={t('inviteCode')} {...form.register('invite', { required: true })} /> : null}
       {mode !== '2fa' ? <Input placeholder={t('username')} aria-label={t('username')} autoComplete="username" {...form.register('username', { required: true })} /> : null}
@@ -72,14 +73,15 @@ export function AuthScreens({
       ) : null}
       {mode !== '2fa' ? <Input type="password" placeholder={t('accountPassword')} aria-label={t('accountPassword')} autoComplete={mode === 'register' ? 'new-password' : 'current-password'} {...form.register('password', { required: true })} /> : null}
       {mode === '2fa' ? <Input placeholder={t('code')} aria-label={t('code')} inputMode="numeric" {...form.register('code', { required: true })} /> : null}
-      <p className="text-xs text-muted">{mode === 'register' ? t('accountPasswordHint') : t('vaultPasswordSeparate')}</p>
+      <p className="text-xs text-muted">{mode === 'register' ? t('accountPasswordHint') : mode === '2fa' ? t('twoFactorHintShort') : t('signInPasswordHint')}</p>
       {error ? <p className="text-sm text-danger" role="alert">{error}</p> : null}
       <Button type="submit">{mode === 'register' ? t('register') : t('continue')}</Button>
       {mode === 'login' ? (
-        <button type="button" className="block text-sm text-accent/80 underline decoration-accent/25 underline-offset-2 hover:text-accent hover:decoration-accent/50" onClick={() => { setError(''); onMode('register') }}>
+        <button type="button" className="ma-focusable block text-sm text-accent/80 underline decoration-accent/25 underline-offset-2 hover:text-accent hover:decoration-accent/50" onClick={() => { setError(''); onMode('register') }}>
           {t('haveInvite')}
         </button>
       ) : null}
+      </Surface>
     </form>
   )
 }

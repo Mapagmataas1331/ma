@@ -1,12 +1,12 @@
 import { vaultPasswordError } from '@ma/protocol'
-import { Button, Input, PageHeader } from '@ma/ui'
+import { Button, Input, PageHeader, Surface } from '@ma/ui'
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function VaultExplainer({ defaultOpen = false }: { defaultOpen?: boolean }) {
   const { t } = useTranslation('common')
   return (
-    <details className="rounded-md border border-line bg-surface-1 px-4 py-3 text-sm" open={defaultOpen}>
+    <details className="ma-surface rounded-md border border-line px-4 py-3 text-sm" open={defaultOpen}>
       <summary className="cursor-pointer font-medium">{t('vaultWhatIs')}</summary>
       <div className="mt-3 space-y-3 text-muted">
         <p>{t('vaultExplainWhat')}</p>
@@ -74,6 +74,7 @@ export function UnlockScreen({
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center gap-4 overflow-y-auto px-4 py-6">
+      <Surface strong className="flex flex-col gap-3 p-5 sm:p-6">
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -133,8 +134,9 @@ export function UnlockScreen({
         <Button type="submit" disabled={busy}>{creating ? t('createVaultButton') : webAuthnReady ? t('unlockWithPassword') : t('unlock')}</Button>
         {creating ? <p className="text-xs text-muted">{t('vaultNotAccountPassword')}</p> : null}
       </form>
+      </Surface>
       {pending && onTransfer && onFresh ? (
-        <div className="flex flex-col gap-2 rounded-md border border-line bg-surface-1 px-4 py-3">
+        <div className="ma-surface flex flex-col gap-2 rounded-md border border-line px-4 py-3">
           <p className="text-sm">{t('deviceUntrusted')}</p>
           <Button type="button" onClick={onTransfer}>{t('transferChats')}</Button>
           <Button type="button" variant="outline" disabled={busy} onClick={() => {

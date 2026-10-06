@@ -4,7 +4,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 export function ResumePage() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation('common')
   const lang = i18n.language.startsWith('ru') ? 'ru' : 'en'
   const data = loadResume(lang)
   const projectsOrigin = import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou'
@@ -17,7 +17,7 @@ export function ResumePage() {
     <article ref={articleRef} className="mx-auto max-w-3xl">
       <header>
         <div className="flex items-center gap-4 sm:gap-6">
-          <button type="button" className="size-24 shrink-0 overflow-hidden rounded-lg sm:size-32" onClick={() => setShot({ src: data.profile.photo, alt: data.profile.name, caption: data.profile.name })}>
+          <button type="button" className="ma-focusable size-24 shrink-0 overflow-hidden rounded-lg shadow-float ring-1 ring-line/60 sm:size-32" aria-label={t('enlargePhoto')} onClick={() => setShot({ src: data.profile.photo, alt: data.profile.name, caption: data.profile.name })}>
             <img src={data.profile.photo} alt={data.profile.name} className="size-full object-cover object-[center_28%]" />
           </button>
           <div className="min-w-0">
@@ -55,7 +55,7 @@ export function ResumePage() {
         ))}
         <div className="mt-6 grid gap-6 sm:grid-cols-3">
           {data.highlights.map((h) => (
-            <div key={h.title} className="min-w-0">
+            <div key={h.title} className="ma-surface min-w-0 rounded-md border border-line/70 p-4">
               <p className="font-medium">{h.title}</p>
               <p className="mt-1 text-sm leading-relaxed text-muted">{h.body}</p>
             </div>
@@ -153,7 +153,7 @@ export function ResumePage() {
         <ul className="divide-y divide-line">
           {data.contacts.map((c) => (
             <li key={c.href}>
-              <a href={c.href} className="block py-3" {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>
+              <a href={c.href} className="ma-focusable block rounded-sm py-3 transition hover:bg-surface-2/40" {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>
                 <span className="text-sm text-muted">{c.label}</span>
                 <span className="mt-0.5 block font-medium break-all">{c.value}</span>
                 <span className="block text-sm text-muted">{c.hint}</span>

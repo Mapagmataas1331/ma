@@ -23,3 +23,9 @@ services/api/admin
 .idea
 .vscode
 *.tsbuildinfo
+# OS / editor / caches
+Thumbs.db
+Desktop.ini
+*.log
+.turbo
+.cache

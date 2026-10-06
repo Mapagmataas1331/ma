@@ -1,6 +1,6 @@
 import { ApiError, authApi, type BadgeTrack } from '@ma/api-client'
 import { canonicalDisplayName, canonicalUsername, displayNameError, passwordError, usernameError } from '@ma/protocol'
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { UserAvatar } from './identicon'
@@ -47,7 +47,7 @@ export function AccountSettings() {
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileSaved, setProfileSaved] = useState('')
 
-  async function load() {
+  const load = useCallback(async () => {
     setError('')
     try {
       const session = await authApi.session()
@@ -67,14 +67,14 @@ export function AccountSettings() {
     } finally {
       setReady(true)
     }
-  }
+  }, [t])
 
   useEffect(() => {
     void load()
     const onAuth = () => void load()
     window.addEventListener('ma-auth', onAuth)
     return () => window.removeEventListener('ma-auth', onAuth)
-  }, [])
+  }, [load])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()

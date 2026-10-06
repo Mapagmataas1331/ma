@@ -1,8 +1,8 @@
 {
-  "lead": "Resume, projects, and a quiet messenger — everything needed, nothing loud.",
+  "lead": "I build web products that are quiet, fast, and reach production — from the database to the UI.",
   "intro": "I keep web systems alive — APIs, data, and the machines under them.",
   "open": "Open",
   "resumeBlurb": "CV without the corporate fog.",
   "projectsBlurb": "Things that are actually online.",
-  "chatBlurb": "Invite-gated chat. Encryption on. No feed, no ads."
+  "chatBlurb": "Invite-only. E2E in the browser. WebRTC when online. No feed, no ads."
 }
