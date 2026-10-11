@@ -133,6 +133,13 @@ export type DayConfig = {
 
 const S = 0.5 // cloud sprite resolution relative to CSS px (they're soft; upscaling is invisible)
 const RS = 0.25 // god-ray layer resolution
+/**
+ * Smoothing for the quarter-res soft layers (warm light, god-rays, flare) stretched over the full canvas.
+ * They are smooth gradients, so bilinear ('medium') looks the same as bicubic ('high'), and 'high' made
+ * each frame cost a full-canvas bicubic resample per layer: on a throttled phone CPU that pushed every
+ * frame past 50 ms, and Lighthouse saw a never-ending chain of long tasks (TBT 17 s). Sprites keep 'high'.
+ */
+const SOFT_UPSCALE: ImageSmoothingQuality = 'medium'
 const HAZE_RGB: [number, number, number] = [240, 244, 250]
 
 /** One horizontally tiling band of cumulus tops: a foreshortened cauliflower merged into a lit height field. */
@@ -949,9 +956,19 @@ export function createDayScene(cfg: DayConfig): SkyScene {
           ctx.globalAlpha = 1
         }
         ctx.globalCompositeOperation = 'multiply'
+        ctx.imageSmoothingQuality = SOFT_UPSCALE
         ctx.drawImage(warmC, 0, warmY0 * DPR, canvas.width, canvas.height - warmY0 * DPR)
         ctx.globalCompositeOperation = 'source-over'
+        ctx.imageSmoothingQuality = 'high'
       }
+
+      // sun flare: breathes slowly, swells a little as the page scrolls
+      const flareK = Math.min(1, shift / 500)
+      const flareScale = 1 + 0.15 * flareK
+      const flareAlpha = Math.min(1, (0.22 + 0.3 * flareK) * (still ? 1 : 0.92 + 0.08 * Math.sin((t * TAU) / 22)) * cfg.bloom)
+      // Screen is associative, so the flare can be screened into the (same quarter-res) ray layer first and
+      // both reach the full-res canvas in one pass instead of two. Same picture, about half the per-frame cost.
+      const flareInRays = !!(flareC && rayC && rayG && rays.length)
 
       // god-rays: each = 3 nested soft wedges with a radial alpha profile, breathing on long periods
       if (rayC && rayG && rays.length) {
@@ -976,27 +993,34 @@ export function createDayScene(cfg: DayConfig): SkyScene {
             rayG.fill()
           }
         }
+        if (flareInRays && flareC) {
+          rayG.globalCompositeOperation = 'screen'
+          rayG.globalAlpha = flareAlpha
+          rayG.drawImage(flareC, SX * (1 - flareScale), SY * (1 - flareScale), W * flareScale, H * flareScale)
+          rayG.globalAlpha = 1
+          rayG.globalCompositeOperation = 'source-over'
+        }
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.globalCompositeOperation = 'screen'
+        ctx.imageSmoothingQuality = SOFT_UPSCALE
         ctx.drawImage(rayC, 0, 0, canvas.width, canvas.height)
         ctx.globalCompositeOperation = 'source-over'
+        ctx.imageSmoothingQuality = 'high'
       }
 
-      // sun flare: breathes slowly, swells a little as the page scrolls
-      if (flareC) {
-        const k = Math.min(1, shift / 500)
-        const breathe = still ? 1 : 0.92 + 0.08 * Math.sin((t * TAU) / 22)
-        const sc = 1 + 0.15 * k
+      if (flareC && !flareInRays) {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.globalCompositeOperation = 'screen'
-        ctx.globalAlpha = Math.min(1, (0.22 + 0.3 * k) * breathe * cfg.bloom)
-        const fw = canvas.width * sc
-        const fh = canvas.height * sc
-        const ox = SX * DPR * (1 - sc)
-        const oy = SY * DPR * (1 - sc)
+        ctx.globalAlpha = flareAlpha
+        ctx.imageSmoothingQuality = SOFT_UPSCALE
+        const fw = canvas.width * flareScale
+        const fh = canvas.height * flareScale
+        const ox = SX * DPR * (1 - flareScale)
+        const oy = SY * DPR * (1 - flareScale)
         ctx.drawImage(flareC, ox, oy, fw, fh)
         ctx.globalAlpha = 1
         ctx.globalCompositeOperation = 'source-over'
+        ctx.imageSmoothingQuality = 'high'
       }
 
       // specks of light, drifting in the sunbeams
