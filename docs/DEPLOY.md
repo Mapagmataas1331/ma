@@ -44,6 +44,8 @@ Live HTTPS is already wired in `nginx-api.conf`: `:80` serves ACME HTTP-01 under
 
 WebSocket upgrades for chat use `$connection_upgrade` from `nginx-upgrade.conf` and long proxy timeouts; leave those intact when editing the vhost.
 
+Keep `client_body_buffer_size 8m` on `location = /v1/mailbox/files`. Over HTTP/2, nginx sizes each upload's flow-control window from that buffer (64 KiB by default), which held chat cloud uploads to roughly 64 KiB per round trip (a few hundred KB/s from far away). After changing the vhost run `sudo nginx -t && sudo systemctl reload nginx`.
+
 ## Open Graph images
 
 The API renders the social preview cards: `GET https://api.ma.cyou/v1/og?site=home|projects|resume|chat` (alias `/og.png`) returns a 1200×630 PNG in the site's night-sky style, with optional `title` and `subtitle` (or `desc`) query parameters. The four `index.html` files point `og:image` / `twitter:image` at it. Responses carry `Cache-Control: public, max-age=86400, s-maxage=604800` and an `ETag`; rendered cards stay in a small in-process cache. Bump `og.Version` (and add `&v=N` to the meta URLs if crawlers hold old copies) after changing the design.
