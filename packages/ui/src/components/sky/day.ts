@@ -51,6 +51,18 @@ type Mote = {
   per: number
   ph: number
 }
+type FloaterState = {
+  sprite: HTMLCanvasElement
+  x: number
+  y: number
+  w: number
+  h: number
+  alpha: number
+  amp: number
+  T: number
+  ph: number
+  key: string
+}
 type WispState = {
   sprite: HTMLCanvasElement
   x: number
@@ -75,6 +87,19 @@ export type Wisp = {
   v: number
 }
 
+/** A detached cumulus floating mid-sky; bobs gently in place (no wrap-around). Fractions of the viewport. */
+export type Floater = {
+  x: number
+  y: number
+  w: number
+  maxW: number
+  alpha: number
+  seed: number
+  /** Horizontal sway (CSS px) and its period (s). */
+  amp: number
+  T: number
+}
+
 export type DayConfig = {
   /** Frame cap; 0 = static. */
   fps: number
@@ -96,6 +121,13 @@ export type DayConfig = {
   wisps: Wisp[]
   /** Soft brightening behind the content: a round glow or a full-height reading column. */
   veil: { kind: 'radial' | 'column'; alpha: number } | null
+  /** Cool, deeper blue settling into the corner opposite the sun (the other half of the warm/cool split). */
+  zenith?: { rgb: [number, number, number]; alpha: number }
+  /** Wide warm haze around the sun, well beyond the white bloom. `r` × viewport diagonal. */
+  halo?: { alpha: number; r: number }
+  /** Pale daytime moon; skipped where it would sit behind the content column. `r` in CSS px. */
+  moon?: { x: number; y: number; r: number; alpha: number }
+  floaters?: Floater[]
 }
 
 const S = 0.5 // cloud sprite resolution relative to CSS px (they're soft; upscaling is invisible)
@@ -226,7 +258,7 @@ function* makeBand(
   const [c, g] = makeLayer(w, h)
   const img = g.createImageData(w, h)
   const px = img.data
-  const amb = [158, 184, 224]
+  const amb = [144, 172, 220]
   for (let y = 0; y < h; y++) {
     yield
     for (let x = 0; x < w; x++) {
@@ -249,7 +281,7 @@ function* makeBand(
       nz /= nm
       let l = clamp01((nx * L[0] + ny * L[1] + nz * L[2] + 0.45) / 1.45)
       const depth = clamp01((y - ly) / (h - ly + 1)) // lower in the band → in the shade of the tops
-      l *= 1 - Math.pow(depth, 0.8) * 0.5
+      l *= 1 - Math.pow(depth, 0.8) * 0.56
       l = mix(l, 1, (1 - smooth(0, 0.8, cov)) * 0.5)
       l = Math.pow(l, 0.8)
       const o = i * 4
@@ -281,11 +313,121 @@ function makeWisp(wCss: number, hCss: number, seed: number) {
       const f = fbm(n, u * 2.2, v * 5 + u * 1.5, 5)
       const o = (y * w + x) * 4
       px[o] = px[o + 1] = px[o + 2] = 255
-      px[o + 3] = smooth(-0.05, 0.45, f + 0.12) * env * 120
+      px[o + 3] = smooth(-0.05, 0.45, f + 0.12) * env * 150
     }
   }
   g.putImageData(img, 0, 0)
   return c
+}
+
+/**
+ * A small detached cumulus: a low body of soft lobes with crowns heaped toward the middle, lit
+ * from the upper right, a cool shaded underside and a softly flattened base. Plain 2D gradients,
+ * built once per size.
+ */
+function makeCumulus(wCss: number, hCss: number, seed: number) {
+  const k = 0.75 // sprite scale (soft edges hide the upscale)
+  const [c, g] = makeLayer(Math.round(wCss * k), Math.round(hCss * k), k)
+  const R = rng(seed)
+  const w = wCss
+  const h = hCss
+  const base = h * 0.8
+  const domes: { x: number; y: number; r: number }[] = []
+  const n = 9 + Math.floor(R() * 4)
+  for (let i = 0; i < n; i++) {
+    const u = 0.08 + (0.84 * (i + R() * 0.8)) / n
+    const bulge = Math.pow(Math.sin(u * Math.PI), 1.4)
+    const r = h * (0.1 + bulge * 0.13 + R() * 0.05)
+    domes.push({ x: w * u, y: base - r * 0.7 - bulge * h * 0.12, r })
+  }
+  const m = 5 + Math.floor(R() * 3)
+  for (let i = 0; i < m; i++) {
+    const u = 0.3 + R() * 0.42
+    const bulge = Math.sin(u * Math.PI)
+    const r = h * (0.12 + R() * 0.1) * bulge
+    domes.push({ x: w * u, y: base - h * (0.3 + bulge * 0.22 + R() * 0.08), r })
+  }
+  domes.sort((p, q) => q.y - p.y) // lower lobes first, crowns on top
+  for (const d of domes) {
+    const gr = g.createRadialGradient(d.x + d.r * 0.2, d.y - d.r * 0.3, 0, d.x, d.y, d.r * 1.25)
+    gr.addColorStop(0, 'rgba(255,255,255,0.95)')
+    gr.addColorStop(0.45, 'rgba(252,253,255,0.8)')
+    gr.addColorStop(0.75, 'rgba(236,242,251,0.4)')
+    gr.addColorStop(1, 'rgba(230,238,250,0)')
+    g.fillStyle = gr
+    g.fillRect(d.x - d.r * 1.25, d.y - d.r * 1.25, d.r * 2.5, d.r * 2.5)
+  }
+  g.globalCompositeOperation = 'source-atop'
+  // cool shade on the underside, warm sunlit crowns
+  const sh = g.createLinearGradient(0, h * 0.35, 0, base + h * 0.05)
+  sh.addColorStop(0, 'rgba(150,172,212,0)')
+  sh.addColorStop(0.65, 'rgba(150,172,212,0.36)')
+  sh.addColorStop(1, 'rgba(132,156,202,0.6)')
+  g.fillStyle = sh
+  g.fillRect(0, 0, w, h)
+  const warm = g.createRadialGradient(w, 0, 0, w, 0, Math.hypot(w, h) * 0.8)
+  warm.addColorStop(0, 'rgba(255,234,200,0.45)')
+  warm.addColorStop(1, 'rgba(255,234,200,0)')
+  g.fillStyle = warm
+  g.fillRect(0, 0, w, h)
+  // soft, flat base
+  g.globalCompositeOperation = 'destination-in'
+  const mask = g.createLinearGradient(0, base - h * 0.1, 0, base + h * 0.1)
+  mask.addColorStop(0, 'rgba(0,0,0,1)')
+  mask.addColorStop(1, 'rgba(0,0,0,0)')
+  g.fillStyle = mask
+  g.fillRect(0, 0, w, h)
+  g.globalCompositeOperation = 'source-over'
+  return c
+}
+
+const MARIA: [number, number, number][] = [
+  [-0.32, -0.22, 0.42],
+  [0.22, -0.2, 0.3],
+  [0.12, 0.16, 0.34],
+  [-0.28, 0.38, 0.24],
+]
+
+/** Pale daytime moon: a translucent disc with faint maria, painted straight into the static sky. */
+function paintMoon(g: Ctx, x: number, y: number, r: number, alpha: number) {
+  g.save()
+  g.globalAlpha = alpha
+  const glow = g.createRadialGradient(x, y, r * 0.8, x, y, r * 2.6)
+  glow.addColorStop(0, 'rgba(255,255,255,0.35)')
+  glow.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = glow
+  g.fillRect(x - r * 2.6, y - r * 2.6, r * 5.2, r * 5.2)
+  const disc = g.createRadialGradient(x + r * 0.25, y - r * 0.2, 0, x, y, r)
+  disc.addColorStop(0, 'rgba(255,255,255,0.95)')
+  disc.addColorStop(0.75, 'rgba(246,249,255,0.88)')
+  disc.addColorStop(0.96, 'rgba(226,236,250,0.75)')
+  disc.addColorStop(1, 'rgba(226,236,250,0)')
+  g.fillStyle = disc
+  g.beginPath()
+  g.arc(x, y, r, 0, TAU)
+  g.fill()
+  g.beginPath()
+  g.arc(x, y, r * 0.97, 0, TAU)
+  g.clip()
+  // broad, faint maria (roughly where they sit on the real near side)
+  for (const [ox, oy, k] of MARIA) {
+    const mx = x + ox * r
+    const my = y + oy * r
+    const mr = r * k
+    const mg = g.createRadialGradient(mx, my, 0, mx, my, mr)
+    mg.addColorStop(0, 'rgba(178,194,222,0.26)')
+    mg.addColorStop(0.6, 'rgba(178,194,222,0.14)')
+    mg.addColorStop(1, 'rgba(178,194,222,0)')
+    g.fillStyle = mg
+    g.fillRect(mx - mr, my - mr, mr * 2, mr * 2)
+  }
+  // the side away from the sun falls off a little
+  const shade = g.createLinearGradient(x + r, y - r, x - r, y + r)
+  shade.addColorStop(0.45, 'rgba(200,214,236,0)')
+  shade.addColorStop(1, 'rgba(200,214,236,0.35)')
+  g.fillStyle = shade
+  g.fillRect(x - r, y - r, r * 2, r * 2)
+  g.restore()
 }
 
 function makeMoteSprite() {
@@ -336,6 +478,7 @@ export function createDayScene(cfg: DayConfig): SkyScene {
   let hazeGrad: CanvasGradient[] = []
   let hazeY: [number, number][] = []
   let wisps: WispState[] = []
+  let floaters: FloaterState[] = []
   const moteSprite = cfg.motes ? makeMoteSprite() : null
 
   // specks live in the sunlit part of the sky, inside the ray fan
@@ -474,8 +617,8 @@ export function createDayScene(cfg: DayConfig): SkyScene {
       const y1 = defs[i + 1].y0 + U * 0.04
       const hg = seaG.createLinearGradient(0, y0, 0, y1)
       hg.addColorStop(0, 'rgba(240,244,250,0)')
-      hg.addColorStop(0.3, 'rgba(240,244,250,0.4)')
-      hg.addColorStop(0.65, 'rgba(240,244,250,0.15)')
+      hg.addColorStop(0.3, 'rgba(240,244,250,0.32)')
+      hg.addColorStop(0.65, 'rgba(240,244,250,0.12)')
       hg.addColorStop(1, 'rgba(240,244,250,0)')
       hazeGrad.push(hg)
       hazeY.push([y0, y1])
@@ -539,6 +682,30 @@ export function createDayScene(cfg: DayConfig): SkyScene {
       for (const [k, col] of cfg.sky) grad.addColorStop(k, col)
       g.fillStyle = grad
       g.fillRect(0, 0, W, H)
+      // cool, deeper blue settling into the corner away from the sun
+      if (cfg.zenith) {
+        const [r, gg, b] = cfg.zenith.rgb
+        const a = cfg.zenith.alpha
+        const zx = W - SX
+        const zy = H * 0.05
+        const zg = g.createRadialGradient(zx, zy, 0, zx, zy, DIAG * 0.62)
+        zg.addColorStop(0, `rgba(${r},${gg},${b},${a})`)
+        zg.addColorStop(0.45, `rgba(${r},${gg},${b},${a * 0.55})`)
+        zg.addColorStop(1, `rgba(${r},${gg},${b},0)`)
+        g.fillStyle = zg
+        g.fillRect(0, 0, W, H)
+      }
+      // wide warm haze around the sun: peach fading into the blue
+      if (cfg.halo) {
+        const a = cfg.halo.alpha
+        const hr = g.createRadialGradient(SX, SY, 0, SX, SY, DIAG * cfg.halo.r)
+        hr.addColorStop(0, `rgba(255,214,168,${a})`)
+        hr.addColorStop(0.4, `rgba(255,222,184,${a * 0.7})`)
+        hr.addColorStop(0.75, `rgba(255,232,206,${a * 0.25})`)
+        hr.addColorStop(1, 'rgba(255,236,214,0)')
+        g.fillStyle = hr
+        g.fillRect(0, 0, W, H)
+      }
       // luminous haze resting on the horizon: cool on the left, sun-warmed on the right
       if (cfg.horizon > 0) {
         const k = cfg.horizon
@@ -571,6 +738,20 @@ export function createDayScene(cfg: DayConfig): SkyScene {
         bloom.addColorStop(1, 'rgba(255,240,210,0)')
         g.fillStyle = bloom
         g.fillRect(0, 0, W, H)
+      }
+      if (cfg.moon) {
+        const { x, y, r, alpha } = cfg.moon
+        const mr = Math.max(10, Math.min(r, Math.min(W, H) * 0.045))
+        const mx = W * x
+        const my = H * y
+        const pad = mr * 2
+        const hidden =
+          content &&
+          mx + pad > content.x &&
+          mx - pad < content.x + content.w &&
+          my + pad > content.y &&
+          my - pad < content.y + content.h
+        if (!hidden && W >= 560) paintMoon(g, mx, my, mr, alpha)
       }
       // soft brightening behind the content (keeps text contrast high where it matters)
       if (cfg.veil) {
@@ -656,6 +837,32 @@ export function createDayScene(cfg: DayConfig): SkyScene {
           v: wd.v,
         }
       })
+
+      // ── detached cumulus, bobbing in place (sprites keyed by size) ──
+      const prevFloaters = floaters
+      const narrow = W < 640
+      // phones: the content fills the width, so the floaters would only sit behind text
+      floaters = (narrow ? [] : (cfg.floaters ?? [])).map((fd, i) => {
+        const w = Math.round(Math.min(W * fd.w, fd.maxW))
+        const h = Math.round(w * 0.46)
+        const key = `${w}|${fd.seed}`
+        const old = prevFloaters[i]
+        const sprite = old && old.key === key ? old.sprite : makeCumulus(w, h, fd.seed)
+        if (old && old.sprite !== sprite) freeCanvas(old.sprite)
+        return {
+          sprite,
+          key,
+          x: W * fd.x - w / 2,
+          y: H * fd.y - h / 2,
+          w,
+          h,
+          alpha: fd.alpha,
+          amp: fd.amp,
+          T: fd.T,
+          ph: rng(fd.seed)() * TAU,
+        }
+      })
+      for (let i = floaters.length; i < prevFloaters.length; i++) freeCanvas(prevFloaters[i].sprite)
     },
 
     draw(t, dt, shift, still) {
@@ -674,6 +881,11 @@ export function createDayScene(cfg: DayConfig): SkyScene {
         if (w.x > W + 10) w.x = -w.w - 10
         ctx.globalAlpha = w.alpha
         ctx.drawImage(w.sprite, w.x, w.y - lift, w.w, w.h)
+      }
+      for (const f of floaters) {
+        const dx = still ? 0 : Math.sin((t * TAU) / f.T + f.ph) * f.amp
+        ctx.globalAlpha = f.alpha
+        ctx.drawImage(f.sprite, f.x + dx, f.y - lift * 0.6, f.w, f.h)
       }
       ctx.globalAlpha = 1
 

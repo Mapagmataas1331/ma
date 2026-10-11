@@ -1,11 +1,11 @@
-import type { DayConfig } from './day'
+import type { DayConfig, Floater, Wisp } from './day'
 import type { Blob, NightConfig, Planet } from './night'
 
 /**
  * One sky world, a different view per page. The homepage is the showpiece; the other pages
  * reuse the same palettes and renderers in calmer compositions (chat being the quietest).
  */
-export type SkyVariant = 'home' | 'resume' | 'projects' | 'chat' | 'conversation'
+export type SkyVariant = 'home' | 'resume' | 'projects' | 'chat' | 'conversation' | 'account'
 
 type Preset = { night: NightConfig; day: DayConfig }
 
@@ -44,6 +44,55 @@ const cornerLimb = (w: number, h: number): Planet => {
 
 const CALM_NIGHT: [string, string, string] = ['rgb(6,8,14)', 'rgb(8,11,19)', 'rgb(11,15,26)']
 
+const CHAT_NIGHT: NightConfig = {
+  fps: 30,
+  base: CALM_NIGHT,
+  lift: 0.32,
+  stars: { density: 0.5, alpha: 0.7, twinkle: 0.5, speed: 0.4 },
+  blobs: [],
+  nebGain: 0,
+  hole: null,
+  planet: null,
+  glow: 0,
+  meteors: false,
+}
+
+/** Light skies: the cool blue that settles into the corner opposite the sun. */
+const ZENITH: [number, number, number] = [92, 146, 226]
+
+/** Pale calm sky for the chat pages (list, sign-in, conversation). */
+const CALM_SKY: [number, string][] = [
+  [0, '#fffaf0'],
+  [0.14, '#fdf0dc'],
+  [0.36, '#f9f4ee'],
+  [0.58, '#e6eef7'],
+  [0.8, '#c9dcf2'],
+  [1, '#b4cff0'],
+]
+
+const cirrus = (x: number, y: number, w: number, alpha: number, seed: number, v: number): Wisp => ({
+  x,
+  y,
+  w,
+  h: w * 0.2,
+  maxW: w * 1500,
+  maxH: w * 280,
+  alpha,
+  seed,
+  v,
+})
+
+const cumulus = (x: number, y: number, w: number, maxW: number, alpha: number, seed: number): Floater => ({
+  x,
+  y,
+  w,
+  maxW,
+  alpha,
+  seed,
+  amp: 14 + (seed % 7) * 2,
+  T: 70 + (seed % 5) * 9,
+})
+
 export const SKY_PRESETS: Record<SkyVariant, Preset> = {
   home: {
     night: {
@@ -70,9 +119,19 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       motes: 30,
       sea: { side: 'full', top: 'content' },
       wisps: [
-        { x: 0.04, y: 0.09, w: 0.42, h: 0.09, maxW: 620, maxH: 80, alpha: 0.8, seed: 77, v: 0.8 },
+        { x: 0.04, y: 0.09, w: 0.42, h: 0.09, maxW: 620, maxH: 80, alpha: 0.85, seed: 77, v: 0.8 },
+        cirrus(0.55, 0.2, 0.26, 0.6, 91, 0.6),
+        cirrus(0.2, 0.33, 0.2, 0.45, 113, 0.45),
       ],
       veil: { kind: 'radial', alpha: 0.34 },
+      zenith: { rgb: ZENITH, alpha: 0.34 },
+      halo: { alpha: 0.42, r: 0.62 },
+      moon: { x: 0.13, y: 0.2, r: 24, alpha: 0.85 },
+      floaters: [
+        cumulus(0.09, 0.52, 0.15, 240, 0.95, 21),
+        cumulus(0.91, 0.62, 0.13, 210, 0.9, 34),
+        cumulus(0.84, 0.36, 0.08, 130, 0.75, 47),
+      ],
     },
   },
 
@@ -122,7 +181,8 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
   },
 
   // Night — a large planet curving out of the lower-right corner, a faint periwinkle glow upper left.
-  // Day — low cloud banks off to the left, warm sun haze from the upper right.
+  // Day — low cloud banks off to the left, warm sun haze from the upper right, a cool upper left,
+  // high cirrus and two small cumulus in the margins.
   projects: {
     night: {
       fps: 30,
@@ -150,50 +210,39 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       rays: { count: 6, alpha: 0.6 },
       motes: 14,
       sea: { side: 'left', top: 0.8 },
-      wisps: [],
+      wisps: [cirrus(0.42, 0.06, 0.3, 0.6, 77, 0.5), cirrus(0.66, 0.22, 0.2, 0.45, 91, 0.35)],
       veil: null,
+      zenith: { rgb: ZENITH, alpha: 0.24 },
+      halo: { alpha: 0.36, r: 0.58 },
+      floaters: [cumulus(0.935, 0.5, 0.1, 170, 0.85, 34), cumulus(0.065, 0.36, 0.08, 120, 0.7, 47)],
     },
   },
 
   // Chat list / sign-in: dim and calm. Night — faint stars over a slight gradient.
-  // Day — soft hazy sky with a gentle sun glow and three barely-there rays.
+  // Day — warm sun haze against a cool corner, two small cumulus off to the sides, a low sea of clouds.
   chat: {
-    night: {
-      fps: 30,
-      base: CALM_NIGHT,
-      lift: 0.32,
-      stars: { density: 0.5, alpha: 0.7, twinkle: 0.5, speed: 0.4 },
-      blobs: [],
-      nebGain: 0,
-      hole: null,
-      planet: null,
-      glow: 0,
-      meteors: false,
-    },
+    night: CHAT_NIGHT,
     day: {
       fps: 20,
       sun: [0.95, -0.1],
-      sky: [
-        [0, '#fffbf4'],
-        [0.15, '#fdf4e6'],
-        [0.4, '#f5f2ed'],
-        [0.65, '#e5ecf4'],
-        [1, '#cfdff1'],
-      ],
+      sky: CALM_SKY,
       reach: 1.1,
-      bloom: 0.6,
+      bloom: 0.7,
       bloomR: 0.2,
-      horizon: 0.4,
-      rays: { count: 3, alpha: 0.4 },
+      horizon: 0.6,
+      rays: { count: 4, alpha: 0.5 },
       motes: 0,
-      sea: null,
-      wisps: [],
-      veil: null,
+      sea: { side: 'full', top: 0.87 },
+      wisps: [cirrus(0.04, 0.12, 0.3, 0.65, 77, 0.5), cirrus(0.62, 0.3, 0.2, 0.45, 113, 0.35)],
+      veil: { kind: 'radial', alpha: 0.22 },
+      zenith: { rgb: ZENITH, alpha: 0.26 },
+      halo: { alpha: 0.34, r: 0.55 },
+      floaters: [cumulus(0.07, 0.56, 0.1, 170, 0.8, 21), cumulus(0.93, 0.44, 0.08, 140, 0.7, 34)],
     },
   },
 
   // Inside a conversation: the most minimal. Night — a few barely-twinkling, motionless stars at
-  // 10fps. Day — a fully static pale sky with a faint warm corner.
+  // 10fps. Day — a fully static pale sky: warm corner, cool corner, two still cirrus streaks.
   conversation: {
     night: {
       fps: 10,
@@ -211,20 +260,45 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       fps: 0,
       sun: [0.95, -0.1],
       sky: [
-        [0, '#fdfaf4'],
-        [0.3, '#f7f3ed'],
-        [0.6, '#eef1f5'],
-        [1, '#dde7f2'],
+        [0, '#fdf8ef'],
+        [0.25, '#f8f1e6'],
+        [0.55, '#e9eef5'],
+        [1, '#d0e0f2'],
       ],
       reach: 1.1,
-      bloom: 0.45,
+      bloom: 0.5,
       bloomR: 0.18,
       horizon: 0.3,
       rays: null,
       motes: 0,
       sea: null,
-      wisps: [],
+      wisps: [cirrus(0.06, 0.1, 0.26, 0.5, 77, 0), cirrus(0.6, 0.24, 0.18, 0.35, 91, 0)],
       veil: null,
+      zenith: { rgb: ZENITH, alpha: 0.2 },
+      halo: { alpha: 0.26, r: 0.5 },
+    },
+  },
+
+  // Sign-in, register and vault unlock: a calm, open view. Night — the chat page's quiet stars.
+  // Day — pale moon over a low sea of clouds, sun haze from the upper right, a soft glow behind the card.
+  account: {
+    night: CHAT_NIGHT,
+    day: {
+      fps: 20,
+      sun: [0.95, -0.1],
+      sky: CALM_SKY,
+      reach: 1.1,
+      bloom: 0.7,
+      bloomR: 0.2,
+      horizon: 0.7,
+      rays: { count: 3, alpha: 0.45 },
+      motes: 0,
+      sea: { side: 'full', top: 0.8 },
+      wisps: [cirrus(0.03, 0.08, 0.3, 0.7, 77, 0.5), cirrus(0.66, 0.26, 0.2, 0.45, 91, 0.35)],
+      veil: { kind: 'radial', alpha: 0.28 },
+      zenith: { rgb: ZENITH, alpha: 0.28 },
+      halo: { alpha: 0.34, r: 0.55 },
+      moon: { x: 0.16, y: 0.24, r: 22, alpha: 0.8 },
     },
   },
 }
