@@ -33,11 +33,11 @@ stack:
 
 ## The problem
 
-A production site needs to know what materials it has, where they are, and what to buy next. Spreadsheets and paper logs drift out of date as soon as two people work at once.
+I built this as a freelance project for Exomaterial. Its production needs to know what materials it has, where they are, and what to buy next. Spreadsheets and paper logs drift out of date as soon as two people work at once.
 
 ## How it works
 
-One Next.js app holds both the interface and the server code (server actions on top of a small service layer), next to PostgreSQL. It runs on the company's own server and is used from the local network, so it needs no internet access.
+One Next.js app holds both the interface and the server code (server actions on top of a small service layer), next to PostgreSQL. It runs on the client's own server and is used from the local network, so it needs no internet access.
 
 Every receipt, issue and transfer runs in a database transaction. An issue lowers stock with one conditional update that succeeds only while enough is left, adjustments lock the stock row first, and a database check keeps every quantity at zero or above. Two people can't issue the same last item twice. The purchase list is computed from current stock and each material's minimum. Material search uses trigram indexes in PostgreSQL.
 
@@ -53,17 +53,17 @@ There is no public registration. The first administrator is created with a comma
 
 ## Status
 
-In active development. It deploys with `docker compose up -d --build`, and backups are a `pg_dump` of the database.
+In active development as client work for Exomaterial; the source is public on my GitHub. It deploys with `docker compose up -d --build`, and backups are a `pg_dump` of the database.
 
 <!-- ru -->
 
 ## Задача
 
-Производству нужно знать, какие материалы есть, где они лежат и что пора закупать. Таблицы и бумажные журналы устаревают, как только с ними работают двое одновременно.
+Я сделал эту систему на фрилансе для компании Exomaterial. Её производству нужно знать, какие материалы есть, где они лежат и что пора закупать. Таблицы и бумажные журналы устаревают, как только с ними работают двое одновременно.
 
 ## Как это работает
 
-Одно приложение на Next.js содержит и интерфейс, и серверный код (server actions поверх небольшого слоя сервисов), рядом PostgreSQL. Оно разворачивается на своём сервере предприятия и открывается из локальной сети — интернет не нужен.
+Одно приложение на Next.js содержит и интерфейс, и серверный код (server actions поверх небольшого слоя сервисов), рядом PostgreSQL. Оно разворачивается на собственном сервере заказчика и открывается из локальной сети — интернет не нужен.
 
 Каждое поступление, списание и перемещение выполняется в транзакции. Списание уменьшает остаток одним условным обновлением, которое проходит, только пока хватает количества; корректировки сначала блокируют строку остатка, а проверка в базе не даёт количеству уйти ниже нуля. Двое не спишут одну и ту же последнюю позицию дважды. Список закупки считается из текущих остатков и минимума каждого материала. Поиск по названию использует триграммные индексы PostgreSQL.
 
@@ -79,4 +79,4 @@ In active development. It deploys with `docker compose up -d --build`, and backu
 
 ## Статус
 
-В активной разработке. Разворачивается командой `docker compose up -d --build`, резервная копия — `pg_dump` базы.
+В активной разработке как заказ для Exomaterial; исходный код открыт на моём GitHub. Разворачивается командой `docker compose up -d --build`, резервная копия — `pg_dump` базы.

@@ -91,6 +91,8 @@
   "projectStatus_archived": "Archived",
   "projectContext_work": "Work",
   "projectContext_own": "Own project",
+  "projectContext_freelance": "Freelance",
+  "projectClient": "Client: {name}",
   "projectFeatures": "Key features",
   "projectStack": "Stack",
   "projectGallery": "Screenshots",

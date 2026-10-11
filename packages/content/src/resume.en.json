@@ -41,6 +41,15 @@
         "After launch: logs, resource checks, Grafana, health checks, and backups.",
         "Runbooks so a service can be updated and restored without reading the project from scratch."
       ]
+    },
+    {
+      "org": "Freelance — Exomaterial",
+      "period": "2026",
+      "kind": "freelance",
+      "bullets": [
+        "Built an internal web system for tracking materials in production: stock per storage location, receipts, issues and transfers, and an automatically updated purchase list.",
+        "Next.js, PostgreSQL 16 and Drizzle, with Auth.js and Argon2id; runs with Docker Compose on the client's own server."
+      ]
     }
   ],
   "educationTitle": "Education",
@@ -105,14 +114,14 @@
     },
     {
       "slug": "materials-tracker",
-      "title": "materials-tracker — materials accounting for production",
-      "tags": ["Next.js", "PostgreSQL", "Drizzle", "Docker Compose"],
-      "summary": "Exomaterial, an internal web system for tracking materials at a production site: stock per storage location is calculated automatically, and the purchase list stays current without Excel or paper logs.",
+      "title": "materials-tracker — materials accounting for Exomaterial (freelance)",
+      "tags": ["Freelance", "Next.js", "PostgreSQL", "Drizzle", "Docker Compose"],
+      "summary": "Freelance project for Exomaterial: an internal web system for tracking materials in production. Stock per storage location is calculated automatically, and the purchase list stays current without Excel or paper logs.",
       "bullets": [
         "Receipts, issues and transfers run in database transactions, and stock can't go below zero even when several people work at once.",
         "An automatic list of items below their minimum, with print and CSV export, plus a full operations journal.",
         "Admin and user roles, Auth.js sessions and Argon2id password hashing; no public registration.",
-        "One Next.js app with PostgreSQL 16 and Drizzle, deployed with Docker Compose and an optional nginx HTTPS proxy on the company's own server."
+        "One Next.js app with PostgreSQL 16 and Drizzle, deployed with Docker Compose and an optional nginx HTTPS proxy on the client's own server."
       ],
       "screenshots": [
         { "src": "/screenshots/materials-tracker-materials.webp", "alt": "Materials catalogue in Exomaterial", "caption": "Materials catalogue" },

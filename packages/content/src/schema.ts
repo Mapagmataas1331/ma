@@ -19,6 +19,8 @@ export const resumeSchema = z.object({
     z.object({
       org: z.string(),
       period: z.string(),
+      /** `freelance` marks client work, which is not employment (kept out of the JSON-LD worksFor). */
+      kind: z.enum(['job', 'freelance']).default('job'),
       bullets: z.array(z.string()),
     }),
   ),
@@ -94,8 +96,10 @@ export const projectSchema = z.object({
   tags: z.array(z.string()),
   year: z.number(),
   status: z.enum(['active', 'archived', 'personal']),
-  /** Where the project lives: built for an employer (`work`) or on my own time (`own`). */
-  context: z.enum(['work', 'own']).default('own'),
+  /** Who it was built for: an employer (`work`), a freelance client (`freelance`, see `client`) or myself (`own`). */
+  context: z.enum(['work', 'freelance', 'own']).default('own'),
+  /** The client's name for freelance work, shown next to the label. */
+  client: z.string().default(''),
   featured: z.boolean().default(false),
   titleRu: z.string().default(''),
   summary: z.string(),

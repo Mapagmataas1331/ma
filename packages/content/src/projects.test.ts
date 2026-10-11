@@ -27,6 +27,8 @@ describe('project pages', () => {
   it('includes materials-tracker', () => {
     const tracker = projects.find((project) => project.slug === 'materials-tracker')
     expect(tracker?.links.some((link) => link.href === 'https://github.com/Mapagmataas1331/materials-tracker')).toBe(true)
+    // freelance work for a client, not a personal project
+    expect(tracker).toMatchObject({ context: 'freelance', client: 'Exomaterial' })
   })
 
   it.each(projects.map((project) => [project.slug, project] as const))('%s has images and EN and RU content that lines up', async (slug, project) => {

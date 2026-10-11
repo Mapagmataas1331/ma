@@ -6,7 +6,7 @@ import { defineConfig } from 'vite'
 
 // Facts for the JSON-LD come from the résumé itself, so they cannot drift from the page.
 const resume = JSON.parse(readFileSync(new URL('../../packages/content/src/resume.en.json', import.meta.url), 'utf8')) as {
-  experience: { org: string }[]
+  experience: { org: string; kind?: string }[]
   education: { org: string }[]
   skills: Record<string, string[]>
 }
@@ -38,7 +38,8 @@ export default defineConfig({
             inLanguage: ['en', 'ru'],
             mainEntity: {
               ...person,
-              worksFor: resume.experience.map((job) => ({ '@type': 'Organization', name: job.org })),
+              // freelance clients are not employers
+              worksFor: resume.experience.filter((job) => job.kind !== 'freelance').map((job) => ({ '@type': 'Organization', name: job.org })),
               alumniOf: resume.education.map((school) => ({ '@type': 'EducationalOrganization', name: school.org })),
               knowsAbout: [...new Set(Object.values(resume.skills).flat())],
             },

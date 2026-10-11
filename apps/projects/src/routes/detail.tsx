@@ -84,6 +84,7 @@ export function DetailPage() {
           <span className="font-mono tabular-nums">{project.year}</span>
           <span className={`project-status project-status--${project.status}`}>{t(`projectStatus_${project.status}`)}</span>
           <span className="text-muted">{t(`projectContext_${project.context}`)}</span>
+          {project.client ? <span className="text-muted">{t('projectClient', { name: project.client })}</span> : null}
         </p>
         <h1 className="mt-3 text-[clamp(1.9rem,6.5vw,3.25rem)] leading-[1.08] font-semibold tracking-tight text-balance break-words">{text.title}</h1>
         <p className="mt-4 max-w-2xl text-base leading-relaxed text-pretty text-muted sm:text-lg">{text.summary}</p>

@@ -91,6 +91,8 @@
   "projectStatus_archived": "В архиве",
   "projectContext_work": "По работе",
   "projectContext_own": "Свой проект",
+  "projectContext_freelance": "Фриланс",
+  "projectClient": "Заказчик: {name}",
   "projectFeatures": "Возможности",
   "projectStack": "Стек",
   "projectGallery": "Скриншоты",

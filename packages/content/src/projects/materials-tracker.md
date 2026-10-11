@@ -9,10 +9,11 @@ tags:
   - Docker
 year: 2026
 status: active
-context: own
+context: freelance
+client: Exomaterial
 featured: true
-summary: Exomaterial, an internal web system for tracking materials at a production site. Stock per storage location is calculated automatically, and the purchase list stays current without Excel or paper logs.
-summaryRu: Exomaterial — внутренняя веб-система учёта материалов для производства. Остатки по местам хранения считаются автоматически, а список «Требуется закупка» всегда актуален — без Excel и бумажных журналов.
+summary: An internal materials-tracking system built for Exomaterial as a freelance project. Stock per storage location is calculated automatically, and the purchase list stays current without Excel or paper logs.
+summaryRu: Внутренняя система учёта материалов, сделанная для компании Exomaterial на фрилансе. Остатки по местам хранения считаются автоматически, а список «Требуется закупка» всегда актуален — без Excel и бумажных журналов.
 links:
   - label: GitHub
     href: https://github.com/Mapagmataas1331/materials-tracker
