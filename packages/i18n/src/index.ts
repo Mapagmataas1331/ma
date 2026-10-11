@@ -1,10 +1,13 @@
 import i18n, { type BackendModule, type Resource, type ResourceKey } from 'i18next'
 import { initReactI18next } from 'react-i18next'
+import { onSharedPrefReturn, readSharedPref, writeSharedPref } from './shared-pref'
 
 export type Lang = 'en' | 'ru'
 export type NamespaceBundle = Record<string, object>
 
 const LANGS: Lang[] = ['en', 'ru']
+/** Shared across ma.cyou apps (cookie + localStorage, see shared-pref.ts) and read by the pre-paint script in index.html. */
+const KEY = 'ma.lang'
 
 // The shared `common` strings are the bulk of the i18n payload, so each language is its own chunk
 // and only the active one is fetched. The build injects <meta name="ma-i18n"> with both chunk URLs
@@ -19,7 +22,7 @@ export function detectLanguage(): Lang {
   if (typeof window === 'undefined') return 'en'
   const query = new URLSearchParams(window.location.search).get('lang')
   if (query === 'en' || query === 'ru') return query
-  const stored = window.localStorage.getItem('ma.lang')
+  const stored = readSharedPref(KEY)
   if (stored === 'en' || stored === 'ru') return stored
   return window.navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'en'
 }
@@ -28,7 +31,7 @@ function apply(lng: string) {
   if (typeof document === 'undefined') return
   const lang = lng.startsWith('ru') ? 'ru' : 'en'
   document.documentElement.lang = lang
-  window.localStorage.setItem('ma.lang', lang)
+  writeSharedPref(KEY, lang)
 }
 
 /** i18next backend that lazy-loads `common` per language; app namespaces stay bundled. */
@@ -71,6 +74,11 @@ export async function createI18n(extra: NamespaceBundle = {}) {
     })
     apply(i18n.language)
     i18n.on('languageChanged', apply)
+    // Follow a language picked in another ma.cyou app when this tab comes back.
+    onSharedPrefReturn(() => {
+      const next = readSharedPref(KEY)
+      if ((next === 'en' || next === 'ru') && !i18n.language.startsWith(next)) void i18n.changeLanguage(next)
+    })
   } else {
     for (const lng of LANGS) {
       for (const [ns, value] of Object.entries(resources[lng] ?? {})) {

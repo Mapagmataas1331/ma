@@ -15,5 +15,7 @@ describe('createI18n', () => {
     expect(i18n.t('demo:hi', { name: 'Bo' })).toBe('Привет, Bo')
     expect(document.documentElement.lang).toBe('ru')
     expect(window.localStorage.getItem('ma.lang')).toBe('ru')
+    // shared with the other ma.cyou apps through a cookie (host-only on localhost)
+    expect(document.cookie).toContain('ma.lang=ru')
   })
 })

@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
-    <!-- Pre-paint: saved theme (ma.theme, see packages/ui/src/theme.tsx) and language (ma.lang, see detectLanguage in packages/i18n)
+    <!-- Pre-paint: saved theme (ma.theme, see packages/ui/src/theme.tsx) and language (ma.lang, see detectLanguage in packages/i18n),
+         read from the shared ma.cyou cookie first and localStorage second (shared-pref.ts), and
          applied before CSS/JS so the first frame (and the sky) starts in the right mode. It also preloads the active language's
          strings chunk (and the Cyrillic Inter subset for ru) from <meta name="ma-i18n">, which the build injects (i18nPreloadPlugin).
          Kept on one line so its CSP hash does not depend on line endings; public/_headers pins that sha256 and
          packages/config/inline-script-csp.test.ts fails if they drift. Every app ships the same script. -->
-    <script>(function(){try{var d=document.documentElement,s=JSON.parse(localStorage.getItem('ma.theme')||'null')||{},m=s.mode;d.classList.toggle('dark',m==='dark'||(m!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches));if(typeof s.accentH==='number')d.style.setProperty('--accent-h',String(s.accentH));var q=new URLSearchParams(location.search).get('lang'),l=localStorage.getItem('ma.lang');d.lang=q==='en'||q==='ru'?q:l==='en'||l==='ru'?l:/^ru/i.test(navigator.language||'')?'ru':'en';var c=document.querySelector('meta[name=ma-i18n]'),u=new URLSearchParams(c?c.content:''),p=function(h,f){if(!h)return;var k=document.createElement('link');k.href=h;if(f){k.rel='preload';k.as='font';k.type='font/woff2';k.crossOrigin=''}else k.rel='modulepreload';document.head.appendChild(k)};p(u.get(d.lang));if(d.lang==='ru')p(u.get('font-ru'),1)}catch(e){}})()</script>
+    <script>(function(){try{var d=document.documentElement,g=function(k){var c=('; '+document.cookie).split('; '+k+'=');if(c.length>1)try{return decodeURIComponent(c[1].split(';')[0])}catch(e){}return localStorage.getItem(k)},s=JSON.parse(g('ma.theme')||'null')||{},m=s.mode;d.classList.toggle('dark',m==='dark'||(m!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches));if(typeof s.accentH==='number')d.style.setProperty('--accent-h',String(s.accentH));var q=new URLSearchParams(location.search).get('lang'),l=g('ma.lang');d.lang=q==='en'||q==='ru'?q:l==='en'||l==='ru'?l:/^ru/i.test(navigator.language||'')?'ru':'en';var c=document.querySelector('meta[name=ma-i18n]'),u=new URLSearchParams(c?c.content:''),p=function(h,f){if(!h)return;var k=document.createElement('link');k.href=h;if(f){k.rel='preload';k.as='font';k.type='font/woff2';k.crossOrigin=''}else k.rel='modulepreload';document.head.appendChild(k)};p(u.get(d.lang));if(d.lang==='ru')p(u.get('font-ru'),1)}catch(e){}})()</script>
     <title>projects.ma.cyou</title>
     <meta name="description" content="Projects by Timofey — systems and tools that are actually online." />
     <meta name="theme-color" content="#12141c" media="(prefers-color-scheme: dark)" />

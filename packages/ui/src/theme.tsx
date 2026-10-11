@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { onSharedPrefReturn, readSharedPref, writeSharedPref } from './shared-pref'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -10,6 +11,7 @@ type ThemeState = {
   setAccentH: (hue: number) => void
 }
 
+/** Shared across ma.cyou apps (cookie + localStorage, see shared-pref.ts) and read by the pre-paint script in index.html. */
 const KEY = 'ma.theme'
 /** While this class is on <html>, colours ease along with the sky crossfade (see styles.css). */
 const FADE_CLASS = 'ma-theme-fade'
@@ -18,7 +20,7 @@ export const ThemeContext = createContext<ThemeState | null>(null)
 
 function readStored(): { mode: ThemeMode; accentH: number } {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = readSharedPref(KEY)
     if (!raw) return { mode: 'system', accentH: 262 }
     const parsed = JSON.parse(raw) as { mode?: ThemeMode; accentH?: number }
     const mode = parsed.mode === 'light' || parsed.mode === 'dark' || parsed.mode === 'system' ? parsed.mode : 'system'
@@ -46,6 +48,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => media.removeEventListener('change', onChange)
   }, [])
 
+  // Picked up a theme changed in another ma.cyou app (another tab or subdomain) when this one comes back.
+  useEffect(
+    () =>
+      onSharedPrefReturn(() => {
+        const next = readStored()
+        setMode(next.mode)
+        setAccentH(next.accentH)
+      }),
+    [],
+  )
+
   const resolved = mode === 'system' ? (system ? 'dark' : 'light') : mode
   const applied = useRef<'light' | 'dark' | null>(null)
 
@@ -60,7 +73,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applied.current = resolved
     root.classList.toggle('dark', resolved === 'dark')
     root.style.setProperty('--accent-h', String(accentH))
-    localStorage.setItem(KEY, JSON.stringify({ mode, accentH }))
+    writeSharedPref(KEY, JSON.stringify({ mode, accentH }))
     return () => {
       if (!fadeTimer) return
       window.clearTimeout(fadeTimer)
