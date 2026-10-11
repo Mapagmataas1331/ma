@@ -5,6 +5,124 @@
   --fg-muted: oklch(0.42 0.022 262);
 }
 
+.resume-photo {
+  box-shadow:
+    0 0 0 1px var(--glass-border),
+    0 0 0 5px color-mix(in oklch, var(--accent) 10%, transparent),
+    var(--glass-shadow);
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+
+.resume-photo:hover {
+  transform: translateY(-2px) rotate(-1deg);
+}
+
+.resume-photo:focus-visible {
+  box-shadow: var(--focus-ring), var(--glass-shadow);
+}
+
+/* the stack lines read as soft pills */
+.resume-stack {
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  background: color-mix(in oklch, var(--surface-2) 70%, transparent);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+  color: var(--fg-muted);
+}
+
+:root[data-sky] .resume-stack {
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+/* sections: a fading hairline on top and a short accent tick before the heading */
+.resume-section {
+  position: relative;
+}
+
+.resume-section::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(to right, var(--line), var(--line) 70%, transparent);
+}
+
+.resume-h2 {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.resume-h2::before {
+  content: '';
+  width: 0.875rem;
+  height: 2px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  margin-top: 0.68em;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--glow);
+}
+
+/* experience as a quiet timeline */
+.resume-job {
+  position: relative;
+  padding-left: var(--space-6);
+}
+
+.resume-job::before {
+  content: '';
+  position: absolute;
+  left: 0.3rem;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.resume-job:first-of-type::before {
+  top: 1.875rem;
+}
+
+.resume-job:last-of-type::before {
+  bottom: auto;
+  height: 1.875rem;
+}
+
+.resume-job:only-of-type::before {
+  display: none;
+}
+
+.resume-job::after {
+  content: '';
+  position: absolute;
+  left: calc(0.3rem - 4px);
+  top: calc(1.875rem - 4.5px);
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow:
+    inset 0 0 0 2px var(--accent),
+    0 0 10px var(--glow);
+}
+
+.resume-contact {
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+
+.resume-contact:hover {
+  background: var(--surface-glass);
+  box-shadow:
+    inset 0 0 0 1px var(--glass-border),
+    inset 0 1px 0 var(--glass-hi);
+}
+
 @media print {
   header,
   .no-print {

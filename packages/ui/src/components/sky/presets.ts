@@ -55,6 +55,9 @@ const CHAT_NIGHT: NightConfig = {
   planet: null,
   glow: 0,
   meteors: false,
+  band: 0.45,
+  airglow: 0.7,
+  beacons: 2,
 }
 
 /** Light skies: the cool blue that settles into the corner opposite the sun. */
@@ -106,6 +109,8 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       planet: bottomLimb,
       glow: 1,
       meteors: true,
+      band: 0.8,
+      beacons: 4,
     },
     day: {
       fps: 30,
@@ -151,7 +156,11 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       hole: { x: 0.5, y: 0.5, rx: 0.34, ry: 0.7 },
       planet: null,
       glow: 0,
-      meteors: false,
+      meteors: true,
+      meteorEvery: [80, 140],
+      band: 0.7,
+      airglow: 0.8,
+      beacons: 3,
     },
     day: {
       fps: 30,
@@ -197,7 +206,10 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       hole: { x: 0.5, y: 0.45, rx: 0.4 },
       planet: cornerLimb,
       glow: 0.85,
-      meteors: false,
+      meteors: true,
+      meteorEvery: [70, 120],
+      band: 0.5,
+      beacons: 3,
     },
     day: {
       fps: 30,
@@ -255,6 +267,7 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
       planet: null,
       glow: 0,
       meteors: false,
+      airglow: 0.5,
     },
     day: {
       fps: 0,
@@ -282,7 +295,7 @@ export const SKY_PRESETS: Record<SkyVariant, Preset> = {
   // Sign-in, register and vault unlock: a calm, open view. Night — the chat page's quiet stars.
   // Day — pale moon over a low sea of clouds, sun haze from the upper right, a soft glow behind the card.
   account: {
-    night: CHAT_NIGHT,
+    night: { ...CHAT_NIGHT, meteors: true, meteorEvery: [90, 160] },
     day: {
       fps: 20,
       sun: [0.95, -0.1],

@@ -61,6 +61,7 @@ type FloaterState = {
   amp: number
   T: number
   ph: number
+  depth: number
   key: string
 }
 type WispState = {
@@ -320,6 +321,8 @@ function makeWisp(wCss: number, hCss: number, seed: number) {
   return c
 }
 
+const CLOUD_PAD = 0.3
+
 /**
  * A small detached cumulus: a low body of soft lobes with crowns heaped toward the middle, lit
  * from the upper right, a cool shaded underside and a softly flattened base. Plain 2D gradients,
@@ -327,12 +330,15 @@ function makeWisp(wCss: number, hCss: number, seed: number) {
  */
 function makeCumulus(wCss: number, hCss: number, seed: number) {
   const k = 0.75 // sprite scale (soft edges hide the upscale)
-  const [c, g] = makeLayer(Math.round(wCss * k), Math.round(hCss * k), k)
+  // CLOUD_PAD of extra headroom above the body so tall crowns are never clipped
+  const [c, g] = makeLayer(Math.round(wCss * k), Math.round(hCss * (1 + CLOUD_PAD) * k), k)
+  g.translate(0, hCss * CLOUD_PAD)
   const R = rng(seed)
   const w = wCss
   const h = hCss
+  const top = -h * CLOUD_PAD
   const base = h * 0.8
-  const domes: { x: number; y: number; r: number }[] = []
+  const domes: { x: number; y: number; r: number; a?: number }[] = []
   const n = 9 + Math.floor(R() * 4)
   for (let i = 0; i < n; i++) {
     const u = 0.08 + (0.84 * (i + R() * 0.8)) / n
@@ -347,12 +353,22 @@ function makeCumulus(wCss: number, hCss: number, seed: number) {
     const r = h * (0.12 + R() * 0.1) * bulge
     domes.push({ x: w * u, y: base - h * (0.3 + bulge * 0.22 + R() * 0.08), r })
   }
+  // a lopsided tower: one crown pushed higher on the sunward side
+  const tx = 0.5 + R() * 0.18
+  domes.push({ x: w * tx, y: base - h * (0.62 + R() * 0.08), r: h * (0.16 + R() * 0.05) })
+  // ragged fringe: small, thin puffs trailing off both ends
+  for (let i = 0; i < 4; i++) {
+    const left = i % 2 === 0
+    const u = left ? 0.02 + R() * 0.1 : 0.88 + R() * 0.1
+    domes.push({ x: w * u, y: base - h * (0.08 + R() * 0.1), r: h * (0.06 + R() * 0.05), a: 0.55 })
+  }
   domes.sort((p, q) => q.y - p.y) // lower lobes first, crowns on top
   for (const d of domes) {
+    const k = d.a ?? 1
     const gr = g.createRadialGradient(d.x + d.r * 0.2, d.y - d.r * 0.3, 0, d.x, d.y, d.r * 1.25)
-    gr.addColorStop(0, 'rgba(255,255,255,0.95)')
-    gr.addColorStop(0.45, 'rgba(252,253,255,0.8)')
-    gr.addColorStop(0.75, 'rgba(236,242,251,0.4)')
+    gr.addColorStop(0, `rgba(255,255,255,${0.95 * k})`)
+    gr.addColorStop(0.45, `rgba(252,253,255,${0.8 * k})`)
+    gr.addColorStop(0.75, `rgba(236,242,251,${0.4 * k})`)
     gr.addColorStop(1, 'rgba(230,238,250,0)')
     g.fillStyle = gr
     g.fillRect(d.x - d.r * 1.25, d.y - d.r * 1.25, d.r * 2.5, d.r * 2.5)
@@ -364,19 +380,19 @@ function makeCumulus(wCss: number, hCss: number, seed: number) {
   sh.addColorStop(0.65, 'rgba(150,172,212,0.36)')
   sh.addColorStop(1, 'rgba(132,156,202,0.6)')
   g.fillStyle = sh
-  g.fillRect(0, 0, w, h)
+  g.fillRect(0, top, w, h - top)
   const warm = g.createRadialGradient(w, 0, 0, w, 0, Math.hypot(w, h) * 0.8)
   warm.addColorStop(0, 'rgba(255,234,200,0.45)')
   warm.addColorStop(1, 'rgba(255,234,200,0)')
   g.fillStyle = warm
-  g.fillRect(0, 0, w, h)
+  g.fillRect(0, top, w, h - top)
   // soft, flat base
   g.globalCompositeOperation = 'destination-in'
   const mask = g.createLinearGradient(0, base - h * 0.1, 0, base + h * 0.1)
   mask.addColorStop(0, 'rgba(0,0,0,1)')
   mask.addColorStop(1, 'rgba(0,0,0,0)')
   g.fillStyle = mask
-  g.fillRect(0, 0, w, h)
+  g.fillRect(0, top, w, h - top)
   g.globalCompositeOperation = 'source-over'
   return c
 }
@@ -479,6 +495,7 @@ export function createDayScene(cfg: DayConfig): SkyScene {
   let hazeY: [number, number][] = []
   let wisps: WispState[] = []
   let floaters: FloaterState[] = []
+  let flareC: HTMLCanvasElement | null = null
   const moteSprite = cfg.motes ? makeMoteSprite() : null
 
   // specks live in the sunlit part of the sky, inside the ray fan
@@ -548,8 +565,8 @@ export function createDayScene(cfg: DayConfig): SkyScene {
 
   function release() {
     cancelJob()
-    for (const c of [sky, rayC, seaC, warmC]) freeCanvas(c)
-    sky = rayC = seaC = warmC = null
+    for (const c of [sky, rayC, seaC, warmC, flareC]) freeCanvas(c)
+    sky = rayC = seaC = warmC = flareC = null
     rayG = seaG = null
   }
 
@@ -608,7 +625,7 @@ export function createDayScene(cfg: DayConfig): SkyScene {
       job = { key, gens, out: [], timer: window.setTimeout(pump, 0) }
     }
     placeBands() // current sprites (if any) at the new positions until fresh ones land
-    seaY0 = Math.floor(defs[0].y0 - U * 0.03)
+    seaY0 = Math.floor(defs[0].y0 - U * 0.03 - 24) // headroom for the scroll parallax
     ;[seaC, seaG] = makeLayer(canvas.width, (H - seaY0) * DPR + 2, DPR, seaY0)
     hazeGrad = []
     hazeY = []
@@ -853,16 +870,31 @@ export function createDayScene(cfg: DayConfig): SkyScene {
           sprite,
           key,
           x: W * fd.x - w / 2,
-          y: H * fd.y - h / 2,
+          y: H * fd.y - h / 2 - h * CLOUD_PAD,
           w,
-          h,
+          h: h * (1 + CLOUD_PAD),
           alpha: fd.alpha,
           amp: fd.amp,
           T: fd.T,
           ph: rng(fd.seed)() * TAU,
+          depth: 0.8 + Math.min(1.2, w / 180), // bigger = nearer = moves more on scroll
         }
       })
       for (let i = floaters.length; i < prevFloaters.length; i++) freeCanvas(prevFloaters[i].sprite)
+
+      // ── sun flare: a soft extra glow (quarter res) that breathes and swells as the page scrolls ──
+      if (cfg.bloom > 0) {
+        let fg: Ctx
+        ;[flareC, fg] = makeLayer(W / 4, H / 4, 0.25)
+        const fr = DIAG * cfg.bloomR * 2.2
+        const fl = fg.createRadialGradient(SX, SY, 0, SX, SY, fr)
+        fl.addColorStop(0, 'rgba(255,246,226,0.9)')
+        fl.addColorStop(0.25, 'rgba(255,236,206,0.5)')
+        fl.addColorStop(0.6, 'rgba(255,226,190,0.16)')
+        fl.addColorStop(1, 'rgba(255,220,180,0)')
+        fg.fillStyle = fl
+        fg.fillRect(0, 0, W, H)
+      }
     },
 
     draw(t, dt, shift, still) {
@@ -885,7 +917,7 @@ export function createDayScene(cfg: DayConfig): SkyScene {
       for (const f of floaters) {
         const dx = still ? 0 : Math.sin((t * TAU) / f.T + f.ph) * f.amp
         ctx.globalAlpha = f.alpha
-        ctx.drawImage(f.sprite, f.x + dx, f.y - lift * 0.6, f.w, f.h)
+        ctx.drawImage(f.sprite, f.x + dx, f.y - lift * f.depth * 1.5, f.w, f.h)
       }
       ctx.globalAlpha = 1
 
@@ -896,7 +928,8 @@ export function createDayScene(cfg: DayConfig): SkyScene {
         bands.forEach((b, i) => {
           if (!seaG) return
           b.x = (((b.x + b.v * dt) % b.w) + b.w) % b.w
-          for (let x = b.x - b.w; x < W; x += b.w) seaG.drawImage(b.sprite, x, b.y, b.w + 0.5, b.h)
+          const by = b.y - Math.min(40, lift * (0.3 + i * 0.25)) // nearer bands rise faster
+          for (let x = b.x - b.w; x < W; x += b.w) seaG.drawImage(b.sprite, x, by, b.w + 0.5, b.h)
           if (i < bands.length - 1) {
             seaG.fillStyle = hazeGrad[i]
             seaG.fillRect(0, hazeY[i][0], W, hazeY[i][1] - hazeY[i][0])
@@ -946,6 +979,23 @@ export function createDayScene(cfg: DayConfig): SkyScene {
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.globalCompositeOperation = 'screen'
         ctx.drawImage(rayC, 0, 0, canvas.width, canvas.height)
+        ctx.globalCompositeOperation = 'source-over'
+      }
+
+      // sun flare: breathes slowly, swells a little as the page scrolls
+      if (flareC) {
+        const k = Math.min(1, shift / 500)
+        const breathe = still ? 1 : 0.92 + 0.08 * Math.sin((t * TAU) / 22)
+        const sc = 1 + 0.15 * k
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        ctx.globalCompositeOperation = 'screen'
+        ctx.globalAlpha = Math.min(1, (0.22 + 0.3 * k) * breathe * cfg.bloom)
+        const fw = canvas.width * sc
+        const fh = canvas.height * sc
+        const ox = SX * DPR * (1 - sc)
+        const oy = SY * DPR * (1 - sc)
+        ctx.drawImage(flareC, ox, oy, fw, fh)
+        ctx.globalAlpha = 1
         ctx.globalCompositeOperation = 'source-over'
       }
 

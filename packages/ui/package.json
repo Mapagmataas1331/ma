@@ -6,6 +6,7 @@
   "sideEffects": ["*.css"],
   "exports": {
     ".": "./src/index.ts",
+    "./account": "./src/components/account-loader.ts",
     "./layout": "./src/components/layout.tsx",
     "./shell": "./src/components/shell.tsx",
     "./sky-backdrop": "./src/components/sky-backdrop.tsx",

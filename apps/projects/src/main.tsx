@@ -36,7 +36,7 @@ function Shell({ children }: { children: ReactNode }) {
   return (
     <AppShell
       sites={sites}
-      nav={[{ href: '/', label: t('all') }]}
+      nav={[]}
       actions={<LanguageSwitch />}
       commandItems={[
         ...sites.map((site) => ({ id: `site-${site.short}`, label: site.label, onSelect: () => window.location.assign(site.href) })),
@@ -48,7 +48,7 @@ function Shell({ children }: { children: ReactNode }) {
         })),
       ]}
     >
-      <SkyBackdrop scene="projects" />
+      <SkyBackdrop scene="projects" parallax />
       {children}
     </AppShell>
   )

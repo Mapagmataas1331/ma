@@ -13,37 +13,37 @@ export function ResumePage() {
   const articleRef = useRef<HTMLElement>(null)
   return (
     <>
-    <SkyBackdrop scene="resume" contentRef={articleRef} />
+    <SkyBackdrop scene="resume" parallax contentRef={articleRef} />
     <article ref={articleRef} className="mx-auto max-w-3xl">
       <header>
         <div className="flex items-center gap-4 sm:gap-6">
-          <button type="button" className="ma-focusable size-24 shrink-0 overflow-hidden rounded-lg shadow-float ring-1 ring-line/60 sm:size-32" aria-label={t('enlargePhoto')} onClick={() => setShot({ src: data.profile.photo, alt: data.profile.name, caption: data.profile.name })}>
+          <button type="button" className="resume-photo ma-focusable size-24 shrink-0 overflow-hidden rounded-lg sm:size-32" aria-label={t('enlargePhoto')} onClick={() => setShot({ src: data.profile.photo, alt: data.profile.name, caption: data.profile.name })}>
             <img src={data.profile.photo} alt={data.profile.name} className="size-full object-cover object-[center_28%]" />
           </button>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-accent">{data.profile.eyebrow}</p>
+            <p className="text-sm font-medium tracking-tight text-accent">{data.profile.eyebrow}</p>
             <h1 className="mt-2 text-[clamp(2rem,8vw,3.25rem)] leading-none font-semibold tracking-tight">{data.profile.name}</h1>
           </div>
         </div>
-        <p className="mt-6 max-w-2xl text-base leading-relaxed text-muted">{data.profile.lead}</p>
-        <ul className="mt-4 space-y-1 text-sm text-muted">
+        <p className="mt-6 max-w-2xl text-base leading-relaxed text-pretty text-muted">{data.profile.lead}</p>
+        <ul className="mt-4 flex flex-wrap gap-2 text-sm">
           {data.profile.chips.map((chip) => (
-            <li key={chip}>{chip}</li>
+            <li key={chip} className="resume-stack">{chip}</li>
           ))}
         </ul>
-        <dl className="mt-6 grid grid-cols-1 gap-4 border-t border-line pt-5 min-[420px]:grid-cols-3">
+        <dl className="mt-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
           {data.profile.stats.map((stat) => (
-            <div key={stat.label} className="min-w-0">
-              <dt className="font-medium break-words">{stat.value}</dt>
-              <dd className="mt-1 text-sm text-muted">{stat.label}</dd>
+            <div key={stat.label} className="ma-surface min-w-0 rounded-md border border-line/70 px-4 py-3.5">
+              <dt className="text-lg font-semibold tracking-tight break-words">{stat.value}</dt>
+              <dd className="mt-0.5 text-sm text-muted">{stat.label}</dd>
             </div>
           ))}
         </dl>
-        <dl className="mt-5 space-y-1.5 text-sm">
+        <dl className="mt-5 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
           {data.profile.facts.map((fact) => (
-            <div key={fact.label} className="flex flex-wrap gap-x-2">
+            <div key={fact.label} className="contents">
               <dt className="text-muted">{fact.label}</dt>
-              <dd>{fact.value}</dd>
+              <dd className="break-words">{fact.value}</dd>
             </div>
           ))}
         </dl>
@@ -55,7 +55,7 @@ export function ResumePage() {
         ))}
         <div className="mt-6 grid gap-6 sm:grid-cols-3">
           {data.highlights.map((h) => (
-            <div key={h.title} className="ma-surface min-w-0 rounded-md border border-line/70 p-4">
+            <div key={h.title} className="ma-surface min-w-0 rounded-md border border-line/70 p-4 sm:p-5">
               <p className="font-medium">{h.title}</p>
               <p className="mt-1 text-sm leading-relaxed text-muted">{h.body}</p>
             </div>
@@ -65,7 +65,7 @@ export function ResumePage() {
 
       <Section title={data.experienceTitle} id="experience">
         {data.experience.map((job) => (
-          <article key={job.org} className="border-b border-line py-5 last:border-b-0">
+          <article key={job.org} className="resume-job py-4">
             <h3 className="text-lg font-medium">{job.org}</h3>
             <p className="mt-1 text-sm text-muted">{job.period}</p>
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted">
@@ -153,7 +153,7 @@ export function ResumePage() {
         <ul className="divide-y divide-line">
           {data.contacts.map((c) => (
             <li key={c.href}>
-              <a href={c.href} className="ma-focusable block rounded-sm py-3 transition hover:bg-surface-2/40" {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>
+              <a href={c.href} className="resume-contact ma-focusable -mx-3 block rounded-md px-3 py-3" {...(c.href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>
                 <span className="text-sm text-muted">{c.label}</span>
                 <span className="mt-0.5 block font-medium break-all">{c.value}</span>
                 <span className="block text-sm text-muted">{c.hint}</span>
@@ -171,8 +171,8 @@ export function ResumePage() {
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section id={id} className="mt-12 scroll-mt-24 border-t border-line pt-8">
-      <h2 className="mb-4 text-xl font-semibold tracking-tight">{title}</h2>
+    <section id={id} className="resume-section mt-14 scroll-mt-24 pt-8">
+      <h2 className="resume-h2 mb-5 text-xl font-semibold tracking-tight">{title}</h2>
       {children}
     </section>
   )

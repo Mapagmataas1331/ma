@@ -29,3 +29,12 @@ describe('chat _headers', () => {
     )
   })
 })
+
+// home, resume and projects make no API calls (no account UI), so their CSP only allows same-origin fetches.
+describe.each(['home', 'resume', 'projects'])('%s _headers', (app) => {
+  it('connect-src allows only self', () => {
+    const headers = readFileSync(new URL(`../../apps/${app}/public/_headers`, import.meta.url), 'utf8')
+    expect(headers).toMatch(/connect-src 'self';/)
+    expect(headers).not.toMatch(/api\.ma\.cyou|wss:|localhost/)
+  })
+})

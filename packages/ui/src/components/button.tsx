@@ -12,7 +12,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const buttonClass = {
   base: 'inline-flex cursor-pointer items-center justify-center gap-2 rounded-sm text-center leading-tight font-medium transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50',
-  primary: 'bg-accent text-accent-fg shadow-float hover:-translate-y-0.5 hover:shadow-md',
+  primary: 'ma-btn-primary bg-accent text-accent-fg hover:-translate-y-0.5',
   ghost: 'bg-transparent text-fg hover:-translate-y-0.5 hover:bg-surface-2',
   outline: 'border border-line bg-surface-1 text-fg hover:-translate-y-0.5 hover:bg-surface-2 hover:shadow-sm',
   danger: 'bg-danger text-white hover:-translate-y-0.5 hover:shadow-md',

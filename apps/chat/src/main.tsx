@@ -1,5 +1,5 @@
 import { createI18n, LanguageSwitch } from '@ma/i18n'
-import { AppShell, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
+import { AppShell, loadAccountSettings, ThemeProvider, Toaster, type SiteLink } from '@ma/ui'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -32,6 +32,7 @@ function Shell() {
   return (
     <AppShell
       fill
+      account={loadAccountSettings}
       sites={sites}
       nav={[]}
       actions={<LanguageSwitch />}

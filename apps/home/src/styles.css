@@ -28,6 +28,149 @@
   animation: home-fade 1s ease both;
 }
 
+/* ── hero ── */
+.home-wordmark {
+  letter-spacing: -0.035em;
+}
+
+.home-wordmark-ma {
+  color: var(--fg);
+}
+
+/* the TLD fades from muted ink into the accent, like light catching the edge */
+.home-wordmark-tld {
+  background: linear-gradient(
+    100deg,
+    var(--fg-muted) 10%,
+    color-mix(in oklch, var(--accent) 70%, var(--fg-muted)) 95%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:root.dark .home-wordmark {
+  text-shadow: 0 0 48px color-mix(in oklch, var(--accent) 28%, transparent);
+}
+
+:root.dark .home-wordmark-tld {
+  text-shadow: none;
+}
+
+/* subtitle sits between two fading hairlines */
+.home-name {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  color: color-mix(in oklch, var(--fg) 88%, var(--fg-muted));
+}
+
+.home-name::before,
+.home-name::after {
+  content: '';
+  height: 1px;
+  width: clamp(1.5rem, 8vw, 3.5rem);
+  flex-shrink: 0;
+  background: linear-gradient(to right, transparent, color-mix(in oklch, var(--fg-muted) 55%, transparent));
+}
+
+.home-name::after {
+  transform: scaleX(-1);
+}
+
+.home-lead {
+  text-wrap: pretty;
+}
+
+/* ── site rows ── */
+.home-link {
+  position: relative;
+  outline: none;
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    transform var(--dur-2) var(--ease-out);
+}
+
+.home-link:hover,
+.home-link:focus-visible {
+  background: var(--surface-glass);
+  box-shadow:
+    inset 0 0 0 1px var(--glass-border),
+    inset 0 1px 0 var(--glass-hi),
+    0 10px 28px -14px var(--glow);
+}
+
+.home-link:focus-visible {
+  box-shadow:
+    var(--focus-ring),
+    0 10px 28px -14px var(--glow);
+}
+
+.home-link:active {
+  transform: scale(0.995);
+}
+
+/* the subdomain gets an underline that draws in from the left */
+.home-link-short {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1.5px no-repeat;
+  padding-bottom: 1px;
+  transition: background-size var(--dur-2) var(--ease-out);
+}
+
+.home-link:hover .home-link-short,
+.home-link:focus-visible .home-link-short {
+  background-size: 100% 1.5px;
+}
+
+.home-link-arrow {
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) ease,
+    color var(--dur-2) ease,
+    box-shadow var(--dur-2) ease;
+}
+
+.home-link:hover .home-link-arrow,
+.home-link:focus-visible .home-link-arrow {
+  transform: translateX(4px);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 22%, transparent);
+}
+
+/* ── footer ── */
+.home-social {
+  position: relative;
+}
+
+.home-social::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    color-mix(in oklch, var(--line) 100%, transparent),
+    color-mix(in oklch, var(--line) 100%, transparent) 60%,
+    transparent
+  );
+}
+
+.home-social-link {
+  background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat;
+  transition:
+    color var(--dur-1) ease,
+    background-size var(--dur-2) var(--ease-out);
+}
+
+.home-social-link:hover,
+.home-social-link:focus-visible {
+  color: var(--fg);
+  background-size: 100% 1px;
+}
+
 /* Light sky behind the homepage (SkyBackdrop): slightly deeper muted text for contrast on blue/cream. */
 :root:not(.dark) .home-sky {
   --fg-muted: oklch(0.43 0.022 262);

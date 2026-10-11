@@ -36,15 +36,20 @@ export function ListPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {shown.map((project) => (
-            <Link key={project.slug} to={`/p/${project.slug}`} className="ma-focusable block rounded-lg transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none">
-              <Card className="h-full transition duration-200 hover:border-accent/25 hover:shadow-md">
+            <Link key={project.slug} to={`/p/${project.slug}`} className="ma-card-link group block">
+              <Card className="h-full">
                 <div className="mb-2 flex flex-wrap gap-2">
                   {project.tags.slice(0, 3).map((tagName) => (
                     <Badge key={tagName}>{tagName}</Badge>
                   ))}
                 </div>
-                <h2 className="text-lg font-medium break-words">{localized(project, ru).title}</h2>
-                <p className="mt-1 text-xs text-muted">{project.year}</p>
+                <h2 className="flex items-baseline gap-2 text-lg font-medium tracking-tight break-words">
+                  <span className="min-w-0 flex-1">{localized(project, ru).title}</span>
+                  <span className="ma-card-arrow shrink-0 text-base text-muted" aria-hidden>
+                    →
+                  </span>
+                </h2>
+                <p className="mt-1 font-mono text-xs text-muted tabular-nums">{project.year}</p>
                 <p className="mt-2 text-sm leading-relaxed text-muted break-words">{localized(project, ru).summary}</p>
               </Card>
             </Link>

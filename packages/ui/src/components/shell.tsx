@@ -1,5 +1,6 @@
 import { ChevronDown, Menu, Moon, Settings, Sun } from 'lucide-react'
 import { Component, lazy, Suspense, useEffect, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
+import type { AccountLoader } from './account-loader'
 import { cn } from '../lib/cn'
 import { useTheme, type ThemeMode } from '../theme'
 import { useTranslation } from 'react-i18next'
@@ -8,17 +9,13 @@ import { AppSettingsSlot } from './settings-slot'
 
 // Everything behind an interaction (site menu, sheets, settings panel, ⌘K palette) is code-split and
 // fetched on first hover/focus/open, so the header paints from the entry chunk alone.
+// The account panel is opt-in: the shell never imports it itself, so apps that don't pass `account`
+// carry no api-client code and make no API requests.
 const loadExtras = () => import('./shell-extras')
-const loadAccount = () => import('./account-settings')
 const SiteMenu = lazy(() => loadExtras().then((m) => ({ default: m.SiteMenu })))
 const Sheet = lazy(() => loadExtras().then((m) => ({ default: m.Sheet })))
 const CommandDialog = lazy(() => loadExtras().then((m) => ({ default: m.CommandDialog })))
-const AccountSettings = lazy(() => loadAccount().then((m) => ({ default: m.AccountSettings })))
 const preloadExtras = () => void loadExtras()
-const preloadSettings = () => {
-  void loadExtras()
-  void loadAccount()
-}
 
 /** Suspense plus a tiny error boundary: a chunk that fails to load (offline, stale deploy) leaves the fallback instead of unmounting the app. */
 class Deferred extends Component<{ fallback?: ReactNode; children: ReactNode }, { failed: boolean }> {
@@ -121,6 +118,7 @@ export function AppShell({
   children,
   commandItems = [],
   fill = false,
+  account,
 }: {
   /** @deprecated Prefer `sites` — kept so older call sites still render a brand link. */
   brand?: { href: string; label: string }
@@ -131,7 +129,19 @@ export function AppShell({
   commandItems?: { id: string; label: string; hint?: string; onSelect: () => void }[]
   /** Lock the page to the dynamic viewport and let the page fill the space under the header. */
   fill?: boolean
+  /**
+   * Opt in to the settings gear and its account panel (sign-in, profile, invites) by passing
+   * `loadAccountSettings` from `@ma/ui` or `@ma/ui/account`. Off by default: pages that don't use
+   * accounts get no gear, no settings sheet and no API calls.
+   */
+  account?: AccountLoader
 }) {
+  // created once per loader so the lazy component keeps its identity across renders
+  const [AccountSettings] = useState(() => (account ? lazy(() => account().then((m) => ({ default: m.AccountSettings }))) : null))
+  const preloadSettings = () => {
+    void loadExtras()
+    void account?.()
+  }
   const [open, setOpen] = useState(false)
   const [settings, setSettings] = useState(false)
   const [command, setCommand] = useState(false)
@@ -187,17 +197,19 @@ export function AppShell({
                   <Menu className="size-4" />
                 </IconButton>
               ) : null}
-              <IconButton
-                label={t('settings')}
-                onPointerEnter={preloadSettings}
-                onFocus={preloadSettings}
-                onClick={() => {
-                  touch('settings')
-                  setSettings(true)
-                }}
-              >
-                <Settings className="size-4" />
-              </IconButton>
+              {AccountSettings ? (
+                <IconButton
+                  label={t('settings')}
+                  onPointerEnter={preloadSettings}
+                  onFocus={preloadSettings}
+                  onClick={() => {
+                    touch('settings')
+                    setSettings(true)
+                  }}
+                >
+                  <Settings className="size-4" />
+                </IconButton>
+              ) : null}
             </div>
           </div>
         </header>
@@ -220,7 +232,7 @@ export function AppShell({
             </Sheet>
           </Deferred>
         ) : null}
-        {used.settings ? (
+        {AccountSettings && used.settings ? (
           <Deferred>
             <Sheet open={settings} onOpenChange={setSettings} title={t('settings')}>
               <Deferred>

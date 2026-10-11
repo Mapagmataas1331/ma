@@ -49,6 +49,14 @@ export type NightConfig = {
   planet: ((w: number, h: number) => Planet) | null
   glow: number
   meteors: boolean
+  /** Seconds between shooting stars [min, max] (default 50–80). */
+  meteorEvery?: [number, number]
+  /** A few bright stars with soft diffraction spikes. */
+  beacons?: number
+  /** Faint galactic band sweeping across a corner, with its own dust (static). 0..1 */
+  band?: number
+  /** Airglow resting on the bottom edge (static). 0..1 */
+  airglow?: number
 }
 
 type Star = {
@@ -86,6 +94,42 @@ const LAYERS: StarLayer[] = [
   { density: 0.42e-4, size: [0.7, 1.5], alpha: [0.45, 0.85], speed: 3.6 },
 ]
 const NEB_SCALE = 1 / 8
+
+type Beacon = { x: number; y: number; s: number; a: number; w: number; p: number; sprite: number }
+
+/** A soft star with four thin diffraction spikes, pre-rendered once per tint. */
+function makeBeaconSprite(rgb: string) {
+  const n = 64
+  const [c, g] = makeLayer(n, n)
+  const m = n / 2
+  const core = g.createRadialGradient(m, m, 0, m, m, m * 0.42)
+  core.addColorStop(0, `rgba(${rgb},1)`)
+  core.addColorStop(0.12, `rgba(${rgb},0.85)`)
+  core.addColorStop(0.35, `rgba(${rgb},0.18)`)
+  core.addColorStop(1, `rgba(${rgb},0)`)
+  g.fillStyle = core
+  g.fillRect(0, 0, n, n)
+  for (const [dx, dy, len] of [
+    [1, 0, 1],
+    [0, 1, 1],
+    [Math.SQRT1_2, Math.SQRT1_2, 0.45],
+    [Math.SQRT1_2, -Math.SQRT1_2, 0.45],
+  ] as const) {
+    const l = m * len
+    const lg = g.createLinearGradient(m - dx * l, m - dy * l, m + dx * l, m + dy * l)
+    lg.addColorStop(0, `rgba(${rgb},0)`)
+    lg.addColorStop(0.5, `rgba(${rgb},${len === 1 ? 0.55 : 0.25})`)
+    lg.addColorStop(1, `rgba(${rgb},0)`)
+    g.strokeStyle = lg
+    g.lineWidth = len === 1 ? 1 : 0.8
+    g.beginPath()
+    g.moveTo(m - dx * l, m - dy * l)
+    g.lineTo(m + dx * l, m + dy * l)
+    g.stroke()
+  }
+  return c
+}
+const BEACON_TINTS = ['235,240,255', '214,226,255', '255,240,222']
 const BREATH = 25
 
 /** Where a limb crosses the viewport edges (for the rim fade and the bright spot). */
@@ -178,7 +222,7 @@ export function createNightScene(cfg: NightConfig): SkyScene {
   let starsW = 0
   let acc = 1
   let meteor: Meteor | null = null
-  let nextMeteor = rand(6, 14)
+  let nextMeteor = cfg.meteorEvery ? rand(cfg.meteorEvery[0] * 0.3, cfg.meteorEvery[0] * 0.6) : rand(6, 14)
   let P: Planet | null = null
   const S = cfg.stars
   const layers = LAYERS.map((L) => ({
@@ -187,16 +231,25 @@ export function createNightScene(cfg: NightConfig): SkyScene {
     speed: L.speed * S.speed,
   }))
 
-  const makeStar = (L: StarLayer): Star => ({
-    x: Math.random() * W,
-    y: Math.random() * H,
-    r: rand(L.size[0], L.size[1]),
-    a: rand(L.alpha[0], L.alpha[1]) * S.alpha,
-    w: rand(0.25, 0.9),
-    p: Math.random() * TAU,
-    d: rand(0.15, 0.45) * S.twinkle,
-    c: TINTS[(Math.random() * TINTS.length) | 0],
-  })
+  // three twinkle temperaments: most stars breathe, a few scintillate quickly, some barely move
+  const makeStar = (L: StarLayer): Star => {
+    const k = Math.random()
+    const [w, d] =
+      k < 0.08 ? [rand(1.6, 3.2), rand(0.45, 0.7)] : k < 0.35 ? [rand(0.06, 0.2), rand(0.05, 0.15)] : [rand(0.25, 0.9), rand(0.15, 0.45)]
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: rand(L.size[0], L.size[1]),
+      a: rand(L.alpha[0], L.alpha[1]) * S.alpha,
+      w,
+      p: Math.random() * TAU,
+      d: d * S.twinkle,
+      c: TINTS[(Math.random() * TINTS.length) | 0],
+    }
+  }
+  const beaconSprites = cfg.beacons ? BEACON_TINTS.map(makeBeaconSprite) : []
+  let beacons: Beacon[] = []
+  const every = cfg.meteorEvery ?? [50, 80]
 
   function renderNebula(t: number) {
     if (!neb || !nctx || !mask || !nebMask) return
@@ -393,6 +446,76 @@ export function createNightScene(cfg: NightConfig): SkyScene {
         g.fillRect(0, 0, W, H)
       }
 
+      // ── airglow on the bottom edge: a thin teal-to-indigo light, as if from a far horizon ──
+      if (cfg.airglow && !cfg.planet) {
+        const k = cfg.airglow
+        const ag = g.createLinearGradient(0, H, 0, H * 0.62)
+        ag.addColorStop(0, `rgba(70,110,200,${0.22 * k})`)
+        ag.addColorStop(0.25, `rgba(60,90,180,${0.1 * k})`)
+        ag.addColorStop(1, 'rgba(40,60,140,0)')
+        g.fillStyle = ag
+        g.fillRect(0, H * 0.62, W, H * 0.38)
+        const side = g.createRadialGradient(W * 0.1, H * 1.05, 0, W * 0.1, H * 1.05, Math.max(W, H) * 0.5)
+        side.addColorStop(0, `rgba(40,160,170,${0.12 * k})`)
+        side.addColorStop(1, 'rgba(40,160,170,0)')
+        g.fillStyle = side
+        g.fillRect(0, H * 0.5, W, H * 0.5)
+      }
+
+      // ── galactic band across the upper-left corner, textured and dusted (static) ──
+      if (cfg.band) {
+        const k = cfg.band
+        const bs = 1 / 4
+        const [bc, bg] = makeLayer(Math.max(2, Math.round(W * bs)), Math.max(2, Math.round(H * bs)), bs)
+        const x0 = 0
+        const y0 = H * 0.62
+        const x1 = W * 0.7
+        const y1 = -H * 0.05
+        const len = Math.hypot(x1 - x0, y1 - y0)
+        const thick = Math.min(W, H) * 0.2
+        bg.save()
+        bg.translate((x0 + x1) / 2, (y0 + y1) / 2)
+        bg.rotate(Math.atan2(y1 - y0, x1 - x0))
+        bg.scale(1, thick / (len / 2))
+        const core = bg.createRadialGradient(0, 0, 0, 0, 0, len / 2)
+        core.addColorStop(0, `rgba(150,165,240,${0.42 * k})`)
+        core.addColorStop(0.5, `rgba(120,115,225,${0.2 * k})`)
+        core.addColorStop(1, 'rgba(90,90,200,0)')
+        bg.fillStyle = core
+        bg.fillRect(-len, -len, len * 2, len * 2)
+        bg.restore()
+        const tex = makeNoiseMask(bc.width, bc.height)
+        bg.save()
+        bg.setTransform(1, 0, 0, 1, 0, 0)
+        bg.globalCompositeOperation = 'destination-in'
+        bg.drawImage(tex, 0, 0)
+        bg.restore()
+        freeCanvas(tex)
+        g.save()
+        g.globalCompositeOperation = 'screen'
+        g.drawImage(bc, 0, 0, W, H)
+        g.restore()
+        freeCanvas(bc)
+        // dust: tiny static stars crowding the band's spine
+        const R = rng(977)
+        const n = Math.round(W * H * 2.2e-4 * k)
+        const ux = (x1 - x0) / len
+        const uy = (y1 - y0) / len
+        for (let i = 0; i < n; i++) {
+          const along = R() * len
+          const off = (R() + R() + R() - 1.5) * thick * 0.9
+          const x = x0 + ux * along - uy * off
+          const y = y0 + uy * along + ux * off
+          if (x < 0 || x > W || y < 0 || y > H) continue
+          g.globalAlpha = (0.12 + R() * 0.3) * (1 - Math.abs(off) / (thick * 1.4))
+          g.fillStyle = R() < 0.3 ? 'rgb(214,224,255)' : 'rgb(255,255,255)'
+          g.beginPath()
+          g.arc(x, y, 0.3 + R() * 0.45, 0, TAU)
+          g.fill()
+        }
+        g.globalAlpha = 1
+      }
+
       // ── nebula buffer (1/8 res) + its static keep-out mask ──
       if (cfg.blobs.length) {
         ;[neb, nctx] = makeLayer(
@@ -435,6 +558,19 @@ export function createNightScene(cfg: NightConfig): SkyScene {
       if (P) buildPlanet(cw, P)
       applyGrain(base, grainTile('dark'), true)
       syncStars()
+      if (cfg.beacons) {
+        const R = rng(313)
+        beacons = Array.from({ length: cfg.beacons }, (_, i) => ({
+          // spread across the outer thirds so they never sit behind the text column
+          x: (i % 2 ? 0.66 + R() * 0.3 : 0.04 + R() * 0.28) * W,
+          y: (0.06 + R() * 0.6) * H,
+          s: 18 + R() * 12,
+          a: 0.55 + R() * 0.35,
+          w: 0.3 + R() * 0.5,
+          p: R() * TAU,
+          sprite: i % BEACON_TINTS.length,
+        }))
+      }
       acc = 1
     },
 
@@ -498,6 +634,21 @@ export function createNightScene(cfg: NightConfig): SkyScene {
         }
       })
 
+      // bright beacons with diffraction spikes, slowly breathing
+      if (beacons.length) {
+        const off = -shift * 0.12
+        for (const b of beacons) {
+          let y = b.y + off
+          if (y < -40) y += H + 80
+          if (P && Math.hypot(b.x - P.cx, y - P.cy) - P.R < 30) continue
+          const tw = 0.75 + 0.25 * Math.sin(t * b.w + b.p)
+          ctx.globalAlpha = b.a * tw * S.alpha
+          const sz = b.s * (0.92 + 0.08 * tw)
+          ctx.drawImage(beaconSprites[b.sprite], b.x - sz / 2, y - sz / 2, sz, sz)
+        }
+        ctx.globalAlpha = 1
+      }
+
       // shooting star, confined to the top band (never in a static frame)
       if (still || !cfg.meteors) meteor = null
       else {
@@ -513,7 +664,7 @@ export function createNightScene(cfg: NightConfig): SkyScene {
             t0: t,
             dur: rand(1, 1.2),
           }
-          nextMeteor = t + rand(50, 80)
+          nextMeteor = t + rand(every[0], every[1])
         }
         if (meteor) {
           const m = meteor

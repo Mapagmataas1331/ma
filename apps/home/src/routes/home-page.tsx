@@ -27,10 +27,10 @@ export function HomePage() {
         <div ref={contentRef} className="home-panel mx-auto flex w-full max-w-2xl flex-col self-center">
           <div className="home-rise home-brand mb-8 text-center sm:mb-10" style={{ animationDelay: '40ms' }}>
             <p className="home-wordmark text-[clamp(3rem,14vw,5.5rem)] leading-none font-semibold tracking-tight">
-              <span className="text-fg">ma</span>
-              <span className="text-muted">.cyou</span>
+              <span className="home-wordmark-ma">ma</span>
+              <span className="home-wordmark-tld">.cyou</span>
             </p>
-            <h1 className="mt-4 text-xl font-medium tracking-tight sm:text-2xl">{copy.name}</h1>
+            <h1 className="home-name mt-5 text-lg font-medium tracking-tight sm:text-xl">{copy.name}</h1>
           </div>
 
           <p className="home-rise home-lead mb-2 max-w-lg text-sm leading-relaxed text-muted sm:text-base" style={{ animationDelay: '120ms' }}>
@@ -43,17 +43,17 @@ export function HomePage() {
                 <li key={link.href}>
                   <a
                     href={link.href}
-                    className="home-link ma-focusable group -mx-3 flex items-center gap-4 rounded-md px-3 py-3.5 transition duration-200 ease-[cubic-bezier(.2,.8,.2,1)] hover:bg-surface-2/70 focus-visible:bg-surface-2/70"
+                    className="home-link group -mx-3 flex items-center gap-4 rounded-md px-3 py-3.5"
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-base font-medium tracking-tight sm:text-lg">
-                        <span className="text-accent">{link.short}</span>
+                        <span className="home-link-short text-accent">{link.short}</span>
                         <span className="text-muted">.ma.cyou</span>
                       </span>
                       <span className="home-link-blurb mt-0.5 block text-sm text-muted">{copy[link.key]}</span>
                     </span>
                     <span
-                      className="home-link-arrow flex size-9 shrink-0 items-center justify-center rounded-full text-xl leading-none text-muted transition group-hover:translate-x-0.5 group-hover:bg-surface-3 group-hover:text-accent"
+                      className="home-link-arrow flex size-9 shrink-0 items-center justify-center rounded-full text-xl leading-none text-muted"
                       aria-hidden
                     >
                       →
@@ -64,9 +64,9 @@ export function HomePage() {
             </ul>
           </nav>
 
-          <div className="home-fade home-social mt-6 flex flex-wrap gap-x-5 gap-y-2 border-t border-line pt-5" style={{ animationDelay: '300ms' }}>
+          <div className="home-fade home-social mt-6 flex flex-wrap gap-x-5 gap-y-2 pt-5" style={{ animationDelay: '300ms' }}>
             {socials.map((s) => (
-              <a key={s.href} href={s.href} target="_blank" rel="noopener noreferrer" className="ma-focusable rounded-sm text-sm text-muted transition hover:text-fg">
+              <a key={s.href} href={s.href} target="_blank" rel="noopener noreferrer" className="home-social-link ma-focusable rounded-sm text-sm text-muted">
                 {s.label}
               </a>
             ))}

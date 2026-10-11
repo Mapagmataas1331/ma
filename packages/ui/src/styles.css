@@ -49,6 +49,26 @@
   --shadow: 0 1px 2px oklch(0.2 0.02 262 / 0.06), 0 12px 32px oklch(0.2 0.02 262 / 0.08);
   --surface-glass: color-mix(in oklch, var(--surface-1) 78%, transparent);
   --surface-glass-strong: color-mix(in oklch, var(--surface-1) 88%, transparent);
+  /* glass depth: hairline border, top-edge highlight, soft layered drop */
+  --glass-border: oklch(0.22 0.02 262 / 0.09);
+  --glass-hi: oklch(1 0 0 / 0.75);
+  --glass-shadow: 0 1px 2px oklch(0.25 0.03 262 / 0.05), 0 8px 24px -10px oklch(0.3 0.06 262 / 0.22);
+  --glass-shadow-hover: 0 2px 4px oklch(0.25 0.03 262 / 0.06), 0 18px 40px -14px oklch(0.35 0.08 262 / 0.3);
+  --glow: color-mix(in oklch, var(--accent) 22%, transparent);
+  /* spacing scale (4px base) and motion */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-1: 140ms;
+  --dur-2: 220ms;
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring), 0 0 0 8px color-mix(in oklch, var(--ring) 18%, transparent);
 }
 
 :root.dark {
@@ -65,6 +85,11 @@
   --shadow: 0 1px 2px oklch(0 0 0 / 0.35), 0 16px 40px oklch(0 0 0 / 0.35);
   --surface-glass: color-mix(in oklch, var(--surface-1) 58%, transparent);
   --surface-glass-strong: color-mix(in oklch, var(--surface-1) 72%, transparent);
+  --glass-border: oklch(0.96 0.01 262 / 0.09);
+  --glass-hi: oklch(1 0 0 / 0.07);
+  --glass-shadow: 0 1px 2px oklch(0 0 0 / 0.4), 0 14px 36px -12px oklch(0 0 0 / 0.6);
+  --glass-shadow-hover: 0 2px 4px oklch(0 0 0 / 0.45), 0 22px 48px -14px oklch(0 0 0 / 0.7);
+  --glow: color-mix(in oklch, var(--accent) 30%, transparent);
 }
 
 html {
@@ -80,6 +105,9 @@ body,
 
 body {
   margin: 0;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overflow-x: clip;
   background: var(--bg);
   color: var(--fg);
@@ -152,6 +180,22 @@ a[href] {
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
+/* A hairline under the header veil that fades out at both ends. */
+:root[data-sky] .ma-header::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in oklch, var(--line) 80%, transparent) 20%,
+    color-mix(in oklch, var(--line) 80%, transparent) 80%,
+    transparent
+  );
+}
+
 /* Theme switch: ThemeProvider adds this class for ~650ms so text and surfaces ease along with the
    sky's 600ms crossfade (no permanent global transitions). The sky layers keep their own fade. */
 @media (prefers-reduced-motion: no-preference) {
@@ -171,9 +215,77 @@ a[href] {
    instead of covering it with opaque slabs. */
 :root[data-sky] .ma-surface {
   background: var(--surface-glass);
-  border-color: color-mix(in oklch, var(--line) 75%, transparent);
+  border-color: var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--glass-shadow);
   -webkit-backdrop-filter: blur(14px) saturate(1.25);
   backdrop-filter: blur(14px) saturate(1.25);
+}
+
+/* Card that is a link: lifts a little and catches a faint accent edge on hover/focus. */
+.ma-card-link {
+  border-radius: var(--radius-lg);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.ma-card-link > .ma-surface {
+  transition:
+    border-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out);
+}
+
+.ma-card-link:hover,
+.ma-card-link:focus-visible {
+  transform: translateY(-3px);
+}
+
+.ma-card-link:hover > .ma-surface,
+.ma-card-link:focus-visible > .ma-surface {
+  border-color: color-mix(in oklch, var(--accent) 30%, var(--glass-border));
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    var(--glass-shadow-hover),
+    0 0 0 4px color-mix(in oklch, var(--accent) 7%, transparent);
+}
+
+.ma-card-link:focus-visible {
+  outline: none;
+}
+
+.ma-card-link:focus-visible > .ma-surface {
+  box-shadow: var(--focus-ring), var(--glass-shadow-hover);
+}
+
+.ma-card-link:active {
+  transform: translateY(-1px);
+}
+
+.ma-card-arrow {
+  transition:
+    transform var(--dur-2) var(--ease-out),
+    color var(--dur-2) ease;
+}
+
+.ma-card-link:hover .ma-card-arrow,
+.ma-card-link:focus-visible .ma-card-arrow {
+  transform: translateX(3px);
+  color: var(--accent);
+}
+
+/* Primary buttons: a faint top light and an accent glow instead of a flat slab. */
+.ma-btn-primary {
+  background-image: linear-gradient(to bottom, oklch(1 0 0 / 0.14), oklch(1 0 0 / 0));
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.22),
+    0 1px 2px oklch(0.2 0.05 262 / 0.2),
+    0 8px 20px -8px var(--glow);
+}
+
+.ma-btn-primary:hover {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.26),
+    0 2px 4px oklch(0.2 0.05 262 / 0.2),
+    0 14px 28px -10px var(--glow);
 }
 
 :root[data-sky] .ma-surface--strong {
@@ -212,30 +324,48 @@ a[href] {
 /* Calm focus ring for plain buttons/links that are not using Button. */
 .ma-focusable:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  box-shadow: var(--focus-ring);
 }
 
 .ma-chip {
   border-radius: 999px;
   padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
+  font-weight: 500;
   line-height: 1.25rem;
-  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+  transition:
+    background-color var(--dur-1) ease,
+    color var(--dur-1) ease,
+    box-shadow var(--dur-1) ease,
+    transform var(--dur-1) var(--ease-out);
 }
 
 .ma-chip:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
+  box-shadow: var(--focus-ring);
+}
+
+.ma-chip:active {
+  transform: scale(0.96);
 }
 
 .ma-chip--active {
-  background: var(--fg);
-  color: var(--bg);
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 0.2),
+    0 4px 14px -6px var(--glow);
 }
 
 .ma-chip--idle {
   background: color-mix(in oklch, var(--surface-2) 85%, transparent);
   color: var(--fg);
+  box-shadow: inset 0 0 0 1px var(--glass-border);
+}
+
+.ma-chip--idle:hover {
+  transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 35%, var(--glass-border));
 }
 
 :root[data-sky] .ma-chip--idle {
