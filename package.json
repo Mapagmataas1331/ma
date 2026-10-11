@@ -16,6 +16,7 @@
     "onlyBuiltDependencies": ["esbuild", "libsodium"]
   },
   "scripts": {
+    "postinstall": "node scripts/link-sodium.mjs",
     "pretest": "node scripts/link-sodium.mjs",
     "prebuild": "node scripts/link-sodium.mjs",
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
