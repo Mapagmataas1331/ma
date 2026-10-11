@@ -43,12 +43,12 @@
       ]
     },
     {
-      "org": "Freelance — Exomaterial",
+      "org": "Freelance",
       "period": "2026",
       "kind": "freelance",
       "bullets": [
-        "Built an internal web system for tracking materials in production: stock per storage location, receipts, issues and transfers, and an automatically updated purchase list.",
-        "Next.js, PostgreSQL 16 and Drizzle, with Auth.js and Argon2id; runs with Docker Compose on the client's own server."
+        "Selected client work; most projects are under NDA. One that can be shown: materials-tracker, an internal materials-tracking system for Exomaterial.",
+        "For Exomaterial: Next.js, PostgreSQL 16 and Drizzle, Auth.js and Argon2id, deployed with Docker Compose on the client's own server."
       ]
     }
   ],
