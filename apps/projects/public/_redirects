@@ -1,6 +1,2 @@
-/p/db-configs /index.html 200
-/p/db-plots /index.html 200
-/p/redis-grafana /index.html 200
-/p/reverse-proxy /index.html 200
-/p/pocketcam /index.html 200
-/p/chat /index.html 200
+# /p/<slug> needs no rewrite: the build writes dist/p/<slug>.html with that project's head tags
+# (seoPagesPlugin in packages/config/seo.ts). Unknown paths get 404.html with a real 404 status.

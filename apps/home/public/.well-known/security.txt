@@ -1,0 +1,5 @@
+Contact: mailto:me@ma.cyou
+Contact: https://t.me/mapagmataas
+Expires: 2027-10-01T00:00:00.000Z
+Preferred-Languages: en, ru
+Canonical: https://ma.cyou/.well-known/security.txt

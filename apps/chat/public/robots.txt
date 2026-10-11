@@ -1,0 +1,4 @@
+# chat.ma.cyou is private (invite-only). Crawling stays allowed so search engines can see the
+# noindex (meta robots + X-Robots-Tag) and drop the pages; a Disallow would hide that signal.
+User-agent: *
+Allow: /

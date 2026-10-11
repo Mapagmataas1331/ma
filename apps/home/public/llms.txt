@@ -1,0 +1,18 @@
+# ma.cyou
+
+> Personal sites of Timofey (Mapagmataas), a developer in Novosibirsk who builds web systems for working with data: APIs, PostgreSQL and Redis, interfaces, and the Linux servers they run on.
+
+The sites are available in English and Russian (add `?lang=ru` for Russian).
+
+## Sites
+
+- [Résumé](https://me.ma.cyou/): experience, skills, education and contacts
+- [Projects](https://projects.ma.cyou/): things that are actually online, each with its own page under /p/
+- [PocketCam](https://pocketcam.ma.cyou/): phone browser as a Windows 11 webcam
+- [Chat](https://chat.ma.cyou/): invite-only, end-to-end encrypted messenger (private, not indexed)
+
+## Contact
+
+- Email: me@ma.cyou
+- Telegram: https://t.me/mapagmataas
+- GitHub: https://github.com/mapagmataas1331/

@@ -3,6 +3,7 @@ import { Badge, Card, EmptyState, PageHeader } from '@ma/ui/layout'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { LIST_DESCRIPTION, LIST_TITLE, usePageHead } from '../head'
 import { smallSrc } from './media'
 import { prefetchProject } from './prefetch'
 
@@ -20,6 +21,7 @@ export function ListPage() {
   const tags = [...new Set(projects.flatMap((p) => p.tags))].sort()
   const [tag, setTag] = useState<string | null>(null)
   const shown = tag ? projects.filter((p) => p.tags.includes(tag)) : projects
+  usePageHead(LIST_TITLE, LIST_DESCRIPTION, '/')
   return (
     <div>
       <PageHeader eyebrow="projects.ma.cyou" title={t('projects')} lead={t('projectsLead')} />

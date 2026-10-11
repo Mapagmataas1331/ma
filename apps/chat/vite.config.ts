@@ -1,4 +1,4 @@
-import { appViteDefaults, cspApiOriginPlugin, i18nPreloadPlugin, notFoundPlugin, sitemapPlugin } from '@ma/config/vite'
+import { appViteDefaults, cspApiOriginPlugin, i18nPreloadPlugin, notFoundPlugin } from '@ma/config/vite'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -45,7 +45,7 @@ export default defineConfig({
     notFoundPlugin(),
     i18nPreloadPlugin(),
     cspApiOriginPlugin(),
-    sitemapPlugin('https://chat.ma.cyou', ['/']),
+    // no sitemap: chat is noindex (meta robots + X-Robots-Tag in public/_headers)
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'script',

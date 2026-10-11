@@ -1,21 +1,16 @@
 {
-  "name": "ma.cyou",
-  "short_name": "macyou",
+  "name": "ma.cyou — Timofey - Mapagmataas",
+  "short_name": "ma.cyou",
+  "description": "Personal site with a résumé, projects, PocketCam and an invite-only chat.",
+  "start_url": "/",
+  "scope": "/",
+  "lang": "en",
   "icons": [
-    {
-      "src": "/web-app-manifest-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
-    {
-      "src": "/web-app-manifest-512x512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
+    { "src": "/web-app-manifest-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/web-app-manifest-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
   ],
-  "theme_color": "#ffffff",
-  "background_color": "#ffffff",
+  "theme_color": "#12141c",
+  "background_color": "#12141c",
   "display": "standalone"
 }

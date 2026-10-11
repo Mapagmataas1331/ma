@@ -1,1 +1,2 @@
-/dev/gallery /index.html 200
+# /dev/gallery is served by dist/dev/gallery.html (noindex), written by seoPagesPlugin.
+# Unknown paths get 404.html with a real 404 status.

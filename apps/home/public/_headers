@@ -8,3 +8,7 @@
 # Vite's /assets/* files are content-hashed, so they can be cached forever. HTML (no rule here) keeps the platform default and revalidates.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Internal component gallery: reachable, never indexed.
+/dev/*
+  X-Robots-Tag: noindex

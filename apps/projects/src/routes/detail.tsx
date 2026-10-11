@@ -3,6 +3,7 @@ import { EmptyState } from '@ma/ui/layout'
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router'
+import { projectTitle, usePageHead } from '../head'
 import { Gallery } from './gallery'
 import { ArrowUpRight, ChevronLeft, ChevronRight, DocIcon, DownloadIcon, GithubIcon } from './media'
 import { loadDetailBody, prefetchProject } from './prefetch'
@@ -55,15 +56,7 @@ export function DetailPage() {
     // the router keeps the old scroll position on client-side navigation; prev/next should start at the top
     window.scrollTo({ top: 0 })
   }, [slug])
-  const pageTitle = text?.title
-  useEffect(() => {
-    if (!pageTitle) return
-    const before = document.title
-    document.title = `${pageTitle} · projects.ma.cyou`
-    return () => {
-      document.title = before
-    }
-  }, [pageTitle])
+  usePageHead(text ? projectTitle(text.title) : undefined, text?.summary, `/p/${slug ?? ''}`)
 
   if (!project || !text) {
     return (
