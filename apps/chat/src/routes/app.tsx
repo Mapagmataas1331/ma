@@ -3167,7 +3167,7 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
-        <SkyBackdrop scene="chat" />
+        <SkyBackdrop scene="account" />
         <AuthScreens mode={mode} onMode={setMode} onLogin={onLogin} onRegister={onRegister} on2fa={on2fa} />
       </>
     )
@@ -3177,7 +3177,7 @@ export function ChatApp() {
     return (
       <>
         <AppSettings>{localDataSection}</AppSettings>
-        <SkyBackdrop scene="chat" />
+        <SkyBackdrop scene="account" />
         <UnlockScreen
           mode={vaultExists === false ? 'create' : 'unlock'}
           onUnlock={onUnlock}
