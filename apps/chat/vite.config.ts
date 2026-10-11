@@ -45,7 +45,8 @@ export default defineConfig({
     notFoundPlugin(),
     i18nPreloadPlugin(),
     cspApiOriginPlugin(),
-    // no sitemap: chat is noindex (meta robots + X-Robots-Tag in public/_headers)
+    // sitemap.xml is a static file in public/: the only indexable URL is the sign-in page at /. Head tags live in
+    // index.html rather than seoPagesPlugin so the PWA precache sees the final index.html.
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: 'script',

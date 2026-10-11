@@ -10,30 +10,45 @@
          Kept on one line so its CSP hash does not depend on line endings; public/_headers pins that sha256 and
          packages/config/inline-script-csp.test.ts fails if they drift. Every app ships the same script. -->
     <script>(function(){try{var d=document.documentElement,g=function(k){var c=('; '+document.cookie).split('; '+k+'=');if(c.length>1)try{return decodeURIComponent(c[1].split(';')[0])}catch(e){}return localStorage.getItem(k)},s=JSON.parse(g('ma.theme')||'null')||{},m=s.mode;d.classList.toggle('dark',m==='dark'||(m!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches));if(typeof s.accentH==='number')d.style.setProperty('--accent-h',String(s.accentH));var q=new URLSearchParams(location.search).get('lang'),l=g('ma.lang');d.lang=q==='en'||q==='ru'?q:l==='en'||l==='ru'?l:/^ru/i.test(navigator.language||'')?'ru':'en';var c=document.querySelector('meta[name=ma-i18n]'),u=new URLSearchParams(c?c.content:''),p=function(h,f){if(!h)return;var k=document.createElement('link');k.href=h;if(f){k.rel='preload';k.as='font';k.type='font/woff2';k.crossOrigin=''}else k.rel='modulepreload';document.head.appendChild(k)};p(u.get(d.lang));if(d.lang==='ru')p(u.get('font-ru'),1)}catch(e){}})()</script>
-    <title>chat.ma.cyou</title>
-    <meta name="description" content="Invite-gated chat. Encryption on. No feed, no ads." />
+    <title>Chat — invite-only end-to-end encrypted messenger · chat.ma.cyou</title>
+    <meta name="description" content="Invite-only messenger by Timofey (Mapagmataas) for direct and small group chats. Messages and files are encrypted in the browser before they leave the device." />
     <meta name="theme-color" content="#12141c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f7f6fb" media="(prefers-color-scheme: light)" />
-    <meta name="robots" content="noindex, nofollow" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://chat.ma.cyou/" />
-    <meta property="og:title" content="chat.ma.cyou" />
-    <meta property="og:description" content="Invite-gated chat. Encryption on. No feed, no ads." />
+    <meta property="og:title" content="chat.ma.cyou — invite-only encrypted chat" />
+    <meta property="og:description" content="Invite-only messenger for direct and small group chats. Messages and files are encrypted in the browser before they leave the device." />
     <meta property="og:image" content="https://api.ma.cyou/v1/og?site=chat" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="chat.ma.cyou: Chat. Invite-gated chat. Encryption on. No feed, no ads." />
+    <meta property="og:image:alt" content="chat.ma.cyou: invite-only end-to-end encrypted messenger for direct and small group chats." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="chat.ma.cyou" />
-    <meta name="twitter:description" content="Invite-gated chat. Encryption on. No feed, no ads." />
+    <meta name="twitter:title" content="chat.ma.cyou — invite-only encrypted chat" />
+    <meta name="twitter:description" content="Invite-only messenger for direct and small group chats. Messages and files are encrypted in the browser before they leave the device." />
     <meta name="twitter:image" content="https://api.ma.cyou/v1/og?site=chat" />
-    <meta name="twitter:image:alt" content="chat.ma.cyou: Chat. Invite-gated chat. Encryption on. No feed, no ads." />
+    <meta name="twitter:image:alt" content="chat.ma.cyou: invite-only end-to-end encrypted messenger for direct and small group chats." />
     <link rel="canonical" href="https://chat.ma.cyou/" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "chat.ma.cyou",
+        "url": "https://chat.ma.cyou/",
+        "description": "Invite-only messenger for direct and small group chats. Messages and files are encrypted in the browser before they leave the device.",
+        "applicationCategory": "CommunicationApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript and a modern web browser.",
+        "inLanguage": ["en", "ru"],
+        "image": "https://api.ma.cyou/v1/og?site=chat",
+        "sameAs": "https://projects.ma.cyou/p/chat",
+        "author": { "@type": "Person", "@id": "https://ma.cyou/#person", "name": "Timofey", "alternateName": "Mapagmataas", "url": "https://ma.cyou/" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

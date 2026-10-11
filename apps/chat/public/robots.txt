@@ -1,4 +1,6 @@
-# chat.ma.cyou is private (invite-only). Crawling stays allowed so search engines can see the
-# noindex (meta robots + X-Robots-Tag) and drop the pages; a Disallow would hide that signal.
+# chat.ma.cyou: the sign-in page at / is public and indexable. Conversations, invites and settings
+# have no URLs of their own (they live behind sign-in in the single-page app), so there is nothing else to hide.
 User-agent: *
 Allow: /
+
+Sitemap: https://chat.ma.cyou/sitemap.xml

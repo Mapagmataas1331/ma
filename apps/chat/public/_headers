@@ -2,7 +2,6 @@
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  X-Robots-Tag: noindex, nofollow
   Permissions-Policy: accelerometer=(), browsing-topics=(), camera=(), display-capture=(), geolocation=(), gyroscope=(), hid=(), idle-detection=(), magnetometer=(), microphone=(), midi=(), payment=(), serial=(), usb=(), xr-spatial-tracking=()
   Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
   Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-gMsGDwuBDa93acm/JW2baJMedjolvyvzU/eA/c2oQBA=' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self' https://api.ma.cyou wss://api.ma.cyou; worker-src 'self' blob:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'; object-src 'none'
@@ -10,3 +9,8 @@
 # Vite's /assets/* files are content-hashed, so they can be cached forever. HTML (no rule here) keeps the platform default and revalidates.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The sign-in page at / is indexable; it is the only app URL (the whole chat UI lives behind it, client-side).
+# 404.html already has <meta name="robots" content="noindex">; this also covers direct requests for it.
+/404.html
+  X-Robots-Tag: noindex

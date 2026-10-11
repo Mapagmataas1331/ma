@@ -9,7 +9,7 @@ The sites are available in English and Russian (add `?lang=ru` for Russian).
 - [Résumé](https://me.ma.cyou/): experience, skills, education and contacts
 - [Projects](https://projects.ma.cyou/): things that are actually online, each with its own page under /p/
 - [PocketCam](https://pocketcam.ma.cyou/): phone browser as a Windows 11 webcam
-- [Chat](https://chat.ma.cyou/): invite-only, end-to-end encrypted messenger (private, not indexed)
+- [Chat](https://chat.ma.cyou/): invite-only, end-to-end encrypted messenger for direct and small group chats (sign-in page; conversations need an invite)
 
 ## Contact
 

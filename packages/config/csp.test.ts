@@ -9,7 +9,9 @@ describe('chat _headers', () => {
   it('production CSP does not allow localhost', () => {
     expect(prod).toMatch(/connect-src 'self' https:\/\/api\.ma\.cyou wss:\/\/api\.ma\.cyou;/)
     expect(prod).not.toMatch(/localhost|127\.0\.0\.1/)
-    expect(prod).toMatch(/X-Robots-Tag: noindex/)
+    // the sign-in page at / is indexable; only the 404 page carries noindex
+    expect(prod).not.toMatch(/^\/\*[\s\S]*?X-Robots-Tag[\s\S]*?^\/assets/m)
+    expect(prod).toMatch(/^\/404\.html\r?\n\s+X-Robots-Tag: noindex/m)
   })
 
   it('adds a local API origin and its ws twin to connect-src', () => {
