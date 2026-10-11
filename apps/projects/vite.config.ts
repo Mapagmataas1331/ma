@@ -11,6 +11,7 @@ const routes = [
   '/p/reverse-proxy',
   '/p/pocketcam',
   '/p/chat',
+  '/p/materials-tracker',
 ]
 
 export default defineConfig({

@@ -104,6 +104,23 @@
       "featured": true
     },
     {
+      "slug": "materials-tracker",
+      "title": "materials-tracker — учёт материалов на производстве",
+      "tags": ["Next.js", "PostgreSQL", "Drizzle", "Docker Compose"],
+      "summary": "Exomaterial — внутренняя веб-система учёта материалов для производства: остатки по местам хранения считаются автоматически, а список «Требуется закупка» всегда актуален — без Excel и бумажных журналов.",
+      "bullets": [
+        "Поступления, списания и перемещения выполняются в транзакциях; остаток не уходит в минус, даже если работают несколько человек одновременно.",
+        "Автоматический список позиций ниже минимума с печатью и выгрузкой CSV, полный журнал операций.",
+        "Роли администратора и пользователя, сессии Auth.js и пароли в Argon2id; публичной регистрации нет.",
+        "Одно приложение на Next.js с PostgreSQL 16 и Drizzle, развёртывание через Docker Compose и опциональный nginx с HTTPS на своём сервере предприятия."
+      ],
+      "screenshots": [
+        { "src": "/screenshots/materials-tracker-materials.webp", "alt": "Каталог материалов в Exomaterial", "caption": "Каталог материалов" },
+        { "src": "/screenshots/materials-tracker-purchase-list.webp", "alt": "Список «Требуется закупка» в Exomaterial", "caption": "«Требуется закупка» формируется автоматически" }
+      ],
+      "featured": true
+    },
+    {
       "slug": "keycloak",
       "title": "Keycloak — доступ",
       "tags": ["IAM", "Keycloak"],

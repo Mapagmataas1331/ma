@@ -1,4 +1,4 @@
-import { loadProjects, loadResume } from '@ma/content'
+import { loadResume, projectSlugs } from '@ma/content'
 import { Lightbox, SkyBackdrop } from '@ma/ui'
 import { useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,7 +8,7 @@ export function ResumePage() {
   const lang = i18n.language.startsWith('ru') ? 'ru' : 'en'
   const data = loadResume(lang)
   const projectsOrigin = import.meta.env.VITE_APP_ORIGIN_PROJECTS || 'https://projects.ma.cyou'
-  const projectPages = new Set(loadProjects().map((project) => project.slug))
+  const projectPages = new Set<string>(projectSlugs)
   const [shot, setShot] = useState<{ src: string; alt: string; caption: string } | null>(null)
   const articleRef = useRef<HTMLElement>(null)
   return (
@@ -110,7 +110,7 @@ export function ResumePage() {
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 {project.screenshots.map((shotItem) => (
                   <button key={shotItem.src} type="button" className="min-w-0 text-left" onClick={() => setShot(shotItem)}>
-                    <img src={shotItem.src} alt={shotItem.alt} className="aspect-video w-full rounded-md border border-line object-cover object-top" />
+                    <img src={shotItem.src} alt={shotItem.alt} loading="lazy" decoding="async" className="aspect-video w-full rounded-md border border-line object-cover object-top" />
                     <span className="mt-1.5 block text-xs text-muted">{shotItem.caption}</span>
                   </button>
                 ))}

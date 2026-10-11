@@ -9,14 +9,26 @@ tags:
   - Nginx
 year: 2024
 status: active
+context: work
 featured: true
 summary: One workspace for several PostgreSQL databases, with a guarded edit mode and session rollback.
 summaryRu: Один интерфейс к нескольким базам PostgreSQL, с защищённым режимом правок и откатом сессии.
 links: []
+images:
+  - src: /shots/db-configs/list.webp
+    width: 1600
+    height: 900
+    alt: db-configs table view
+    altRu: Просмотр таблиц в db-configs
+    caption: Browsing PostgreSQL data
+    captionRu: Просмотр данных из PostgreSQL
+    source: screenshot from the résumé
+  - src: /shots/db-configs/edit.webp
+    width: 1600
+    height: 900
+    alt: db-configs edit mode with the session panel
+    altRu: Режим правок db-configs с панелью сессии
+    caption: Editing and session
+    captionRu: Редактирование и сессия
+    source: screenshot from the résumé
 ---
-
-A single interface routes queries to multiple PostgreSQL sources from configuration. Operators browse tables and apply allowed edits without a direct database connection. Protected edit mode, server sessions, and in-session undo reduce accidental changes. Authentication goes through Keycloak OIDC with JWT role checks. The React SPA and FastAPI API are deployed behind Nginx with systemd.
-
-<!-- ru -->
-
-Один интерфейс отправляет запросы в несколько баз PostgreSQL по конфигурации. Можно смотреть таблицы и делать разрешённые правки без прямого подключения к базе. Защищённый режим, серверные сессии и отмена внутри сессии уменьшают случайные изменения. Вход через Keycloak OIDC и проверка ролей в JWT. React и FastAPI работают за Nginx и systemd.

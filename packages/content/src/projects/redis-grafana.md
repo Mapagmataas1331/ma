@@ -9,14 +9,26 @@ tags:
   - React
 year: 2025
 status: active
+context: work
 featured: true
 summary: Telemetry pipeline from a TCP source into Redis TimeSeries and Grafana dashboards.
 summaryRu: Телеметрия с TCP-источника в Redis TimeSeries и дашборды Grafana.
 links: []
+images:
+  - src: /shots/redis-grafana/dashboard.webp
+    width: 1600
+    height: 900
+    alt: Grafana dashboard with telemetry series
+    altRu: Дашборд Grafana с рядами телеметрии
+    caption: Grafana dashboard
+    captionRu: Дашборд в Grafana
+    source: screenshot from the résumé
+  - src: /shots/redis-grafana/controller.webp
+    width: 1600
+    height: 900
+    alt: redis-grafana controller with channel settings
+    altRu: Контроллер redis-grafana с настройкой каналов
+    caption: Channel setup in the controller
+    captionRu: Настройка каналов в контроллере
+    source: screenshot from the résumé
 ---
-
-Binary messages are decoded, queued with backpressure, and stored in Redis TimeSeries with aggregation rules for several retention windows. A Flask and React controller manages channels, configuration, status, and logs. Components are split across internal and external networks.
-
-<!-- ru -->
-
-Двоичные сообщения разбираются, встают в очередь с ограничением скорости и пишутся в Redis TimeSeries с правилами агрегации на несколько окон хранения. Контроллер на Flask и React управляет каналами, конфигурацией, статусом и логами. Части системы разделены по внутренней и внешней сети.

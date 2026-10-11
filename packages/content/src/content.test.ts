@@ -7,7 +7,7 @@ describe('content', () => {
     expect(loadResume('ru').experience.length).toBeGreaterThan(0)
     expect(loadProjects().length).toBeGreaterThan(3)
     const pocket = loadProjects().find((project) => project.slug === 'pocketcam')
-    expect(pocket?.links[0]).toEqual({ label: 'GitHub', href: 'https://github.com/Mapagmataas1331/PocketCam' })
+    expect(pocket?.links[0]).toMatchObject({ label: 'GitHub', href: 'https://github.com/Mapagmataas1331/PocketCam', kind: 'github' })
     expect(loadSocials()[0]?.href.startsWith('http') || loadSocials()[0]?.href.startsWith('mailto')).toBe(true)
   })
 })

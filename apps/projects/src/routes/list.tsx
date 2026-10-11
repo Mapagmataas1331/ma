@@ -3,6 +3,8 @@ import { Badge, Card, EmptyState, PageHeader } from '@ma/ui/layout'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
+import { smallSrc } from './media'
+import { prefetchProject } from './prefetch'
 
 function localized(project: Project, ru: boolean) {
   return {
@@ -35,9 +37,22 @@ export function ListPage() {
         <EmptyState title={t('nothingMatches')} body={t('projectsFilterEmpty')} action={<button type="button" className="ma-focusable text-sm text-accent underline-offset-2 hover:underline" onClick={() => setTag(null)}>{t('showAllProjects')}</button>} />
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {shown.map((project) => (
-            <Link key={project.slug} to={`/p/${project.slug}`} className="ma-card-link group block">
-              <Card className="h-full">
+          {shown.map((project) => {
+            const cover = project.images[0]
+            return (
+            <Link
+              key={project.slug}
+              to={`/p/${project.slug}`}
+              className="ma-card-link group block"
+              onPointerEnter={() => prefetchProject(project.slug)}
+              onFocus={() => prefetchProject(project.slug)}
+            >
+              <Card className="h-full overflow-hidden">
+                {cover ? (
+                  <div className="project-cover -mx-5 -mt-5 mb-4">
+                    <img src={smallSrc(cover)} width={cover.width} height={cover.height} alt="" loading="lazy" decoding="async" />
+                  </div>
+                ) : null}
                 <div className="mb-2 flex flex-wrap gap-2">
                   {project.tags.slice(0, 3).map((tagName) => (
                     <Badge key={tagName}>{tagName}</Badge>
@@ -53,7 +68,8 @@ export function ListPage() {
                 <p className="mt-2 text-sm leading-relaxed text-muted break-words">{localized(project, ru).summary}</p>
               </Card>
             </Link>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
