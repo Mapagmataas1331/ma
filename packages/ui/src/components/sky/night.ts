@@ -459,7 +459,10 @@ export function createNightScene(cfg: NightConfig): SkyScene {
         side.addColorStop(0, `rgba(40,160,170,${0.12 * k})`)
         side.addColorStop(1, 'rgba(40,160,170,0)')
         g.fillStyle = side
-        g.fillRect(0, H * 0.5, W, H * 0.5)
+        // Fill the gradient's whole reach. Its radius (half the larger side) passes above H * 0.5 on wide
+        // screens, and clipping the fill there left a hard horizontal seam across the left half.
+        const sideTop = Math.max(0, H * 1.05 - Math.max(W, H) * 0.5)
+        g.fillRect(0, sideTop, W, H - sideTop)
       }
 
       // ── galactic band across the upper-left corner, textured and dusted (static) ──
