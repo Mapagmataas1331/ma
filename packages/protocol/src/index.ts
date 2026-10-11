@@ -62,6 +62,8 @@ export const plaintextMessageSchema = z.object({
         key: z.string().optional(),
         header: z.string().optional(),
         lengths: z.array(z.number().int().positive()).optional(),
+        /** Plaintext bytes per secretstream chunk. Sent instead of `lengths` when every chunk but the last is full. */
+        chunk: z.number().int().positive().optional(),
       }),
     )
     .default([]),
@@ -72,10 +74,13 @@ export type PlaintextMessage = z.infer<typeof plaintextMessageSchema>
 
 export { canonicalDisplayName, canonicalUsername, deviceNameError, displayNameError, graphemeLength, groupNameError, passwordError, usernameError, vaultPasswordError } from './limits'
 
-/** One queued file may use the whole cloud budget. The budget itself is what stops the next file. */
+/**
+ * Fallback mailbox limits, used until `/v1/capabilities` answers. The server is the source of truth.
+ * One queued file may use the whole cloud budget. The budget itself is what stops the next file.
+ * Direct (peer-to-peer) transfers have no size cap.
+ */
 export const MAILBOX_MAX_FILE_BYTES = 5 * 1024 * 1024 * 1024
 export const MAILBOX_USER_QUOTA_BYTES = MAILBOX_MAX_FILE_BYTES
-export const MAILBOX_DIRECT_FILE_BYTES = MAILBOX_MAX_FILE_BYTES
 export const MAILBOX_MAX_MESSAGE_BYTES = 65_536
 
 export function newFrame(t: string, p: Record<string, unknown> = {}, to?: SignalFrame['to']): SignalFrame {

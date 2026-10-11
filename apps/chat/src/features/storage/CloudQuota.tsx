@@ -1,6 +1,6 @@
-import { MAILBOX_USER_QUOTA_BYTES } from '@ma/protocol'
 import { Button, Dialog } from '@ma/ui'
 import { useTranslation } from 'react-i18next'
+import { mailboxLimits } from '../../lib/limits'
 import { formatBytes } from '../messages/format'
 
 export type CloudFileInfo = {
@@ -52,10 +52,10 @@ export function CloudQuotaDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={t('cloudStorage')}
-      description={need > 0 ? t('cloudQuotaHit', { used: formatBytes(used), limit: formatBytes(limit), need: formatBytes(need), room: formatBytes(room) }) : t('cloudStorageLead', { limit: formatBytes(limit || MAILBOX_USER_QUOTA_BYTES) })}
+      description={need > 0 ? t('cloudQuotaHit', { used: formatBytes(used), limit: formatBytes(limit), need: formatBytes(need), room: formatBytes(room) }) : t('cloudStorageLead', { limit: formatBytes(limit || mailboxLimits().userQuotaBytes) })}
     >
       <p className="mb-3 text-sm text-muted">{t('cloudExpires')}</p>
-      <p className="mb-3 text-sm">{t('cloudUsed', { used: formatBytes(used), limit: formatBytes(limit || MAILBOX_USER_QUOTA_BYTES) })}</p>
+      <p className="mb-3 text-sm">{t('cloudUsed', { used: formatBytes(used), limit: formatBytes(limit || mailboxLimits().userQuotaBytes) })}</p>
       {usage?.files.length ? (
         <ul className="flex flex-col gap-2">
           {usage.files.map((file) => (

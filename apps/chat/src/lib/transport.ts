@@ -9,11 +9,22 @@ type Handler = (frame: SignalFrame) => void
 /** File-control frames queued while the socket reconnects are only worth sending this soon after. */
 const BACKLOG_TTL = 15_000
 const BACKLOG_MAX = 64
+/** Used when the browser does not report the negotiated SCTP limit. RFC 8841's default when SDP omits it. */
+const FALLBACK_MESSAGE_BYTES = 64 * 1024
+/** Never send bigger messages than this even when the peer allows more: huge messages stall the SCTP queue. */
+const MAX_SEND_MESSAGE_BYTES = 256 * 1024
+/** Upper bound for one reassembled text message (a sync batch or a file.start with a long chunk list). */
+const MAX_FRAGMENTED_BYTES = 64 * 1024 * 1024
+const FRAG_PREFIX = '{"t":"frag",'
+
+type Fragments = { parts: string[]; got: number; bytes: number; at: number }
 
 export class Transport {
   private ws: WebSocket | null = null
   private peers = new Map<string, RTCPeerConnection>()
   private channels = new Map<string, RTCDataChannel>()
+  private channelPeer = new WeakMap<RTCDataChannel, RTCPeerConnection>()
+  private fragments = new Map<string, Fragments>()
   private iceWait = new Map<string, RTCIceCandidateInit[]>()
   private connecting = new Map<string, Promise<RTCDataChannel | null>>()
   private liveWait = new Map<string, { ok: () => void; fail: (err: Error) => void }>()
@@ -56,7 +67,13 @@ export class Transport {
       if (!this.stopped) this.reconnectTimer = window.setTimeout(() => this.connect(), 1500)
     }
     ws.onmessage = (ev) => {
-      const parsed = signalFrameSchema.safeParse(JSON.parse(String(ev.data)))
+      let raw: unknown
+      try {
+        raw = JSON.parse(String(ev.data))
+      } catch {
+        return
+      }
+      const parsed = signalFrameSchema.safeParse(raw)
       if (!parsed.success) return
       const frame = parsed.data
       if (frame.t === 'chat.envelope.ok') {
@@ -97,8 +114,86 @@ export class Transport {
   sendToPeer(userId: string, deviceId: string, payload: string) {
     const channel = this.channels.get(`${userId}:${deviceId}`)
     if (!channel || channel.readyState !== 'open') return false
-    channel.send(payload)
-    return true
+    try {
+      this.sendText(channel, payload)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Largest message this channel may carry. Firefox and Chrome refuse anything above the peer's
+   * `a=max-message-size` with "Message size exceeds maxMessageSize", so every send must stay below it.
+   */
+  maxMessageSize(channel: RTCDataChannel) {
+    const reported = this.channelPeer.get(channel)?.sctp?.maxMessageSize
+    const limit = typeof reported === 'number' && Number.isFinite(reported) && reported > 0 ? reported : FALLBACK_MESSAGE_BYTES
+    return Math.min(limit, MAX_SEND_MESSAGE_BYTES)
+  }
+
+  /** Send a JSON text message of any length: anything over the channel limit goes out as numbered fragments. */
+  sendText(channel: RTCDataChannel, text: string) {
+    const limit = this.maxMessageSize(channel)
+    // A UTF-16 unit is at most 3 UTF-8 bytes, so this length check is safe without encoding first.
+    if (text.length * 3 <= limit) {
+      channel.send(text)
+      return
+    }
+    // JSON escaping can grow a character to 6 bytes ("\u0001"), so size fragments for the worst case.
+    const step = Math.max(1024, Math.floor((limit - 256) / 6))
+    const id = Math.random().toString(36).slice(2) + Date.now().toString(36)
+    const n = Math.ceil(text.length / step)
+    for (let i = 0; i < n; i += 1) {
+      channel.send(JSON.stringify({ t: 'frag', id, i, n, d: text.slice(i * step, (i + 1) * step) }))
+    }
+  }
+
+  /** Send binary data, split into pieces no larger than the channel limit, waiting for the buffer to drain. */
+  async sendBinary(channel: RTCDataChannel, bytes: Uint8Array, ready?: () => void) {
+    const limit = this.maxMessageSize(channel)
+    for (let offset = 0; offset < bytes.byteLength || offset === 0; offset += limit) {
+      await Transport.drain(channel)
+      ready?.()
+      if (channel.readyState !== 'open') throw new Error('peer_closed')
+      const piece = offset === 0 && bytes.byteLength <= limit ? bytes : bytes.subarray(offset, Math.min(bytes.byteLength, offset + limit))
+      channel.send(piece as unknown as ArrayBufferView<ArrayBuffer>)
+      if (bytes.byteLength === 0) break
+    }
+  }
+
+  /** Reassemble fragments. Returns the whole text once every piece arrived, '' while waiting, or the input when it is not a fragment. */
+  private unfragment(key: string, data: string) {
+    if (!data.startsWith(FRAG_PREFIX)) return data
+    let frag: { id?: unknown; i?: unknown; n?: unknown; d?: unknown }
+    try {
+      frag = JSON.parse(data) as typeof frag
+    } catch {
+      return ''
+    }
+    const { id, i, n, d } = frag
+    if (typeof id !== 'string' || typeof i !== 'number' || typeof n !== 'number' || typeof d !== 'string' || i < 0 || i >= n || n > 100_000) return ''
+    const now = Date.now()
+    for (const [slot, value] of this.fragments) if (now - value.at > 60_000) this.fragments.delete(slot)
+    const slot = `${key}|${id}`
+    const entry = this.fragments.get(slot) ?? { parts: new Array<string>(n), got: 0, bytes: 0, at: now }
+    if (entry.parts.length !== n) return ''
+    if (entry.parts[i] === undefined) {
+      entry.parts[i] = d
+      entry.got += 1
+      entry.bytes += d.length
+    }
+    entry.at = now
+    if (entry.bytes > MAX_FRAGMENTED_BYTES) {
+      this.fragments.delete(slot)
+      return ''
+    }
+    if (entry.got < n) {
+      this.fragments.set(slot, entry)
+      return ''
+    }
+    this.fragments.delete(slot)
+    return entry.parts.join('')
   }
 
   /** Send a signaling frame. Returns false when it could not go out now (file-control frames are queued for the reconnect). */
@@ -180,12 +275,15 @@ export class Transport {
 
   private bindChannel(key: string, channel: RTCDataChannel) {
     channel.binaryType = 'arraybuffer'
+    const pc = this.peers.get(key)
+    if (pc) this.channelPeer.set(channel, pc)
     channel.onopen = () => this.emit({ v: 1, t: 'p2p.open', id: 'local', from: this.peerFrom(key), p: {} })
     channel.onclose = () => this.emit({ v: 1, t: 'p2p.close', id: 'local', from: this.peerFrom(key), p: {} })
     channel.onerror = () => this.emit({ v: 1, t: 'p2p.error', id: 'local', from: this.peerFrom(key), p: {} })
     channel.onmessage = (ev) => {
       if (typeof ev.data === 'string') {
-        this.emit({ v: 1, t: 'p2p.message', id: 'local', from: this.peerFrom(key), p: { data: ev.data } })
+        const data = this.unfragment(key, ev.data)
+        if (data) this.emit({ v: 1, t: 'p2p.message', id: 'local', from: this.peerFrom(key), p: { data } })
         return
       }
       const bytes = ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : null
@@ -353,7 +451,7 @@ export class Transport {
       if (!this.peerOpen(row.recipientUserId, peerDevice)) continue
       const channel = this.channels.get(`${row.recipientUserId}:${peerDevice}`)
       if (!channel) continue
-      channel.send(JSON.stringify(wire))
+      this.sendText(channel, JSON.stringify(wire))
       row.state = 'sent'
       row.deviceId = peerDevice
       via = 'direct'
@@ -377,7 +475,7 @@ export class Transport {
         }),
       ).catch(() => null)
       if (opened) {
-        opened.channel.send(JSON.stringify(wire))
+        this.sendText(opened.channel, JSON.stringify(wire))
         row.state = 'sent'
         row.deviceId = opened.peerDevice
         via = 'direct'

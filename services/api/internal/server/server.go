@@ -62,6 +62,8 @@ type pairSession struct {
 	Code         string
 	State        string
 	Expires      time.Time
+	// TargetTrusted is set when an already trusted device claimed the code to copy the chat key.
+	TargetTrusted bool
 }
 
 func New(cfg config.Config, db *store.Store) *App {
@@ -802,13 +804,16 @@ func (a *App) pairClaim(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	a.mu.Lock()
 	sess, exists := a.pairs[id]
-	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) || sess.State != "created" || p.Device == nil || p.Trust != "pending" || *p.Device == sess.SourceDevice || subtle.ConstantTimeCompare([]byte(sess.Code), []byte(body.Code)) != 1 {
+	if !exists || sess.UserID != p.User.ID || time.Now().After(sess.Expires) || sess.State != "created" || p.Device == nil || (p.Trust != "pending" && p.Trust != "trusted") || *p.Device == sess.SourceDevice || subtle.ConstantTimeCompare([]byte(sess.Code), []byte(body.Code)) != 1 {
 		a.mu.Unlock()
 		httpx.WriteError(w, 404, "not_found", "pairing expired")
 		return
 	}
+	// A trusted device may claim too: it already belongs to this account and only wants the account's chat key
+	// (for example after it created its own vault). The source device still has to confirm the pairing.
 	sess.State = "claimed"
 	sess.TargetDevice = *p.Device
+	sess.TargetTrusted = p.Trust == "trusted"
 	a.pairs[id] = sess
 	a.mu.Unlock()
 	httpx.WriteJSON(w, 200, map[string]string{
@@ -852,11 +857,17 @@ func (a *App) pairComplete(w http.ResponseWriter, r *http.Request) {
 	sess.State = "trusted"
 	delete(a.pairs, id)
 	a.mu.Unlock()
+	if sess.TargetTrusted {
+		w.WriteHeader(204)
+		return
+	}
 	if err := a.DB.TrustOwnedDevice(r.Context(), p.User.ID, sess.TargetDevice, sess.SourceDevice); err != nil {
 		httpx.WriteError(w, 404, "not_found", "device")
 		return
 	}
 	a.event(r, &p.User.ID, "device_trusted")
+	// Tell the new device right away so it can leave the "pending" state without a reload.
+	a.Hub.Notify(r.Context(), p.User.ID, signaling.Frame{V: 1, T: "device.trusted", ID: uuid.NewString(), P: map[string]any{"id": sess.TargetDevice.String()}})
 	w.WriteHeader(204)
 }
 

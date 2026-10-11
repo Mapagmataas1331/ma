@@ -1,6 +1,6 @@
 import { ApiError, api, apiBlobProgress, apiUpload, authApi } from '@ma/api-client'
 import { b64, pairingConfirm, ready, unb64 } from '@ma/crypto'
-import { canonicalDisplayName, displayNameError, groupNameError, MAILBOX_MAX_FILE_BYTES, MAILBOX_USER_QUOTA_BYTES, newFrame, passwordError, plaintextMessageSchema, usernameError, vaultPasswordError } from '@ma/protocol'
+import { canonicalDisplayName, displayNameError, groupNameError, newFrame, type SignalFrame, passwordError, plaintextMessageSchema, usernameError, vaultPasswordError } from '@ma/protocol'
 import {
   AppSettings,
   Button,
@@ -31,9 +31,10 @@ import { Pin } from 'lucide-react'
 import QRCode from 'qrcode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { activeDatabase, openAccount } from '../lib/db'
+import { accountKey, activeDatabase, openAccount } from '../lib/db'
+import { loadMailboxLimits, mailboxLimits } from '../lib/limits'
 import { ensureDeviceSecrets, friendlyDeviceName, publicDeviceKeys, rememberDeviceSecrets, takeDeviceSecrets } from '../lib/device'
-import { blobParts, ciphertextSize, createEncryptor, decryptParts, FILE_CHUNK_BYTES, pullDecryptor, type FileCipherMeta } from '../lib/files'
+import { blobParts, BlobCollector, ChunkAssembler, chunkLengths, ciphertextSize, createEncryptor, decryptBlob, FILE_CHUNK_BYTES, isUniformPlan, pullDecryptor, type FileCipherMeta } from '../lib/files'
 import { replayOutbox } from '../lib/outbox'
 import { dismissTransfer, loadPrefs, loadStorageGb, savePrefs as savePrefsStore, saveStorageGb, transferDismissed, type ChatPref } from '../lib/prefs'
 import { enablePush, notifyHere, notifyPrefOn, setAppBadge, setNotifyPref } from '../lib/push'
@@ -54,6 +55,7 @@ import { TransferPrompt } from '../features/transfers/TransferPrompt'
 import { UnlockScreen, VaultExplainer } from '../features/vault/UnlockScreen'
 import {
   addRecoverySlot,
+  adoptIdentity,
   beginCipherFile,
   changeVaultPassword,
   cleanOldFiles,
@@ -113,21 +115,36 @@ type Pull = {
   size: number
   meta: FileCipherMeta
   received: number
-  parts: Uint8Array[]
+  /** Plaintext so far, folded into Blobs so a multi-GB file does not live in the JS heap. */
+  parts: BlobCollector
+  /** Rebuilds ciphertext chunks from data-channel messages split to the peer's maxMessageSize. */
+  chunks: ChunkAssembler
   queue: Promise<void>
   decrypt: ((chunk: Uint8Array) => Uint8Array) | null
   sink: Awaited<ReturnType<typeof beginCipherFile>>
   failed: boolean
 }
 
+type PairStage = { step: 'waiting' | 'claimed' | 'sending' | 'done' | 'failed'; count?: number; error?: string }
+type LinkStage = { step: 'waiting' | 'receiving' | 'done' | 'failed'; count?: number; error?: string }
+
 const PROBE_TTL = 30_000
 /** A requested peer file that shows no start or chunk for this long is treated as stalled. */
 const PULL_STALL_MS = 30_000
 /** Tag bytes secretstream (XChaCha20-Poly1305) adds to every chunk. Fixed by libsodium. */
 const SECRETSTREAM_ABYTES = 17
-/** The server caps the ciphertext it receives, so compare the encrypted size against the cloud limit. */
+/** The server caps the ciphertext it receives, so compare the encrypted size against the cloud limit it reports. */
 function fitsCloud(size: number) {
-  return size + Math.max(1, Math.ceil(size / FILE_CHUNK_BYTES)) * SECRETSTREAM_ABYTES <= MAILBOX_MAX_FILE_BYTES
+  return size + Math.max(1, Math.ceil(size / FILE_CHUNK_BYTES)) * SECRETSTREAM_ABYTES <= mailboxLimits().maxFileBytes
+}
+/**
+ * Key fields for a cloud attachment inside a message. The chunk plan goes out as one number when it is the
+ * standard one: a per-chunk list for a few hundred MB already overflows the 64 KiB mailbox message limit.
+ */
+function cloudKeyFields(file: { size: number; key?: string; header?: string; lengths?: number[] }) {
+  if (!file.key) return {}
+  const uniform = !file.lengths?.length || isUniformPlan(file.lengths, file.size)
+  return uniform ? { key: file.key, header: file.header, chunk: FILE_CHUNK_BYTES } : { key: file.key, header: file.header, lengths: file.lengths }
 }
 /** How long a group file stays offerable after the last byte moved, so someone who was offline can still join the send. */
 const SHARE_TAIL = 120_000
@@ -184,6 +201,12 @@ export function ChatApp() {
   const [usage, setUsage] = useState({ chatBytes: 0, fileBytes: 0, queueBytes: 0, total: 0 })
   const [limitGb, setLimitGb] = useState(() => loadStorageGb(''))
   const [pairId, setPairId] = useState('')
+  /** Progress of a "Link a device" started here (this device sends keys and chats). */
+  const [pairStage, setPairStage] = useState<PairStage | null>(null)
+  /** Progress of a "Transfer chats" on this device (this device receives keys and chats). */
+  const [linkStage, setLinkStage] = useState<LinkStage | null>(null)
+  const [lastSyncAt, setLastSyncAt] = useState(0)
+  const [cloudLimits, setCloudLimits] = useState(mailboxLimits)
   const [pairCode, setPairCode] = useState('')
   const [pairQr, setPairQr] = useState('')
   const [pairFingerprint, setPairFingerprint] = useState('')
@@ -240,11 +263,19 @@ export function ChatApp() {
   const wantView = useRef('')
   const wantSave = useRef('')
   const transferPassword = useRef('')
+  /** Set only while the user is running "Transfer chats" here: a sync.hello may replace keys only then. */
+  const transferWanted = useRef(false)
   const syncSnapshot = useRef<SyncMessage[]>([])
-  const syncReady = useRef<Promise<void>>(Promise.resolve())
+  /** False when the keys from the other device could not be taken: incoming records are then dropped. */
+  const syncReady = useRef<Promise<boolean>>(Promise.resolve(true))
+  /** sync.records batches are merged one after another; in parallel they raced and the UI showed partial history. */
+  const syncQueue = useRef<Promise<void>>(Promise.resolve())
+  const syncReceived = useRef(0)
+  const syncFrameRef = useRef<(frame: SignalFrame) => void>(() => {})
+  const mismatchToasted = useRef(false)
   const syncRef = useRef<() => void>(() => {})
   const replayRef = useRef<() => void>(() => {})
-  const deviceSyncRef = useRef<() => void>(() => {})
+  const deviceSyncRef = useRef<(manual?: boolean) => void>(() => {})
   const publishSyncRef = useRef<(messages: SyncMessage[]) => void>(() => {})
   const meRef = useRef(session.user?.id)
   meRef.current = session.user?.id
@@ -532,6 +563,7 @@ export function ChatApp() {
             key?: string
             header?: string
             lengths?: number[]
+            chunk?: number
             name?: string
             mime?: string
             size?: number
@@ -549,54 +581,18 @@ export function ChatApp() {
             }).catch(() => undefined)
             return
           }
-          if ((parsed.t === 'sync.hello' || parsed.t === 'transfer.batch') && parsed.dek && parsed.signPk && parsed.signSk && parsed.boxPk && parsed.boxSk) {
-            syncReady.current = (async () => {
-              const local = isUnlocked() ? await exportHistory() : []
-              syncSnapshot.current = local
-              const same = isUnlocked() && getIdentity().identityBox.publicKey === parsed.boxPk
-              if (same) return
-              if ((await hasVault()) && !isUnlocked()) {
-                toast(tRef.current('unlockBeforeSync'))
-                syncSnapshot.current = []
-                return
-              }
-              if (!transferPassword.current) return
-              await importTransferredIdentity(transferPassword.current, { dek: parsed.dek || '', signPk: parsed.signPk || '', signSk: parsed.signSk || '', boxPk: parsed.boxPk || '', boxSk: parsed.boxSk || '' })
-              if (local.length) await storeHistory(local)
-              setVaultExists(true)
-              setUnlocked(true)
-            })()
-          }
-          if (parsed.t === 'sync.records' && Array.isArray(parsed.messages)) {
-            const inbound = parsed.messages
-            const fromSource = parsed.source
-            const done = parsed.final
-            const peer = frame.from
-            void syncReady.current.then(() => storeHistory(inbound)).then(async (merged) => {
-              const attached = await attachCachedFiles(merged as LocalMessage[])
-              setMessages(attached.messages)
-              setStored(attached.kept)
-              await refreshUsage()
-              if (fromSource && done && peer?.device) {
-                transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages: syncSnapshot.current, source: false, final: true }))
-              }
-            })
-          }
-          if (parsed.t === 'sync.manifest' && Array.isArray(parsed.ids) && frame.from?.device) {
-            void exportHistory().then((history) => {
-              const known = new Set(parsed.ids)
-              const missing = history.filter((message) => !known.has(message.id))
-              transport.sendToPeer(frame.from?.user || '', frame.from?.device || '', JSON.stringify({ t: 'sync.records', messages: missing, source: false, final: true }))
-            })
-          }
-          if (parsed.t === 'file.start' && parsed.file_id && parsed.key && parsed.header && parsed.lengths) {
+          // sync.* frames are handled by the always-on listener below, so a locked new device can receive a transfer.
+          if (parsed.t === 'file.start' && parsed.file_id && parsed.key && parsed.header) {
+            const size = Math.max(0, Number(parsed.size ?? 0) || 0)
+            // Newer senders give only the chunk size; the per-chunk list is rebuilt here (it is deterministic).
+            const lengths = Array.isArray(parsed.lengths) && parsed.lengths.length ? parsed.lengths : chunkLengths(size, Number(parsed.chunk) || FILE_CHUNK_BYTES)
             beginPull({
               fileId: parsed.file_id,
               from: frame.from?.user || '',
               name: parsed.name || 'file',
               mime: parsed.mime || 'application/octet-stream',
-              size: Number(parsed.size ?? 0) || 0,
-              meta: { key: parsed.key, header: parsed.header, lengths: parsed.lengths },
+              size,
+              meta: { key: parsed.key, header: parsed.header, lengths },
             })
           }
           if (parsed.t === 'file.end' && parsed.file_id) void finishPull(parsed.file_id)
@@ -657,6 +653,40 @@ export function ChatApp() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, unlocked, relay, directOnly, session.user?.id])
+
+  useEffect(() => {
+    void loadMailboxLimits().then(setCloudLimits)
+  }, [])
+
+  // Device sync must work while this device is still locked: a brand-new device has no vault until the keys arrive.
+  useEffect(() => {
+    if (mode !== 'app') return
+    const off = transport.on((frame) => syncFrameRef.current(frame))
+    return () => {
+      off()
+    }
+  }, [mode])
+
+  useEffect(() => {
+    const userId = session.user?.id
+    setLastSyncAt(userId ? Number(localStorage.getItem(accountKey(userId, 'lastSync')) || 0) : 0)
+  }, [session.user?.id])
+
+  // While a "Link a device" code is shown, notice by itself when the other device has entered it.
+  useEffect(() => {
+    if (!pairId || pairStage?.step !== 'waiting') return
+    const timer = window.setInterval(() => {
+      void api<{ state: string; fingerprint?: string }>(`/v1/devices/pairing/${pairId}`).then((status) => {
+        if (status.state === 'claimed') {
+          setPairFingerprint(status.fingerprint || '')
+          setPairStage({ step: 'claimed' })
+        }
+      }).catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setPairStage({ step: 'failed', error: tRef.current('pairExpired') })
+      })
+    }, 2500)
+    return () => window.clearInterval(timer)
+  }, [pairId, pairStage?.step])
 
   async function refresh() {
     const [c, conv] = await Promise.all([
@@ -751,7 +781,11 @@ export function ChatApp() {
     }
     if (!force && existing?.x25519 && existing.x25519 !== pubs.x25519) {
       setIdentityOutOfSync(true)
-      if (!quiet) toast(t('identityMismatch'), { duration: 10_000 })
+      // Say it once per visit; Settings → Devices keeps showing the status and the fix.
+      if (!quiet && !mismatchToasted.current) {
+        mismatchToasted.current = true
+        toast(t('identityMismatch'), { duration: 10_000 })
+      }
       return
     }
     if (!existing?.x25519 || existing.x25519 !== pubs.x25519) {
@@ -906,7 +940,7 @@ export function ChatApp() {
       size: file.size,
       key: file.key,
       header: file.header,
-      lengths: file.lengths,
+      lengths: file.lengths?.length ? file.lengths : file.key ? chunkLengths(file.size, file.chunk ?? FILE_CHUNK_BYTES) : undefined,
       via: file.key ? 'mailbox' : 'peer',
     }))
     const message: LocalMessage = {
@@ -1094,7 +1128,7 @@ export function ChatApp() {
     if ((share.offered.has(userId) && !upgrade) || share.sending.has(userId)) return
     share.sending.add(userId)
     try {
-      const attachments: { file_id: string; name: string; mime: string; size: number; key?: string; header?: string; lengths?: number[] }[] = []
+      const attachments: { file_id: string; name: string; mime: string; size: number; key?: string; header?: string; lengths?: number[]; chunk?: number }[] = []
       let sentKey = false
       for (const file of share.files) {
         const held = !!(await sourceFor(file.id))
@@ -1107,7 +1141,7 @@ export function ChatApp() {
           name: file.name,
           mime: file.mime,
           size: file.size,
-          ...(linked ? { key: file.key, header: file.header, lengths: file.lengths } : {}),
+          ...(linked ? cloudKeyFields(file) : {}),
         })
       }
       if (!attachments.length) return
@@ -1270,10 +1304,10 @@ export function ChatApp() {
         if (!onlineRecipients.length && onlyOversized) {
           setDraft(text)
           setPending(picked)
-          toast(t('cloudNobodyOnline', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }))
+          toast(t('cloudNobodyOnline', { limit: formatBytes(cloudLimits.maxFileBytes) }))
           return
         }
-        toast(onlineRecipients.length ? t('cloudDirectOnly', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }) : t('cloudNobodyOnline', { limit: formatBytes(MAILBOX_MAX_FILE_BYTES) }))
+        toast(onlineRecipients.length ? t('cloudDirectOnly', { limit: formatBytes(cloudLimits.maxFileBytes) }) : t('cloudNobodyOnline', { limit: formatBytes(cloudLimits.maxFileBytes) }))
       }
       const cloudRecipients = new Map<string, Set<string>>()
       const directIds = new Set<string>()
@@ -1396,7 +1430,7 @@ export function ChatApp() {
           sender_id: me,
           attachments: visible.map((file) => {
             const onCloud = cloudRecipients.get(file.id)?.has(recipientId)
-            return { file_id: file.id, name: file.name, mime: file.mime, size: file.size, ...(onCloud ? { key: file.key, header: file.header, lengths: file.lengths } : {}) }
+            return { file_id: file.id, name: file.name, mime: file.mime, size: file.size, ...(onCloud ? cloudKeyFields(file) : {}) }
           }),
         })
         const recipientKey = await recipientBoxKey(recipientId, conv)
@@ -1724,7 +1758,7 @@ export function ChatApp() {
         if (cancelledFiles.current.has(file.id)) return
         const meta = file.key && file.header && file.lengths?.length ? { key: file.key, header: file.header, lengths: file.lengths } : null
         // Decrypt chunk by chunk from the blob, so large files never sit in one ciphertext and one plaintext buffer at once.
-        const decoded = new Blob(meta ? (await decryptParts(blob, meta)) as BlobPart[] : [blob], { type: file.mime || 'application/octet-stream' })
+        const decoded = meta ? await decryptBlob(blob, meta, file.mime || 'application/octet-stream') : new Blob([blob], { type: file.mime || 'application/octet-stream' })
         sessionFiles.current.set(file.id, decoded)
         url = URL.createObjectURL(decoded)
         const keep = meta ? keepCipher(file.id, blob, meta, file.size) : keepFile(file.id, decoded)
@@ -2084,16 +2118,22 @@ export function ChatApp() {
     const cancelled = () => cancelledFiles.current.has(fileId)
     let sent = 0
     const emit = async (chunk: Uint8Array, plainBytes: number) => {
-      await Transport.drain(channel)
-      if (cancelled()) throw new DOMException('aborted', 'AbortError')
-      if (channel.readyState !== 'open') throw new Error('peer_closed')
-      channel.send(chunk as unknown as ArrayBufferView<ArrayBuffer>)
+      // Split to the peer's maxMessageSize with back-pressure on every piece; the receiver reassembles by the chunk plan.
+      await transport.sendBinary(channel, chunk, () => {
+        if (cancelled()) throw new DOMException('aborted', 'AbortError')
+      })
       sent += plainBytes
       bumpTransfer('send', sent, size, fileId, userId)
     }
+    // file.start used to carry one length per 64 KiB chunk: ~300 KB of JSON for a 4 GB file, over the channel's
+    // maxMessageSize. Send just the chunk size when the plan is the standard one; anything else is fragmented.
+    const startFrame = (meta: FileCipherMeta) => {
+      const plan = isUniformPlan(meta.lengths, size) ? { chunk: FILE_CHUNK_BYTES } : { lengths: meta.lengths }
+      transport.sendText(channel, JSON.stringify({ t: 'file.start', file_id: fileId, name, mime, size, key: meta.key, header: meta.header, ...plan }))
+    }
     try {
       if (!(source instanceof Blob) && source.kind === 'opfs') {
-        channel.send(JSON.stringify({ t: 'file.start', file_id: fileId, name, mime, size, ...source.meta }))
+        startFrame(source.meta)
         let offset = 0
         const overhead = source.meta.lengths.length ? Math.max(0, source.cipher.size - size) / source.meta.lengths.length : 0
         for (const length of source.meta.lengths) {
@@ -2104,7 +2144,7 @@ export function ChatApp() {
       } else {
         const blob = source instanceof Blob ? source : new Blob([source.bytes as BlobPart])
         const enc = await createEncryptor(blob.size)
-        channel.send(JSON.stringify({ t: 'file.start', file_id: fileId, name, mime, size, ...enc.meta }))
+        startFrame(enc.meta)
         for await (const { part, final } of blobParts(blob)) await emit(enc.push(part, final), part.byteLength)
       }
       channel.send(JSON.stringify({ t: 'file.end', file_id: fileId }))
@@ -2179,7 +2219,7 @@ export function ChatApp() {
     toast(tRef.current('transferStalled'))
   }
 
-  function beginPull(start: Omit<Pull, 'received' | 'parts' | 'queue' | 'decrypt' | 'sink' | 'failed'>) {
+  function beginPull(start: Omit<Pull, 'received' | 'parts' | 'chunks' | 'queue' | 'decrypt' | 'sink' | 'failed'>) {
     if (cancelledFiles.current.has(start.fileId)) return
     const old = pull.current
     let settled: Promise<unknown> = Promise.resolve()
@@ -2187,7 +2227,7 @@ export function ChatApp() {
       // A restart of the same file, or a different file, must not leak the previous slot's buffers and OPFS writer.
       pull.current = null
       old.failed = true
-      old.parts = []
+      old.parts.clear()
       settled = old.queue.catch(() => undefined).then(() => old.sink?.abort()).catch(() => undefined)
       if (old.fileId !== start.fileId) {
         releaseTransfer(old.fileId)
@@ -2199,7 +2239,7 @@ export function ChatApp() {
     }
     claimTransfer(start.fileId)
     busyRetry.current.delete(start.fileId)
-    const slot: Pull = { ...start, received: 0, parts: [], queue: Promise.resolve(), decrypt: null, sink: null, failed: false }
+    const slot: Pull = { ...start, received: 0, parts: new BlobCollector(), chunks: new ChunkAssembler(start.meta.lengths), queue: Promise.resolve(), decrypt: null, sink: null, failed: false }
     slot.queue = (async () => {
       // The old writer for the same file id must be gone before a new one opens it.
       await settled
@@ -2218,10 +2258,12 @@ export function ChatApp() {
     touchPullWatch(slot.fileId)
     slot.queue = slot.queue.then(async () => {
       if (slot.failed || cancelledFiles.current.has(slot.fileId) || !slot.decrypt) return
-      const plain = slot.decrypt(bytes)
-      slot.parts.push(plain)
-      slot.received += plain.byteLength
-      if (slot.sink) await slot.sink.write(bytes).catch(() => { slot.sink = null })
+      for (const chunk of slot.chunks.push(bytes)) {
+        const plain = slot.decrypt(chunk)
+        slot.parts.push(plain)
+        slot.received += plain.byteLength
+        if (slot.sink) await slot.sink.write(chunk).catch(() => { slot.sink = null })
+      }
       bumpTransfer('receive', slot.received, slot.size || slot.received, slot.fileId, slot.from)
     }).catch(() => {
       slot.failed = true
@@ -2235,7 +2277,10 @@ export function ChatApp() {
     clearPullWatch(fileId)
     askOrder.current.delete(fileId)
     await slot.queue
+    // file.end before the last planned chunk means bytes were lost: never hand out a truncated file.
+    if (!slot.failed && !slot.chunks.done) slot.failed = true
     if (slot.failed || cancelledFiles.current.has(fileId)) {
+      slot.parts.clear()
       await slot.sink?.abort()
       releaseTransfer(fileId)
       setDownloading(null)
@@ -2243,8 +2288,7 @@ export function ChatApp() {
       if (slot.failed) toast(t('transferFailed'))
       return
     }
-    const blob = new Blob(slot.parts as BlobPart[], { type: slot.mime })
-    slot.parts = []
+    const blob = slot.parts.blob(slot.mime)
     sessionFiles.current.set(fileId, blob)
     announceFileHave(fileId)
     const url = URL.createObjectURL(blob)
@@ -2279,6 +2323,7 @@ export function ChatApp() {
     clearPullWatch(slot.fileId)
     slot.failed = true
     await slot.queue.catch(() => undefined)
+    slot.parts.clear()
     await slot.sink?.abort()
     releaseTransfer(slot.fileId)
     if (wantSave.current === slot.fileId) wantSave.current = ''
@@ -2294,25 +2339,55 @@ export function ChatApp() {
     const res = await api<{ pairing_id: string; code: string }>('/v1/devices/pairing', { method: 'POST' })
     setPairId(res.pairing_id)
     setPairCode(res.code)
+    setPairFingerprint('')
+    setPairStage({ step: 'waiting' })
     setPairQr(await QRCode.toDataURL(JSON.stringify({ pairing_id: res.pairing_id, pk: keys.x25519, code: res.code })))
   }
 
+  function closePair() {
+    if (pairId && pairStage?.step !== 'done') void api(`/v1/devices/pairing/${pairId}/cancel`, { method: 'POST' }).catch(() => undefined)
+    setPairId('')
+    setPairCode('')
+    setPairQr('')
+    setPairFingerprint('')
+    setPairStage(null)
+  }
+
+  function noteSynced() {
+    const userId = session.user?.id
+    const now = Date.now()
+    if (userId) localStorage.setItem(accountKey(userId, 'lastSync'), String(now))
+    setLastSyncAt(now)
+  }
+
+  /** Send the chat key and every message to the device that entered the code. Nothing is reported as done unless it went out. */
   async function approvePair() {
     if (!pairId || !session.user) return
     const local = publicDeviceKeys(session.user.id)
     const status = await api<{ state: string; fingerprint?: string; target_device_id?: string; target_x25519?: string }>(`/v1/devices/pairing/${pairId}`)
     if (status.state !== 'claimed' || !status.target_device_id || !status.target_x25519 || !local) {
-      toast(t('waitingPeer'))
+      setPairStage({ step: 'waiting' })
+      toast(t('pairWaitingForCode'))
+      return
+    }
+    if (!isUnlocked()) {
+      setPairStage({ step: 'failed', error: t('pairUnlockFirst') })
       return
     }
     setPairFingerprint(status.fingerprint || '')
+    setPairStage({ step: 'sending' })
+    // Connect first: if the other device cannot be reached, the code stays valid and Confirm can be pressed again.
+    const channel = await transport.ensurePeer(session.user.id, status.target_device_id, 15_000).catch(() => null)
+    if (!channel || channel.readyState !== 'open') {
+      setPairStage({ step: 'failed', error: t('pairNoConnection') })
+      return
+    }
     const tag = pairingConfirm(pairCode, unb64(local.x25519), unb64(status.target_x25519), pairId)
     await api(`/v1/devices/pairing/${pairId}/confirm`, { method: 'POST', body: JSON.stringify({ tag }) })
-    const channel = await transport.ensurePeer(session.user.id, status.target_device_id)
-    if (channel && channel.readyState === 'open' && isUnlocked()) {
-      const identity = getIdentity()
-      const history = await exportHistory()
-      channel.send(JSON.stringify({
+    const identity = getIdentity()
+    const history = await exportHistory()
+    try {
+      transport.sendText(channel, JSON.stringify({
         t: 'sync.hello',
         dek: b64(identity.dek),
         signPk: identity.identitySign.publicKey,
@@ -2321,43 +2396,216 @@ export function ChatApp() {
         boxSk: b64(identity.identityBox.privateKey),
       }))
       const batches = chunkMessages(history)
-      if (!batches.length) channel.send(JSON.stringify({ t: 'sync.records', messages: [], source: true, final: true }))
-      batches.forEach((messages, index) => {
-        channel.send(JSON.stringify({ t: 'sync.records', messages, source: true, final: index === batches.length - 1 }))
-      })
+      if (!batches.length) transport.sendText(channel, JSON.stringify({ t: 'sync.records', messages: [], source: true, final: true }))
+      for (const [index, messages] of batches.entries()) {
+        await Transport.drain(channel)
+        if (channel.readyState !== 'open') throw new Error('peer_closed')
+        transport.sendText(channel, JSON.stringify({ t: 'sync.records', messages, source: true, final: index === batches.length - 1 }))
+      }
+    } catch {
+      setPairStage({ step: 'failed', error: t('pairInterrupted') })
+      return
     }
     await api(`/v1/devices/pairing/${pairId}/complete`, { method: 'POST' })
-    toast(t('transferDone'))
-    setPairId('')
+    noteSynced()
+    setPairStage({ step: 'done', count: history.length })
+    toast(t('pairSent', { count: history.length }))
     setPairCode('')
     setPairQr('')
   }
 
-  async function claimPair(pairingId: string, codeValue: string) {
-    const local = session.user ? publicDeviceKeys(session.user.id) : null
-    if (!pairingId || !local?.x25519 || !codeValue) return
+  /** "Transfer chats" on this device: open the vault that may already be here, then claim the code. */
+  async function runTransfer(pairingId: string, code: string, nextPassword: string) {
+    if (!isUnlocked()) {
+      const problem = vaultPasswordError(nextPassword)
+      if (problem) throw new Error(problem)
+      if (await hasVault()) {
+        // This browser already keeps chats for the account: open them so they are merged, not replaced.
+        const owner = await vaultOwner()
+        if (owner && session.user?.id && owner !== session.user.id) throw new Error(t('wrongVaultAccount'))
+        try {
+          await unlockVault(nextPassword)
+        } catch {
+          throw new Error(t('transferExistingVault'))
+        }
+      } else {
+        transferPassword.current = nextPassword
+      }
+    }
     try {
-      const claimed = await api<{ device_id: string; fingerprint: string }>(`/v1/devices/pairing/${pairingId}/claim`, { method: 'POST', body: JSON.stringify({ code: codeValue }) })
-      setPairFingerprint(claimed.fingerprint)
-      if (session.user?.id) transport.setLocalUser(session.user.id)
-      transport.connect()
-      toast(t('confirmPairing'))
+      await claimPair(pairingId, code)
     } catch (err) {
-      toast(explain(err))
+      transferWanted.current = false
+      transferPassword.current = ''
+      setLinkStage(null)
+      throw new Error(err instanceof ApiError && err.status === 404 ? t('pairCodeInvalid') : explain(err))
     }
   }
 
-  deviceSyncRef.current = () => {
+  function stopChatTransfer() {
+    const running = linkStage?.step === 'waiting' || linkStage?.step === 'receiving'
+    transferWanted.current = false
+    transferPassword.current = ''
+    setLinkStage(null)
+    if (!running && session.user?.id) dismissTransfer(session.user.id)
+    setAskTransfer(false)
+  }
+
+  async function claimPair(pairingId: string, codeValue: string) {
+    const local = session.user ? publicDeviceKeys(session.user.id) : null
+    if (!pairingId || !codeValue) return
+    if (!local?.x25519) throw new Error(t('pairSignInAgain'))
+    const claimed = await api<{ device_id: string; fingerprint: string }>(`/v1/devices/pairing/${pairingId}/claim`, { method: 'POST', body: JSON.stringify({ code: codeValue }) })
+    setPairFingerprint(claimed.fingerprint)
+    transferWanted.current = true
+    syncReceived.current = 0
+    setLinkStage({ step: 'waiting' })
+    if (session.user?.id) transport.setLocalUser(session.user.id)
+    transport.connect()
+  }
+
+  /** Every sync frame, locked or not. A new device receives keys and history before it has a vault. */
+  syncFrameRef.current = (frame) => {
+    if (frame.t === 'device.trusted' && frame.p.id && frame.p.id === useSession.getState().deviceId) {
+      void refreshTrust()
+      return
+    }
+    if (frame.t !== 'p2p.message') return
+    let parsed: { t?: string; dek?: string; signPk?: string; signSk?: string; boxPk?: string; boxSk?: string; messages?: SyncMessage[]; ids?: string[]; source?: boolean; final?: boolean }
+    try {
+      parsed = JSON.parse(String(frame.p.data ?? '')) as typeof parsed
+    } catch {
+      return
+    }
+    const peer = frame.from
+    if ((parsed.t === 'sync.hello' || parsed.t === 'transfer.batch') && parsed.signPk && parsed.signSk && parsed.boxPk && parsed.boxSk) {
+      const keys = { signPk: parsed.signPk, signSk: parsed.signSk, boxPk: parsed.boxPk, boxSk: parsed.boxSk }
+      const dek = parsed.dek || ''
+      syncReady.current = (async () => {
+        const open = isUnlocked()
+        syncSnapshot.current = open ? await exportHistory() : []
+        if (open && getIdentity().identityBox.publicKey === keys.boxPk) {
+          if (transferWanted.current) setLinkStage({ step: 'receiving', count: 0 })
+          return true
+        }
+        // Keys are only ever replaced when the user asked for a transfer on this device.
+        if (!transferWanted.current) return false
+        try {
+          if (open) {
+            await adoptIdentity(keys)
+          } else if (await hasVault()) {
+            setLinkStage({ step: 'failed', error: tRef.current('unlockBeforeSync') })
+            return false
+          } else {
+            if (!transferPassword.current || !dek) {
+              setLinkStage({ step: 'failed', error: tRef.current('transferNeedsPassword') })
+              return false
+            }
+            await importTransferredIdentity(transferPassword.current, { dek, ...keys })
+            setVaultExists(true)
+          }
+        } catch {
+          setLinkStage({ step: 'failed', error: tRef.current('transferFailedKeys') })
+          return false
+        }
+        setLinkStage({ step: 'receiving', count: 0 })
+        return true
+      })()
+      return
+    }
+    if (parsed.t === 'sync.records' && Array.isArray(parsed.messages)) {
+      const inbound = parsed.messages
+      const fromSource = !!parsed.source
+      const done = !!parsed.final
+      syncQueue.current = syncQueue.current.then(async () => {
+        const ready = await syncReady.current
+        // A transfer whose keys could not be taken must not merge its batches; ordinary device sync still can.
+        if ((!ready && fromSource) || !isUnlocked()) return
+        const merged = await storeHistory(inbound)
+        const attached = await attachCachedFiles(merged as LocalMessage[])
+        setMessages(attached.messages)
+        setStored(attached.kept)
+        await refreshUsage()
+        if (fromSource) {
+          syncReceived.current += inbound.length
+          setLinkStage((cur) => (cur ? { step: 'receiving', count: syncReceived.current } : cur))
+        }
+        if (!done) return
+        noteSynced()
+        if (fromSource && peer?.device) {
+          // Send back whatever only this device had, in batches so no message is too large for the channel.
+          const local = syncSnapshot.current
+          const batches = chunkMessages(local)
+          if (!batches.length) transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages: [], source: false, final: true }))
+          batches.forEach((messages, index) => {
+            transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages, source: false, final: index === batches.length - 1 }))
+          })
+          syncSnapshot.current = []
+        }
+        if (fromSource && transferWanted.current) {
+          transferWanted.current = false
+          transferPassword.current = ''
+          setLinkStage({ step: 'done', count: syncReceived.current })
+          toast(tRef.current('transferReceived', { count: syncReceived.current }))
+          setUnlocked(true)
+          setAskTransfer(false)
+          void publishIdentityIfEmpty(false, true).catch(() => undefined)
+          void refreshTrust()
+        }
+      }).catch(() => {
+        if (transferWanted.current) setLinkStage({ step: 'failed', error: tRef.current('transferFailedKeys') })
+      })
+      return
+    }
+    if (parsed.t === 'sync.manifest' && Array.isArray(parsed.ids) && peer?.device) {
+      if (!isUnlocked()) return
+      void exportHistory().then((history) => {
+        const known = new Set(parsed.ids)
+        const missing = history.filter((message) => !known.has(message.id))
+        const batches = chunkMessages(missing)
+        if (!batches.length) transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages: [], source: false, final: true }))
+        batches.forEach((messages, index) => {
+          transport.sendToPeer(peer.user, peer.device, JSON.stringify({ t: 'sync.records', messages, source: false, final: index === batches.length - 1 }))
+        })
+      })
+    }
+  }
+
+  /** Re-read this device's trust after a transfer, and reconnect so the server stops treating the socket as pending. */
+  async function refreshTrust() {
+    const before = useSession.getState().trust
+    const row = await authApi.session().catch(() => null)
+    if (!row?.authenticated || !row.trust_state) return
+    const current = useSession.getState()
+    current.setSession(current.user, current.deviceId, row.trust_state)
+    if (before === 'pending' && row.trust_state === 'trusted') {
+      // Let the last sync batches leave before the socket (and the data channel) is rebuilt.
+      window.setTimeout(() => {
+        transport.disconnect()
+        transport.connect()
+      }, 3000)
+    }
+  }
+
+  deviceSyncRef.current = (manual = false) => {
     const user = session.user
     if (!user || session.trust === 'pending' || !isUnlocked()) return
     void (async () => {
       const devices = await api<{ id: string; trust_state: string; current?: boolean }[]>('/v1/devices').catch(() => [])
       const ids = (await exportHistory()).map((message) => message.id)
+      let reached = 0
       for (const device of devices) {
         if (device.current || device.trust_state !== 'trusted') continue
         const channel = await transport.ensurePeer(user.id, device.id).catch(() => null)
-        if (channel?.readyState === 'open') channel.send(JSON.stringify({ t: 'sync.manifest', ids }))
+        if (channel?.readyState !== 'open') continue
+        try {
+          transport.sendText(channel, JSON.stringify({ t: 'sync.manifest', ids }))
+          reached += 1
+        } catch {
+          // the channel closed between the check and the send
+        }
       }
+      if (manual) toast(reached ? t('syncStarted', { count: reached }) : t('syncNoPeers'))
     })()
   }
   publishSyncRef.current = (messages) => {
@@ -2368,7 +2616,12 @@ export function ChatApp() {
       for (const device of devices) {
         if (device.current || device.trust_state !== 'trusted') continue
         const channel = await transport.ensurePeer(user.id, device.id).catch(() => null)
-        if (channel?.readyState === 'open') channel.send(JSON.stringify({ t: 'sync.records', messages, source: false, final: true }))
+        if (channel?.readyState !== 'open') continue
+        try {
+          transport.sendText(channel, JSON.stringify({ t: 'sync.records', messages, source: false, final: true }))
+        } catch {
+          // best effort; the next manifest sync catches up
+        }
       }
     })()
   }
@@ -2852,6 +3105,16 @@ export function ChatApp() {
       </SettingsSection>
       <SettingsSection title={t('devices')} description={t('devicesLead')}>
         <DeviceList enabled={mode === 'app'} userId={session.user?.id || ''} />
+        <SettingsRow
+          label={t('syncStatus')}
+          hint={identityOutOfSync ? t('syncKeyMismatch') : lastSyncAt ? t('syncKeyOk', { when: new Date(lastSyncAt).toLocaleString() }) : t('syncKeyOkNever')}
+        >
+          {identityOutOfSync ? (
+            <Button variant="outline" onClick={() => { setLinkStage(null); setAskTransfer(true) }}>{t('copyKeyFromDevice')}</Button>
+          ) : (
+            <Button variant="outline" onClick={() => deviceSyncRef.current(true)}>{t('syncNow')}</Button>
+          )}
+        </SettingsRow>
         {identityOutOfSync ? (
           <SettingsRow label={t('useThisDeviceKey')} hint={t('useThisDeviceKeyHint')}>
             <Button variant="outline" onClick={() => void reclaimIdentityKey()}>{t('useThisDeviceKey')}</Button>
@@ -2862,19 +3125,33 @@ export function ChatApp() {
         </SettingsRow>
         {pairId ? (
           <div className="space-y-2 px-4 py-3">
-            <p className="text-sm text-muted">{t('pairingInstructions')}</p>
-            <p className="text-xs text-muted">{t('pairingId')}: <span className="font-mono text-sm text-fg select-all">{pairId}</span></p>
-            <p className="text-xs text-muted">{t('pairingCode')}: <span className="font-mono text-sm text-fg select-all">{pairCode}</span></p>
-            {pairQr ? <img alt={t('pairingQr')} src={pairQr} className="size-40 rounded-md bg-white p-1" /> : null}
-            {pairFingerprint ? <p className="text-xs text-muted">{t('fingerprint')}: <span className="font-mono">{pairFingerprint}</span></p> : null}
+            {pairStage?.step === 'done' ? (
+              <p className="text-sm" role="status">{t('pairSent', { count: pairStage.count ?? 0 })}</p>
+            ) : (
+              <>
+                <p className="text-sm text-muted">{t('pairingInstructions')}</p>
+                {pairCode ? <p className="text-xs text-muted">{t('pairingId')}: <span className="font-mono text-sm text-fg select-all">{pairId}</span></p> : null}
+                {pairCode ? <p className="text-xs text-muted">{t('pairingCode')}: <span className="font-mono text-sm text-fg select-all">{pairCode}</span></p> : null}
+                {pairQr ? <img alt={t('pairingQr')} src={pairQr} className="size-40 rounded-md bg-white p-1" /> : null}
+              </>
+            )}
+            {pairFingerprint && pairStage?.step !== 'done' ? <p className="text-xs text-muted">{t('transferCompare')} <span className="font-mono text-sm text-fg">{pairFingerprint}</span></p> : null}
+            <p className={`text-sm ${pairStage?.step === 'failed' ? 'text-danger' : 'text-muted'}`} role="status" aria-live="polite">
+              {pairStage?.step === 'waiting' ? t('pairWaitingForCode') : null}
+              {pairStage?.step === 'claimed' ? t('pairReadyToConfirm') : null}
+              {pairStage?.step === 'sending' ? t('pairSending') : null}
+              {pairStage?.step === 'failed' ? pairStage.error || t('somethingWentWrong') : null}
+            </p>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void approvePair().catch((err) => toast(explain(err)))}>{t('confirmPairing')}</Button>
-              <Button variant="ghost" onClick={() => { void api(`/v1/devices/pairing/${pairId}/cancel`, { method: 'POST' }).catch(() => undefined); setPairId(''); setPairCode(''); setPairQr(''); setPairFingerprint('') }}>{t('cancel')}</Button>
+              {pairStage?.step !== 'done' ? (
+                <Button variant="outline" disabled={pairStage?.step === 'sending'} onClick={() => void approvePair().catch((err) => setPairStage({ step: 'failed', error: explain(err) }))}>{t('confirmPairing')}</Button>
+              ) : null}
+              <Button variant="ghost" onClick={closePair}>{pairStage?.step === 'done' ? t('close') : t('cancel')}</Button>
             </div>
           </div>
         ) : null}
       </SettingsSection>
-      <SettingsSection title={t('cloudStorage')} description={t('cloudStorageLead', { limit: formatBytes(MAILBOX_USER_QUOTA_BYTES) })}>
+      <SettingsSection title={t('cloudStorage')} description={t('cloudStorageLead', { limit: formatBytes(cloudLimits.userQuotaBytes) })}>
         <SettingsRow label={t('cloudUsedLabel')} hint={t('cloudExpires')}>
           <Button variant="outline" onClick={() => void api<CloudUsage>('/v1/mailbox/cloud').then((row) => {
             const usage = cloudUsage(row)
@@ -2912,22 +3189,11 @@ export function ChatApp() {
         />
         <TransferPrompt
           open={askTransfer}
-          onLater={() => {
-            if (session.user?.id) dismissTransfer(session.user.id)
-            setAskTransfer(false)
-          }}
+          status={linkStage}
+          fingerprint={pairFingerprint}
+          onLater={stopChatTransfer}
           onFresh={(password) => { void beginFresh(password) }}
-          onTransfer={async (pairingId, code, nextPassword) => {
-            const problem = vaultPasswordError(nextPassword)
-            if (problem) throw new Error(problem)
-            transferPassword.current = nextPassword
-            try {
-              await claimPair(pairingId, code)
-              setAskTransfer(false)
-            } catch (err) {
-              throw new Error(explain(err))
-            }
-          }}
+          onTransfer={runTransfer}
         />
       </>
     )
@@ -2993,22 +3259,13 @@ export function ChatApp() {
     </Dialog>
     <TransferPrompt
       open={askTransfer && !!unlocked}
-      onLater={() => {
-        if (session.user?.id) dismissTransfer(session.user.id)
-        setAskTransfer(false)
-      }}
+      status={linkStage}
+      fingerprint={pairFingerprint}
+      needPassword={false}
+      allowFresh={session.trust === 'pending'}
+      onLater={stopChatTransfer}
       onFresh={(password) => { void beginFresh(password) }}
-      onTransfer={async (pairingId, code, nextPassword) => {
-        const problem = vaultPasswordError(nextPassword)
-        if (problem) throw new Error(problem)
-        transferPassword.current = nextPassword
-        try {
-          await claimPair(pairingId, code)
-          setAskTransfer(false)
-        } catch (err) {
-          throw new Error(explain(err))
-        }
-      }}
+      onTransfer={runTransfer}
     />
     <div className="relative grid min-h-0 w-full flex-1 grid-cols-1 overflow-hidden md:grid-cols-[18rem_minmax(0,1fr)]">
       <SkyBackdrop scene={activeConv ? 'conversation' : 'chat'} />

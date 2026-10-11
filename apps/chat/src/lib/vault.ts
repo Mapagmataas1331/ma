@@ -18,7 +18,7 @@ import {
   type WrappedSlot,
 } from '@ma/crypto'
 import { accountKey, activeDatabase, activeUserId } from './db'
-import { decryptParts, encryptStream, type FileCipherMeta } from './files'
+import { decryptBlob, decryptParts, encryptStream, type FileCipherMeta } from './files'
 import { listNamed, openNamed, openWriter, opfsAvailable, removeKind, removeNamed } from './opfs'
 import { createPrfCredential, evaluatePrf, platformAuthenticatorAvailable } from './webauthn'
 
@@ -112,6 +112,27 @@ export async function importTransferredIdentity(password: string, payload: { dek
   await activeDatabase().records.put({ id: 'identity', nonce: rec.nonce, ciphertext: rec.ciphertext })
   secrets = {
     dek,
+    identitySign: { publicKey: payload.signPk, privateKey: unb64(payload.signSk) },
+    identityBox: { publicKey: payload.boxPk, privateKey: unb64(payload.boxSk) },
+  }
+  armLock()
+}
+
+/**
+ * Take over the account's chat key from another device while keeping this vault (its password, its
+ * history, its cached files). Only the identity keys change; the local data key stays, so nothing local
+ * has to be re-encrypted.
+ */
+export async function adoptIdentity(payload: { signPk: string; signSk: string; boxPk: string; boxSk: string }) {
+  await ready()
+  if (!secrets) throw new Error('locked')
+  const keys = { signPk: payload.signPk, signSk: payload.signSk, boxPk: payload.boxPk, boxSk: payload.boxSk }
+  const rec = encryptRecord(secrets.dek, 'identity', 'keys', keys)
+  await activeDatabase().records.put({ id: 'identity', nonce: rec.nonce, ciphertext: rec.ciphertext })
+  zero(secrets.identitySign.privateKey)
+  zero(secrets.identityBox.privateKey)
+  secrets = {
+    dek: secrets.dek,
     identitySign: { publicKey: payload.signPk, privateKey: unb64(payload.signSk) },
     identityBox: { publicKey: payload.boxPk, privateKey: unb64(payload.boxSk) },
   }
@@ -400,8 +421,7 @@ export async function readBlob(id: string, mime = 'application/octet-stream'): P
   const stored = await openStored(id)
   if (!stored) return
   if (stored.kind === 'bytes') return new Blob([stored.bytes as BlobPart], { type: mime })
-  const parts = await decryptParts(stored.cipher, stored.meta)
-  return new Blob(parts as BlobPart[], { type: mime })
+  return decryptBlob(stored.cipher, stored.meta, mime)
 }
 
 export async function readBytes(id: string) {

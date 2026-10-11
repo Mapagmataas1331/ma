@@ -40,7 +40,14 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  const res = await fetch(`${apiOrigin()}${path}`, { ...init, headers, credentials: 'include' })
+  let res: Response
+  try {
+    res = await fetch(`${apiOrigin()}${path}`, { ...init, headers, credentials: 'include' })
+  } catch (err) {
+    // fetch rejects with a bare TypeError ("Failed to fetch") when offline or blocked; give callers one code to explain.
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    throw new ApiError(0, 'network', 'network')
+  }
   if (res.status === 204) return undefined as T
   const text = await res.text()
   let data: unknown = null
