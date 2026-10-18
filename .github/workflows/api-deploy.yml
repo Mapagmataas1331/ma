@@ -6,30 +6,52 @@ on:
     paths:
       - services/api/**
       - .github/workflows/api-deploy.yml
+      - deploy/macyou-api-deploy.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer push waits instead of cancelling a deploy mid-way.
+concurrency:
+  group: api-deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.23'
       - working-directory: services/api
         run: GOOS=linux GOARCH=arm64 go build -o api ./cmd/api
-      - uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ma
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          source: services/api/api
-          target: /tmp
-      - uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ma
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          script: |
-            sudo install -m 755 /tmp/services/api/api /opt/macyou/bin/api
-            sudo systemctl restart macyou-api
-            curl -fsS http://127.0.0.1:8080/healthz || true
+
+      - name: Set up SSH (pinned host key)
+        env:
+          SSH_KEY: ${{ secrets.ORACLE_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ORACLE_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # The key is restricted on the server to /usr/local/sbin/macyou-api-deploy (deploy/macyou-api-deploy.sh):
+      # it reads the binary from stdin, verifies the sha256, installs, restarts and health-checks, rolling back on failure.
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.ORACLE_HOST }}
+        run: |
+          sha="$(sha256sum services/api/api | cut -d' ' -f1)"
+          ssh -i ~/.ssh/deploy_key \
+            -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            "ma@$HOST" "$sha" < services/api/api
+
+      - name: Remove key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
