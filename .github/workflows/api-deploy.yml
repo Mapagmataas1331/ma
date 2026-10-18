@@ -26,6 +26,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: '1.23'
+          cache-dependency-path: services/api/go.sum
       - working-directory: services/api
         run: GOOS=linux GOARCH=arm64 go build -o api ./cmd/api
 
@@ -39,6 +40,8 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      # ORACLE_KNOWN_HOSTS holds the server's host keys under the name s.ma.cyou; HostKeyAlias checks against those
+      # whatever form ORACLE_HOST takes (hostname or IP).
       # The key is restricted on the server to /usr/local/sbin/macyou-api-deploy (deploy/macyou-api-deploy.sh):
       # it reads the binary from stdin, verifies the sha256, installs, restarts and health-checks, rolling back on failure.
       - name: Deploy
@@ -48,7 +51,7 @@ jobs:
           sha="$(sha256sum services/api/api | cut -d' ' -f1)"
           ssh -i ~/.ssh/deploy_key \
             -o IdentitiesOnly=yes -o BatchMode=yes \
-            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts -o HostKeyAlias=s.ma.cyou \
             -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             "ma@$HOST" "$sha" < services/api/api
 
